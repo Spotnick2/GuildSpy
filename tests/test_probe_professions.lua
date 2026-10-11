@@ -87,4 +87,80 @@ WoW.advance(5)
 eq(mr.events[1], "TRADE_SKILL_SHOW", "the frame's events recorded")
 eq(mr.recipeIDs, 0, "no recipe API here: zero, not an error")
 
+-- The client as measured on 70338: C_TradeSkillUI is there, the switch is off.
+local closes, expanded, collapsed = 0, {}, {}
+local function forever()
+    rawset(_G, "C_TradeSkillUI", {
+        IsGuildTradeSkillsEnabled = function() return false end,
+        IsTradeSkillGuildMember = function() return true end,
+        IsTradeSkillReady = function() return true end,
+        GetBaseProfessionInfo = function() return { professionID = 171, skillLevel = 75, professionName = "Alchemy" } end,
+        GetAllRecipeIDs = function() return { 2330, 2331 } end,
+        GetRecipeInfo = function(id) return { name = "Recipe " .. id, learned = id == 2330 } end,
+        CloseTradeSkill = function() closes = closes + 1 end,
+    })
+    rawset(_G, "CanViewGuildRecipes", function() return false end)
+end
+local function unforever()
+    for _, k in ipairs({ "C_TradeSkillUI", "CanViewGuildRecipes", "GetGuildRecipeInfoPostQuery",
+                         "GetNumGuildTradeSkill", "GetGuildTradeSkillInfo", "ExpandGuildTradeSkillHeader",
+                         "CollapseGuildTradeSkillHeader" }) do rawset(_G, k, nil) end
+end
+
+loadAddon({ setup = function() WoW.guild = guild() end })
+forever()
+WoW.slash("/gspy probe")
+p = GuildSpyDB.probe.professions
+eq(p.enabled[1], false, "the switch read as off")
+eq(p.canView.Tailoring[1], false, "CanViewGuildRecipes read per profession")
+
+-- A late answer to a timed-out query is kept apart, never credited to the next one.
+WoW.advance(5)                                       -- Alchemy (171) times out; Tailoring (197) pending
+rawset(_G, "GetGuildRecipeInfoPostQuery", function() return 171, 2330, 3 end)
+WoW.fire("GUILD_RECIPE_KNOWN_BY_MEMBERS")
+eq(p.recipeQueries[2].post, nil, "Alchemy's late answer isn't Tailoring's")
+eq(p.strayAnswers[1][1], 171, "...it is kept as a stray answer")
+rawset(_G, "GetGuildRecipeInfoPostQuery", function() return 197, 2963, 0 end)
+WoW.fire("GUILD_RECIPE_KNOWN_BY_MEMBERS")
+eq(p.recipeQueries[2].post[1], 197, "Tailoring's own answer is Tailoring's")
+
+-- The crafter list: collapsed headers are expanded to read member rows, then collapsed again.
+local open = {}
+rawset(_G, "GetNumGuildTradeSkill", function() return open[171] and 3 or 2 end)
+rawset(_G, "GetGuildTradeSkillInfo", function(i)
+    if i == 1 then return 171, not open[171], 1, "Alchemy", 1, 1, 2 end
+    if open[171] and i == 2 then return 171, nil, nil, nil, nil, nil, nil, "Akka Avery", "Akka Avery", "PRIEST", true, "", 75 end
+    return 197, true, 1, "Tailoring", 0, 0, 2
+end)
+rawset(_G, "ExpandGuildTradeSkillHeader", function(id) open[id] = true; expanded[#expanded + 1] = id end)
+rawset(_G, "CollapseGuildTradeSkillHeader", function(id) open[id] = nil; collapsed[#collapsed + 1] = id end)
+WoW.fire("GUILD_TRADESKILL_UPDATE")
+WoW.advance(4)
+local gts = p.guildTradeSkill
+eq(gts.headers, 2, "two headers")
+eq(#expanded, 2, "both collapsed headers expanded")
+eq(gts.memberRows, 1, "the member row read")
+eq(gts.numbersSeen[13].max, 75, "...with the number it carries (a skill, if the server sends one)")
+eq(#collapsed, 2, "...and collapsed again afterwards")
+
+-- A guildmate's book: the crafting profession may be the second one; the book is read, then closed.
+WoW.guild.club[3].profession1ID, WoW.guild.club[3].profession1Name = 182, "Herbalism"
+WoW.guild.club[3].profession2ID, WoW.guild.club[3].profession2Name = 171, "Alchemy"
+WoW.slash("/gspy probe recipes")
+local mr = GuildSpyDB.probe.memberRecipes
+eq(mr.member, "Akka Avery", "an online crafter whose craft is in slot 2")
+eq(mr.skillLine, 171, "...asked for that craft")
+WoW.advance(5)
+eq(mr.recipeIDs, 2, "the recipe ids read")
+eq(mr.learned, 1, "...and which are learned")
+eq(mr.learnedNames[1], "Recipe 2330", "...by name")
+eq(closes, 1, "the book this probe opened is closed")
+unforever()
+
+-- /gspy probe log with no probe yet: says so, runs nothing.
+loadAddon({ setup = function() WoW.guild = guild() end })
+WoW.slash("/gspy probe log")
+eq(GuildSpyDB.probe, nil, "no probe run")
+check(WoW.chat[#WoW.chat]:find("run /gspy probe first", 1, true), "...and it says what to do")
+
 done("test_probe_professions")

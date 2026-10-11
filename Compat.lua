@@ -3,10 +3,9 @@
 -- put in _G. Helpers lifted from ..\Gnomesweeper\Compat.lua and
 -- ..\AltStable\Compat.lua; lift more from there rather than rewriting them.
 --
--- Guild API shapes (GetGuildRosterInfo's tuple, GetGuildEventInfo's) are NOT
--- measured yet: phase 0's /gspy probe measures them (docs/FOREVER-PROBE.md).
--- Until then nothing reads them by position except the probe, which dumps
--- every position it finds.
+-- Guild API shapes are measured (docs/FOREVER-PROBE.md, 1.60.1.70338), and
+-- this file is the only one that knows their positions: everything else gets
+-- named structs from API.ReadRoster and API.ReadEventLog.
 
 local ADDON = ...
 GuildSpy = GuildSpy or {}
