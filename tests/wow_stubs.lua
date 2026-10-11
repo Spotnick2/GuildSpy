@@ -345,7 +345,7 @@ function GetGuildRosterInfo(i)
     if not m then return nil end
     local onote = WoW.guild.canViewOfficerNote and m.onote or ""
     return m.name, WoW.guild.ranks[m.rank + 1], m.rank, m.level, m.class, m.zone or "",
-        m.note or "", onote, m.online and true or false, 0, m.class, 0, 0, false, false, 4, m.guid
+        m.note or "", onote, m.online and true or false, 0, m.class, -1, 0, false, false, 3, m.guid
 end
 function GetGuildRosterLastOnline(i)
     local m = WoW.guild and WoW.guild.members[i]
@@ -385,6 +385,7 @@ ERR_GUILD_LEAVE_S = "%s has left the guild."
 ERR_GUILD_REMOVE_SS = "%s has been kicked out of the guild by %s."
 ERR_GUILD_PROMOTE_SSS = "%s has promoted %s to %s."
 ERR_GUILD_DEMOTE_SSS = "%s has demoted %s to %s."
+ERR_GUILD_LEADER_CHANGED_SS = "%s has made %s the new Guild Master."
 
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }

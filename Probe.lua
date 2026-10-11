@@ -223,6 +223,7 @@ function Probe.Run()
     -- The first dump, taken on the first update, had every name nil: the names
     -- may arrive later in the burst.
     Probe.wantEventLog = true
+    Probe.eventLogUpdates = 0          -- count this probe's burst, not the session's
     local q = API.Pack(g("QueryGuildEventLog"))
     out.queryEventLog = packData(q)
     API.RequestRoster()
@@ -238,17 +239,29 @@ function Probe.DumpEventLog()
     local n = API.Pack(g("GetNumGuildEvents"))
     local count = (n.ok and type(n[1]) == "number") and n[1] or 0
     out.eventLog = { num = packData(n), entries = {}, named = 0, at = time(),
-                     updates = Probe.eventLogUpdates }
+                     updates = Probe.eventLogUpdates, byType = {} }
+    -- "Named" means every name the type needs: actor and member for promote,
+    -- demote, remove and invite; the member for join and quit. "" is no name.
+    local function has(v) return type(v) == "string" and v ~= "" end
     for i = 1, count do
         local e = API.Pack(g("GetGuildEventInfo"), i)
         out.eventLog.entries[i] = packData(e)
-        if e.ok and (type(e[2]) == "string" or type(e[3]) == "string") then
-            out.eventLog.named = out.eventLog.named + 1
+        if e.ok and type(e[1]) == "string" then
+            local both = e[1] ~= "join" and e[1] ~= "quit"
+            local complete = has(e[2]) and (not both or has(e[3]))
+            if complete then out.eventLog.named = out.eventLog.named + 1 end
+            local bt = out.eventLog.byType[e[1]] or { count = 0, named = 0 }
+            bt.count = bt.count + 1
+            if complete then bt.named = bt.named + 1 end
+            bt.sample = bt.sample or packData(e)
+            out.eventLog.byType[e[1]] = bt
         end
     end
+    local types = {}
+    for t, bt in pairs(out.eventLog.byType) do types[#types + 1] = t .. " " .. bt.named .. "/" .. bt.count end
+    table.sort(types)
     print("|cff7fd4ffGuildSpy probe:|r event log: " .. count .. " entries, " .. out.eventLog.named
-        .. " with a name; first: " .. (count > 0 and packText(API.Pack(g("GetGuildEventInfo"), 1)) or "none")
-        .. "; last: " .. (count > 0 and packText(API.Pack(g("GetGuildEventInfo"), count)) or "none"))
+        .. " with every name they need (" .. table.concat(types, ", ") .. ")")
 end
 
 -- Dump once the burst has been quiet for EVENT_LOG_SETTLE seconds.

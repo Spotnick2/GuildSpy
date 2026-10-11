@@ -105,11 +105,25 @@ local function nextRecipeQuery()
     end)
 end
 
+-- An answer belongs to the pending query only if it names that query's skill
+-- line and recipe (the query may return an updated recipe id). A late answer
+-- to a query that already timed out, or to the Communities UI's own query, is
+-- kept apart and never credited to another query.
 local function recipeAnswered()
-    local entry = Probe.pendingRecipe
-    if not entry then return end
-    Probe.pendingRecipe = nil
+    local o = out()
     local post = API.Pack(g("GetGuildRecipeInfoPostQuery"))
+    local entry = Probe.pendingRecipe
+    local mine = entry and post.ok and post[1] == entry.skillLine
+        and (post[2] == entry.recipe or post[2] == entry.query[1])
+    if not mine then
+        if o and o.professions then
+            local stray = o.professions.strayAnswers or {}
+            o.professions.strayAnswers = stray
+            stray[#stray + 1] = packData(post)
+        end
+        return
+    end
+    Probe.pendingRecipe = nil
     entry.post = packData(post)
     local n = (post.ok and type(post[3]) == "number") and post[3] or 0
     entry.members = {}
@@ -118,22 +132,55 @@ local function recipeAnswered()
     nextRecipeQuery()
 end
 
+-- The crafter list. Its headers come collapsed: expand each one to read the
+-- member rows (Cata's layout puts each crafter's skill there), then collapse
+-- them again, leaving the client's list as it was.
 local function dumpGuildTradeSkills()
     local o = out()
     if not o or not o.professions then return end
-    local n = API.Pack(g("GetNumGuildTradeSkill"))
-    local count = (n.ok and type(n[1]) == "number") and n[1] or 0
-    local t = { num = packData(n), entries = {} }
-    for i = 1, math.min(40, count) do t.entries[i] = packData(API.Pack(g("GetGuildTradeSkillInfo"), i)) end
+    local function count()
+        local n = API.Pack(g("GetNumGuildTradeSkill"))
+        return (n.ok and type(n[1]) == "number") and n[1] or 0, n
+    end
+    local headers, n0 = count()
+    local expanded = {}
+    for i = 1, headers do
+        local row = API.Pack(g("GetGuildTradeSkillInfo"), i)
+        if row.ok and row[2] == true and type(row[1]) == "number" then expanded[#expanded + 1] = row[1] end
+    end
+    for _, id in ipairs(expanded) do API.Pack(g("ExpandGuildTradeSkillHeader"), id) end
+    local total = count()
+    local t = { num = packData(n0), headers = headers, rows = total, expanded = #expanded, entries = {},
+                memberRows = 0, numbersSeen = {} }
+    for i = 1, math.min(400, total) do
+        local row = API.Pack(g("GetGuildTradeSkillInfo"), i)
+        t.entries[i] = packData(row)
+        if row.ok and row[4] == nil and type(row[8]) == "string" then
+            t.memberRows = t.memberRows + 1
+            -- Every number a member row carries, by position: a skill level would show here.
+            for k = 9, row.n do
+                if type(row[k]) == "number" then
+                    local seen = t.numbersSeen[k] or { min = row[k], max = row[k] }
+                    seen.min, seen.max = math.min(seen.min, row[k]), math.max(seen.max, row[k])
+                    t.numbersSeen[k] = seen
+                end
+            end
+        end
+    end
+    for _, id in ipairs(expanded) do API.Pack(g("CollapseGuildTradeSkillHeader"), id) end
     o.professions.guildTradeSkill = t
-    say("guild trade skill list: " .. count .. " rows; first: "
-        .. (count > 0 and packText(API.Pack(g("GetGuildTradeSkillInfo"), 1)) or "none"))
+    local nums = {}
+    for k, v in pairs(t.numbersSeen) do nums[#nums + 1] = k .. ":" .. v.min .. "-" .. v.max end
+    table.sort(nums)
+    say(string.format("guild crafter list: %d headers, %d rows once expanded, %d member rows; numbers by position: %s",
+        headers, total, t.memberRows, #nums > 0 and table.concat(nums, " ") or "none"))
 end
 
 -- Called from Probe.Run.
 function Probe.Professions(o)
     local ts = g("C_TradeSkillUI") or {}
-    local p = { enabled = packData(API.Pack(ts.IsGuildTradeSkillsEnabled)), canView = {}, recipeQueries = {} }
+    local enabled = API.Pack(ts.IsGuildTradeSkillsEnabled)
+    local p = { enabled = packData(enabled), canView = {}, recipeQueries = {} }
     o.professions = p
     local _, infos = clubMembers()
     local s = Probe.ProfessionSurvey(infos)
@@ -144,7 +191,7 @@ function Probe.Professions(o)
         p.canView[name] = packData(API.Pack(g("CanViewGuildRecipes"), b.id))
     end
     table.sort(names)
-    say("guild trade skills enabled: " .. packText(API.Pack(ts.IsGuildTradeSkillsEnabled)))
+    say("guild trade skills enabled: " .. packText(enabled))
     say(string.format("professions: %d of %d members have one; %d skill ranks above 1 (max %d)",
         s.withAny, s.members, s.rankAbove1, s.rankMax))
     if #names > 0 then say("  " .. table.concat(names, ", ")) end
@@ -174,17 +221,27 @@ function Probe.MemberRecipes()
     if not o then say("run /gspy probe first"); return end
     local me = API.PlayerFullName()
     local _, infos = clubMembers()
-    local pick
+    -- A crafting profession in either slot; an online member (online, mobile,
+    -- away or busy: anything but offline or unknown) is preferred.
+    local OFFLINE, UNKNOWN = 3, 0
+    local function onlineish(m) return m.presence ~= nil and m.presence ~= OFFLINE and m.presence ~= UNKNOWN end
+    local pick, slot
     for _, m in ipairs(infos) do
-        if m.guid and not m.isSelf and m.name ~= me and Probe.STARTER_RECIPES[m.profession1ID or -1] then
-            if not pick or (m.presence == 1 and pick.presence ~= 1) then pick = m end
+        if m.guid and not m.isSelf and m.name ~= me then
+            for k = 1, 2 do
+                if Probe.STARTER_RECIPES[m["profession" .. k .. "ID"] or -1]
+                    and (not pick or (onlineish(m) and not onlineish(pick))) then
+                    pick, slot = m, k
+                end
+            end
         end
     end
     if not pick then say("no guildmate with a crafting profession found"); return end
+    local skillLine = pick["profession" .. slot .. "ID"]
     local cgi = g("C_GuildInfo") or {}
-    local r = API.Pack(cgi.QueryGuildMemberRecipes, pick.guid, pick.profession1ID)
-    o.memberRecipes = { member = pick.name, guid = pick.guid, skillLine = pick.profession1ID,
-                        profession = pick.profession1Name, rank = pick.profession1Rank,
+    local r = API.Pack(cgi.QueryGuildMemberRecipes, pick.guid, skillLine)
+    o.memberRecipes = { member = pick.name, guid = pick.guid, skillLine = skillLine, presence = pick.presence,
+                        profession = pick["profession" .. slot .. "Name"], rank = pick["profession" .. slot .. "Rank"],
                         query = packData(r), events = {} }
     Probe.wantMemberRecipes = true
     say("asked for " .. tostring(pick.name) .. "'s " .. tostring(pick.profession1Name)
@@ -212,6 +269,12 @@ function Probe.DumpMemberRecipes()
             mr.learned = mr.learned + 1
             if #mr.learnedNames < 15 then mr.learnedNames[#mr.learnedNames + 1] = ri.name end
         end
+    end
+    -- Close the guildmate's book this probe opened, and only that.
+    local gm = API.Pack(ts.IsTradeSkillGuildMember)
+    if gm.ok and gm[1] == true then
+        API.Pack(ts.CloseTradeSkill)
+        mr.closed = true
     end
     say(string.format("%s's recipes: guild-member view %s, %d recipe ids, %d learned (%s)",
         tostring(mr.member), packText(API.Pack(ts.IsTradeSkillGuildMember)), mr.recipeIDs, mr.learned,

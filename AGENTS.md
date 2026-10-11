@@ -113,8 +113,8 @@ No build step. The Lua 5.1 toolchain is at `C:\Program Files (x86)\Lua\5.1\` (`l
   `WoW` table: globals are strict (reading an unstubbed one errors), and `RegisterEvent` throws on an
   event missing from `tests/events-1.60.1.70338.txt` (checked against the dump by `test_toc`).
 - **The stubs must model Forever, not Classic or Retail.** Before stubbing a global, confirm it's in
-  the API dump. The guild tuple orders in the stub are **Retail's and unmeasured** until the probe
-  says otherwise; update them from `docs/FOREVER-PROBE.md`.
+  the API dump. The guild tuple shapes in the stub are **measured on 70338**
+  (`docs/FOREVER-PROBE.md`); keep them matched to it on every new measurement or build.
 - `tests/harness.lua`: `check`, `eq`, `done`, `tocFiles`, `loadAddon({ db, setup })`, `newPureEnv`.
   Internals are reached through `GuildSpy._test`.
 - Add a test as `tests/test_<area>.lua`; `run.ps1` picks it up. Prove a new test bites: break the

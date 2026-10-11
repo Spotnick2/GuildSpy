@@ -70,7 +70,9 @@ Names alone would collide across connected realms, so keying members by GUID sta
 
 ### 5. When the roster is complete after login
 
-- **Complete 1.6 s after login**, at the first `GUILD_ROSTER_UPDATE` (151 rows, 151 GUIDs).
+- **Names and GUIDs were all there 1.6 s after login**, at the first `GUILD_ROSTER_UPDATE`:
+  151 rows, 151 GUIDs, in one run. The timeline didn't record ranks or the rank table, so this
+  shows names and GUIDs arriving early. It doesn't show the whole completeness gate passing then.
 - The event's argument was `false` every time.
 - Updates come **in pairs**: on every member online/offline change, and otherwise about every
   30–35 s.
@@ -95,12 +97,24 @@ Names alone would collide across connected realms, so keying members by GUID sta
   days and hours ago.
 - `GetNumGuildEvents()` = **100**, which looks like a cap.
 - Index 1 is the **oldest** entry: ages fall as the index rises.
-- **Names arrive with the burst.** Read at the first of about 55 `GUILD_EVENT_LOG_UPDATE`s (all
-  within 0.3 s), player1 and player2 were nil in every entry (run 1). Read once the burst had been
-  quiet for 3 s, **all 100 entries had names** (run 2). Examples:
-  - `join, "Koma Kino"`
-  - `invite, "Cowruzo Kashmere", "Koma Kino"` (inviter, invitee)
-- Never read the log before its burst has settled.
+- **Names, as observed.** Two different runs on two characters, so this is not a within-run
+  transition:
+  - **Run 1** read the log at the first of about 55 `GUILD_EVENT_LOG_UPDATE`s, all within 0.3 s.
+    Only 10 entries were saved, and player1 and player2 were nil in all of them.
+  - **Run 2** read it once the burst had been quiet for 3 s. All 100 entries carried the names
+    their type needs:
+
+    | Type | Count | Names | Example |
+    |---|---|---|---|
+    | promote | 31 | the officer in p1, the member in p2 | `promote, "Enzo Tonic", "Kalendar Frostmarrow", "Member"` |
+    | demote | 1 | the officer in p1, the member in p2 | `demote, "Enzo Matrix", "Baltack Tremblay", "Pogo"` |
+    | invite | 33 | the inviter in p1, the invitee in p2 | |
+    | join | 33 | the member in p1, p2 nil | |
+    | quit | 2 | the member in p1, p2 nil | |
+    | remove (kick) | 0 | **not observed yet** | |
+- **Inferred rule, not proven:** read the log only after its burst has settled. The probe now waits
+  for 3 s of quiet and counts the burst. `/gspy probe log` re-reads the log, and records per type
+  how many entries carry the names that type needs.
 - Join entries carry rank `""`. The invite above carries "Guild Master" although the inviter is a
   Member, so the rank field's meaning on an invite is unclear; don't rely on it there.
 
@@ -160,28 +174,38 @@ the server answers.
 | # | Question | Where | Answer (run 2) |
 |---|---|---|---|
 | 13 | `IsGuildTradeSkillsEnabled()`, and `CanViewGuildRecipes(id)` per profession | `probe.professions.enabled`, `.canView` | **false**, and false for all 9 professions |
-| 14 | Do members' `professionNRank` values carry real skill levels? | `probe.professions.survey` | **No.** 144 of 153 members have professions, with **real names** (Skinning 50, Mining 47, Leatherworking 39, Herbalism 34, Blacksmithing 27, Tailoring 24, Alchemy 22, Enchanting 22, Engineering 8), but **every rank is 1**: a placeholder |
-| 15 | `QueryGuildRecipes` → `GUILD_TRADESKILL_UPDATE` → `GetGuildTradeSkillInfo` | `probe.professions.guildTradeSkill` | **Answers.** 10 header rows, all collapsed: skill line, collapsed, icon, name, online, visible, players. The 9 professions above with matching counts, plus "Test Profession [DNT]" (2933, 0 players). Member rows weren't read, because the headers were collapsed |
-| 16 | `QueryGuildMembersForRecipe` → `GUILD_RECIPE_KNOWN_BY_MEMBERS` | `probe.professions.recipeQueries` | Only 1 of 7 queries answered: Minor Healing Potion with **0 members**, although the guild has 22 alchemists. The other 6 got no answer within 4 s. **Recipe knowledge isn't served** |
-| 17 | `/gspy probe recipes`: does a guildmate's recipe book open? | `probe.memberRecipes` | **No.** `QueryGuildMemberRecipes(guid, 171)` for Gal Orey (Alchemy) returned nothing. No `TRADE_SKILL_SHOW` and no window; `IsTradeSkillReady` false, 0 recipe ids |
+| 14 | Do members' `professionNRank` values carry real skill levels? | `probe.professions.survey` | **Not through this API.** 144 of 153 members have professions, with **real names** (Skinning 50, Mining 47, Leatherworking 39, Herbalism 34, Blacksmithing 27, Tailoring 24, Alchemy 22, Enchanting 22, Engineering 8), but `C_Club` reports **rank 1 for every one** |
+| 15 | `QueryGuildRecipes` → `GUILD_TRADESKILL_UPDATE` → `GetGuildTradeSkillInfo` | `probe.professions.guildTradeSkill` | **Answers.** 10 header rows, all collapsed: skill line, collapsed, icon, name, online, visible, players. The 9 professions above with matching counts, plus "Test Profession [DNT]" (2933, 0 players). Member rows weren't read, because the headers were collapsed. The probe now expands them, reads the rows, and collapses them again: **re-run to see whether member rows carry a skill** |
+| 16 | `QueryGuildMembersForRecipe` → `GUILD_RECIPE_KNOWN_BY_MEMBERS` | `probe.professions.recipeQueries` | Only 1 of 7 queries answered: Minor Healing Potion with **0 members**, although the guild has 22 alchemists. The other 6 got no answer within 4 s. Answers weren't matched to their query then (now they are). **No recipe knowledge was obtained in these attempts** |
+| 17 | `/gspy probe recipes`: does a guildmate's recipe book open? | `probe.memberRecipes` | **Not in one attempt.** `QueryGuildMemberRecipes(guid, 171)` for Gal Orey (Alchemy, presence offline) returned nothing. No `TRADE_SKILL_SHOW` and no window; 4 s later `IsTradeSkillReady` was false, with 0 recipe ids. The probe now prefers an online crafter in either slot |
 
-**Verdict:** the server tracks **who has which profession**, with names and counts, and nothing
-deeper: no skill levels and no recipes. That matches the client's switch being off. A guild
-directory along the lines of "who's a tailor" is possible; "who can craft X" is not, short of
-addon-to-addon sharing. That sharing is what Skilled/AltTrackerProfessions-style sync would add.
+**So far:**
+- **Established:** the server serves **who has which profession**, with names and counts, and
+  the client's switch is off.
+- **Not obtained in these attempts:** skill levels (`C_Club` reports 1) and recipe knowledge
+  (one answer, 0 members; one recipe book that didn't open).
+- **Unsettled:** whether skill or recipe data exists elsewhere. A re-run with the corrected probe
+  (expanded headers, matched answers, an online crafter) is the next measurement.
+
+A "who's a tailor" directory is possible from what is established. "Who can craft X" looks like it
+needs addon-to-addon sharing, unless the re-run shows otherwise (#9).
 
 ## What this changes in the plan
 
-- **The event log does attribute, once its burst has settled.** It names the actor and the
-  target, so the plan's server-log matching stands: offline promotions, demotions and kicks get
-  their officer, and quit versus kicked is told apart. Its limits:
+- **The event log can attribute promotions and demotions** once its burst has settled.
+  31 promote entries and 1 demote entry named the officer and the member. The plan's server-log
+  matching stands for those, and for quits (2 quit entries named the member).
+- **Offline kicks are unconfirmed.** No `remove` entry has been seen, so offline kick-versus-quit
+  is unconfirmed until one is (#6). Live kicks are named by their system message regardless.
+- **Its limits:**
   - ages only to the hour, so matching is by interval and uniqueness, as planned;
   - 100 entries, oldest first;
-  - the reader must wait for the burst to finish.
+  - the reader waits for the burst to finish.
 - **Live attribution is solid.** The promote, demote and kick messages name the officer. The
   strings are the plain enUS ones, captured with `(.+)` because names have surnames.
-- **The completeness gate costs little.** The roster is whole at the first update, so the gate
-  rarely has to wait.
+- **The completeness gate probably passes early.** In one run, names and GUIDs were all there at
+  the first update. Whether ranks were loaded by then wasn't recorded, so treat this as likely,
+  not measured.
 - **`C_Club` is a second source.** It has the same GUIDs and a 1-based rank order, plus
   professions, which is an "Other ideas" candidate. The roster tuple stays the primary source.
 - **`GUILD_EVENT_LOG_UPDATE` comes in bursts of dozens**, so debounce it.

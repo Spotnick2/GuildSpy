@@ -43,7 +43,8 @@ local function slash(msg)
     if cmd == "probe" then
         rest = rest:lower()
         if rest == "watch" then GuildSpy.Probe.ToggleWatch()
-        elseif rest == "log" and GuildSpyDB.probe then GuildSpy.Probe.DumpEventLog()
+        elseif rest == "log" then
+            if GuildSpyDB.probe then GuildSpy.Probe.DumpEventLog() else say("run /gspy probe first") end
         elseif rest == "recipes" then GuildSpy.Probe.MemberRecipes()
         else GuildSpy.Probe.Run() end
     elseif cmd == "log" then
