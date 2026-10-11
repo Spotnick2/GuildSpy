@@ -13,6 +13,7 @@ Scanner.ROSTER_DEBOUNCE = 2     -- GUILD_ROSTER_UPDATE comes in pairs (measured)
 Scanner.LOG_SETTLE = 3          -- GUILD_EVENT_LOG_UPDATE comes in bursts of ~55; names arrive with it
 Scanner.POLL = 60               -- levels and notes fire no message: ask for the roster this often
 Scanner.START_DELAY = 5
+Scanner.FIRST_SCAN_WAIT = 20    -- the first scan of a session waits this long, at most, for the event log
 Scanner.DIGEST_DEADLINE = 90    -- the digest waits for the picture to settle, at most this long
 Scanner.PENDING_TTL = 600
 Scanner.PENDING_MAX = 50
@@ -25,7 +26,7 @@ local S = {}
 Scanner.session = S
 
 local function now() return time() end
-local function say(msg) print("|cff7fd4ffGuildSpy:|r " .. msg) end
+local function say(msg) GuildSpy.Print(msg) end
 
 local function db() return GuildSpyDB end
 local function settings() return db().settings or {} end
@@ -38,6 +39,7 @@ function Scanner.Reset()
     S.eventLog, S.eventLogAt, S.eventLogSettled = nil, nil, false
     S.incomplete, S.warned = 0, false
     S.firstScanDone, S.digestShown, S.baselined, S.deadlinePassed = false, false, nil, false
+    S.holding, S.logQueried = false, false
     S.session = (S.session or 0) + 1
 end
 Scanner.Reset()
@@ -95,10 +97,15 @@ local function guildState(key)
     return gs
 end
 
-function Scanner.Request()
+-- The roster is asked for every poll. The server log (a burst of ~55 events
+-- and a 100-entry read) only when something waits on it: entries to enrich,
+-- departures to confirm, or the session's first look.
+function Scanner.Request(withLog)
     if not IsInGuild() then return end
     API.RequestRoster()
-    API.QueryEventLog()
+    if withLog or not S.eventLogSettled or #S.enrichable > 0 or (S.state and Roster.HasMissing(S.state)) then
+        API.QueryEventLog()
+    end
 end
 
 -- Evidence ------------------------------------------------------------------
@@ -157,7 +164,7 @@ function Scanner.OnSystemMessage(msg)
     prunePending(t)
     Scanner.Enrich()
     -- Look now rather than at the next poll, so the line comes with the message.
-    C_Timer.After(1, Scanner.Request)
+    C_Timer.After(1, function() Scanner.Request(true) end)
 end
 
 -- Scanning -------------------------------------------------------------------
@@ -183,9 +190,11 @@ function Scanner.Print(entry)
     print("|cff7fd4ffGuildSpy:|r " .. Log.Line(entry, now()))
 end
 
-function Scanner.Scan()
+-- The session for the current guild: made (and the saved state loaded) the
+-- first time the guild is known, by a scan or by the event log.
+local function ensureGuild()
     local key = API.GuildKey()
-    if not key then return end
+    if not key then return nil end
     if key ~= S.guildKey then
         Scanner.Reset()
         S.guildKey, S.state = key, guildState(key)
@@ -196,6 +205,26 @@ function Scanner.Scan()
         C_Timer.After(Scanner.DIGEST_DEADLINE, function()
             if S.session == session then Scanner.MaybeDigest(true) end
         end)
+    end
+    return key
+end
+
+function Scanner.Scan(force)
+    if not ensureGuild() then return end
+    -- The session's first scan waits for the server log (at most
+    -- FIRST_SCAN_WAIT): changes found at login, a promotion during a rank
+    -- restructure above all, can only be confirmed from it, and a change
+    -- suppressed once is never re-examined.
+    if not S.firstScanDone and not S.eventLogSettled and not force then
+        if not S.logQueried then S.logQueried = true; API.QueryEventLog() end
+        if not S.holding then
+            S.holding = true
+            local session = S.session
+            C_Timer.After(Scanner.FIRST_SCAN_WAIT, function()
+                if S.session == session and not S.firstScanDone then Scanner.Scan(true) end
+            end)
+        end
+        return
     end
     local scan, why = API.ReadRoster()
     if not scan then
@@ -225,8 +254,11 @@ function Scanner.Scan()
         end
         Scanner.Print(entry)
         -- After the digest, changes are seen as they happen: the next login's
-        -- digest starts after them.
-        if S.digestShown then S.state.shownSeq, S.state.shownAt = entry.seq, t end
+        -- digest starts after them (officer notes only for whoever can read them).
+        if S.digestShown then
+            S.state.shownSeq, S.state.shownAt = entry.seq, t
+            if canView() then S.state.shownOnoteSeq = entry.seq end
+        end
     end
     Roster.PruneFormers(S.state, t)
     S.firstScanDone = true
@@ -236,9 +268,10 @@ function Scanner.Scan()
 end
 
 function Scanner.ReadEventLog()
-    if not S.guildKey then return end
+    if not ensureGuild() then return end
     S.eventLog, S.eventLogAt, S.eventLogSettled = API.ReadEventLog(), now(), true
     Scanner.Enrich()
+    if not S.firstScanDone then Scanner.Scan() end      -- the held first scan
     Scanner.MaybeDigest(false)
 end
 
@@ -257,14 +290,16 @@ function Scanner.MaybeDigest(deadline)
             say("now watching " .. tostring(select(2, API.GuildKey()) or S.guildKey) .. " (" .. S.baselined
                 .. " members). Changes from here on are reported.")
         end
-        local lines = Log.Digest(gs, canView(), t)
+    end
+    local lines, top, topOnote = Log.Digest(gs, canView(), t)
+    if settings().digest ~= false then
         for _, line in ipairs(lines) do print(line) end
         if Roster.HasMissing(gs) then
             say("still confirming who left; it'll show as it's confirmed.")
         end
     end
-    local _, top = Log.Digest(gs, true, t)
     if top > (gs.shownSeq or 0) then gs.shownSeq, gs.shownAt = top, t end
+    if topOnote and topOnote > (gs.shownOnoteSeq or 0) then gs.shownOnoteSeq = topOnote end
     if not gs.shownAt then gs.shownAt = t end
 end
 
@@ -312,7 +347,22 @@ for _, e in ipairs({ "PLAYER_LOGIN", "GUILD_ROSTER_UPDATE", "PLAYER_GUILD_UPDATE
     API.RegisterEvent(frame, e)
 end
 
-local rosterGen, logGen = 0, 0
+-- Runs fn once `delay` seconds after the LAST of a burst of calls, with one
+-- pending timer at a time (a 55-event burst doesn't make 55 closures).
+local function settler(delay, fn)
+    local last, armed = 0, false
+    local function check()
+        local wait = last + delay - GetTime()
+        if wait > 0.01 then C_Timer.After(wait, check) else armed = false; fn() end
+    end
+    return function()
+        last = GetTime()
+        if not armed then armed = true; C_Timer.After(delay, check) end
+    end
+end
+local rosterSettled = settler(Scanner.ROSTER_DEBOUNCE, function() Scanner.Scan() end)
+local logSettled = settler(Scanner.LOG_SETTLE, function() Scanner.ReadEventLog() end)
+
 local function poll()
     Scanner.Request()
     C_Timer.After(Scanner.POLL, poll)
@@ -322,13 +372,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_LOGIN" then
         C_Timer.After(Scanner.START_DELAY, poll)
     elseif event == "GUILD_ROSTER_UPDATE" then
-        rosterGen = rosterGen + 1
-        local gen = rosterGen
-        C_Timer.After(Scanner.ROSTER_DEBOUNCE, function() if gen == rosterGen then Scanner.Scan() end end)
+        rosterSettled()
     elseif event == "GUILD_EVENT_LOG_UPDATE" then
-        logGen = logGen + 1
-        local gen = logGen
-        C_Timer.After(Scanner.LOG_SETTLE, function() if gen == logGen then Scanner.ReadEventLog() end end)
+        logSettled()
     elseif event == "PLAYER_GUILD_UPDATE" then
         -- Left or changed guild: drop this session's evidence. (A moment where the
         -- client doesn't know the guild's name yet is not a change.)

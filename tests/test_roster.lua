@@ -143,8 +143,18 @@ local w = {}
 Roster.Apply(w, scan(away(20 * 24)), T0)
 ev = Roster.Apply(w, scan(away(20 * 24 + 1)), T0 + 3600 * 2)
 eq(#ev, 0, "last-online moving by an hour is rounding")
-ev = Roster.Apply(w, scan(away(1)), T0 + 3600 * 3)
+ev = Roster.Apply(w, scan(away(1)), T0 + 3600 * 5)
 eq(kinds(ev), "RETURN", "logged in while we weren't looking: still back")
+-- A month-sized total that wobbles (calendar months vs 730 h) is not a login.
+local mw = {}
+Roster.Apply(mw, scan(away(743)), T0)                                   -- 0m 30d 23h
+ev = Roster.Apply(mw, scan(away(730)), T0 + 3600)                       -- 1m 0d 0h, an hour later
+eq(#ev, 0, "a month rollover in last-online is not a return")
+-- Both away for weeks: their total, a little off, still isn't newer than our last look.
+local bw = {}
+Roster.Apply(bw, scan(away(30 * 24)), T0)
+ev = Roster.Apply(bw, scan(away(30 * 24 + 40 * 24 - 10)), T0 + 40 * DAY)
+eq(#ev, 0, "we were away as long as they were: no claim")
 
 -- A rank inserted while a member is missing: they keep their rank by name.
 local x = {}

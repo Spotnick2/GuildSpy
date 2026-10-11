@@ -186,11 +186,99 @@ check(ok, "a damaged snapshot doesn't error")
 check(chatHas("now watching Other Guild"), "...it is rebuilt as a baseline")
 eq(#GuildSpyDB.guilds["Other Guild-Forever"].log, 1, "...unreadable log entries dropped, the good one kept")
 
+-- At login, a promotion made during a rank restructure is confirmed from the
+-- server log: the first scan waits for the log instead of suppressing it.
+local R = newGuild()
+loadAddon({ setup = function() WoW.guild = R end })
+WoW.fire("PLAYER_LOGIN"); WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
+WoW.advance(30)
+local saved2 = GuildSpyDB
+WoW.epoch = WoW.epoch + 3600
+local R2 = newGuild()
+R2.ranks = { "Guild Master", "Officer", "Raider", "Veteran", "Member", "Initiate" }   -- a rank added
+R2.members = { member("Fizzle Sprocketwhistle", 4, "Player-1-00000001"),
+               member("Ann Lee", 2, "Player-1-00000002"),                             -- Member -> Raider
+               member("Bo Kay", 5, "Player-1-00000003"),
+               member("Enzo Matrix", 0, "Player-1-00000004") }
+R2.events = { { "promote", "Enzo Matrix", "Ann Lee", "Raider", 0, 0, 0, 0 } }
+local ep = WoW.epoch
+WoW.chat = {}
+loadAddon({ db = saved2, setup = function() WoW.guild = R2; WoW.epoch = ep end })
+WoW.fire("PLAYER_LOGIN")
+WoW.fire("GUILD_ROSTER_UPDATE", false)
+WoW.advance(3)                                       -- roster settled: the first scan holds
+for _ = 1, 5 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
+WoW.advance(5)                                       -- log settled: the held scan runs
+check(chatHas("Enzo Matrix promoted Ann Lee from Member to Raider"), "confirmed from the log at login")
+check(chatHas("1 rank changes"), "...alongside the structure change")
+
+-- The log is asked for only when something waits on it.
+local queries = 0
+local realQuery = QueryGuildEventLog
+rawset(_G, "QueryGuildEventLog", function() queries = queries + 1 end)
+WoW.advance(130)
+eq(queries, 0, "a quiet poll doesn't ask for the server log")
+WoW.fire("CHAT_MSG_SYSTEM", "Enzo Matrix has promoted Bo Kay to Member.")
+WoW.advance(2)
+eq(queries, 1, "a guild message does")
+rawset(_G, "QueryGuildEventLog", realQuery)
+
+-- An empty MOTD at login is "not loaded yet", not a change.
+WoW.chat = {}
+local motd = R2.motd
+R2.motd = ""
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+R2.motd = motd
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+check(chatHas("message of the day") == nil, "no MOTD noise from an unloaded MOTD")
+
+-- A rank index the rank table doesn't have yet: the roster is incomplete.
+WoW.chat = {}
+local n0 = #GuildSpyDB.guilds["Parse Partout-Forever"].log
+R2.members[3].rank = 9
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+eq(#GuildSpyDB.guilds["Parse Partout-Forever"].log, n0, "no entry from a roster ahead of its rank table")
+R2.members[3].rank = 5
+
+-- Officer notes keep their own digest boundary across alts.
+local gs2 = GuildSpyDB.guilds["Parse Partout-Forever"]
+R2.canViewOfficerNote = true
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)          -- seed
+local saved3 = GuildSpyDB
+-- Offline: the note changes; a non-officer alt logs in first, then the officer.
+find("Ann Lee").onote = "x"
+R2.members[2].onote = "officer only"
+R2.canViewOfficerNote = false
+loadAddon({ db = saved3, setup = function() WoW.guild = R2 end })
+WoW.fire("PLAYER_LOGIN"); WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
+WoW.advance(5)
+-- (the alt can't read it, so the change isn't even recorded yet; the officer records it)
+R2.canViewOfficerNote = true
+WoW.chat = {}
+loadAddon({ db = GuildSpyDB, setup = function() WoW.guild = R2 end })
+WoW.fire("PLAYER_LOGIN"); WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
+WoW.advance(5)
+check(chatHas("officer note"), "the officer gets the officer-note change")
+-- A recorded officer-note entry shown to nobody yet: a non-officer digest passes it, the officer still gets it.
+local gs3 = GuildSpyDB.guilds["Parse Partout-Forever"]
+local entry = { seq = GuildSpyDB.nextSeq, at = WoW.epoch, kind = "ONOTE", name = "Ann Lee", from = "a", to = "b" }
+GuildSpyDB.nextSeq = GuildSpyDB.nextSeq + 1
+table.insert(gs3.log, entry)
+local L = GuildSpy.Log
+local _, top, topOnote = L.Digest(gs3, false, WoW.epoch)
+gs3.shownSeq = top
+eq(topOnote, nil, "a non-officer moves no officer-note boundary")
+local lines = L.Digest(gs3, true, WoW.epoch)
+check(#lines > 0 and lines[2]:find("officer note", 1, true), "the officer's next digest still has it")
+
 -- Status and rebaseline answer.
 WoW.chat = {}
 WoW.slash("/gspy status")
-check(chatHas("Other Guild-Forever"), "status names the guild")
+check(chatHas("Parse Partout-Forever"), "status names the guild")
 WoW.slash("/gspy rebaseline")
-eq(GuildSpyDB.guilds["Other Guild-Forever"].observedAt, nil, "rebaseline forgets the snapshot")
+eq(GuildSpyDB.guilds["Parse Partout-Forever"].observedAt, nil, "rebaseline forgets the snapshot")
 
 done("test_scanner")

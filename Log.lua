@@ -138,20 +138,32 @@ function Log.Enrich(e, attr)
 end
 
 -- The digest: one summary line, then up to DIGEST_LINES details, most
--- important first. Returns the lines (nothing new: an empty list) and the
--- highest seq shown.
+-- important first. Returns the lines (nothing new: an empty list), the
+-- highest seq looked at, and the highest officer-note seq looked at (nil
+-- when the viewer can't read officer notes).
+--
+-- Officer-note entries have their own boundary (shownOnoteSeq): a character
+-- that can't read them moves shownSeq past them, but the next officer still
+-- gets them in a digest.
 function Log.Digest(gs, canViewOfficer, now)
-    local fresh, counts, top = {}, {}, gs.shownSeq or 0
+    local fresh, counts = {}, {}
+    local shown, shownOnote = gs.shownSeq or 0, gs.shownOnoteSeq or 0
+    local top, topOnote = shown, canViewOfficer and shownOnote or nil
     for _, e in ipairs(gs.log or {}) do
-        if e.seq > (gs.shownSeq or 0) then
-            if e.seq > top then top = e.seq end
-            if Log.Visible(e, canViewOfficer) then
-                fresh[#fresh + 1] = e
-                counts[e.kind] = (counts[e.kind] or 0) + 1
-            end
+        if e.seq > top then top = e.seq end
+        local new
+        if e.kind == "ONOTE" then
+            new = canViewOfficer and e.seq > shownOnote
+            if new and e.seq > topOnote then topOnote = e.seq end
+        else
+            new = e.seq > shown
+        end
+        if new then
+            fresh[#fresh + 1] = e
+            counts[e.kind] = (counts[e.kind] or 0) + 1
         end
     end
-    if #fresh == 0 then return {}, top end
+    if #fresh == 0 then return {}, top, topOnote end
     local parts = {}
     for _, s in ipairs(Log.SUMMARY) do
         if counts[s[1]] then parts[#parts + 1] = counts[s[1]] .. " " .. s[2] end
@@ -167,5 +179,5 @@ function Log.Digest(gs, canViewOfficer, now)
     if #fresh > Log.DIGEST_LINES then
         lines[#lines + 1] = "  ... and " .. (#fresh - Log.DIGEST_LINES) .. " more: /gspy log"
     end
-    return lines, top
+    return lines, top, topOnote
 end

@@ -87,6 +87,11 @@ a = EventLog.MatchLog({ kind = "PROMOTE", name = "Ann Lee", to = "Veteran", lo =
 eq(a.actor, "Enzo Matrix", "the last step's officer")
 eq(a.lastStep, true, "...marked as the last step only")
 
+-- A log time stays inside the interval it explains (an age of 0 h read 30 min later).
+a = EventLog.MatchLog({ kind = "LEAVE", name = "Cy Dee", lo = T, hi = T + 60 },
+    { { kind = "quit", p1 = "Cy Dee", ageHours = 0 } }, T + 1800)
+check(a.at > T and a.at <= T + 60, "the log's time is clamped into (lo, hi]: " .. tostring(a.at - T))
+
 -- Attribute: live first, then the log.
 a = EventLog.Attribute({ kind = "PROMOTE", name = "Ann Lee", to = "Veteran", lo = T, hi = T + 60 }, liveFresh(), log, now)
 eq(a.approx, false, "live wins")

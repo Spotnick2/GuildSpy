@@ -98,13 +98,24 @@ function API.GuildKey()
     if type(name) ~= "string" or name == "" then return nil end
     if type(realm) ~= "string" or realm == "" then realm = GetRealmName() end
     if type(realm) ~= "string" or realm == "" then return nil end
+    -- One spelling whichever source gave it ("Classic Beta PvE 2" and
+    -- "ClassicBetaPvE2" are one realm), so alts never split one guild in two.
+    realm = realm:gsub("[%s%-']", "")
     return name .. "-" .. realm, name
+end
+
+-- Years, months, days, hours ago -> hours. A month is counted as 730 h; the
+-- client may count calendar months, so totals can wobble by about a day at a
+-- month boundary. Nothing may treat a small change in a large total as a login
+-- (Roster's RETURN rule compares against the time since we last looked).
+local function hours(y, m, d, h)
+    return (y or 0) * 8760 + (m or 0) * 730 + (d or 0) * 24 + (h or 0)
 end
 
 local function lastOnlineHours(i)
     local y, m, d, h = GetGuildRosterLastOnline(i)
     if y == nil and m == nil and d == nil and h == nil then return nil end   -- online: four nils
-    return (y or 0) * 8760 + (m or 0) * 730 + (d or 0) * 24 + (h or 0)
+    return hours(y, m, d, h)
 end
 
 -- The whole roster, or nil and why it isn't complete. Measured (70338):
@@ -132,6 +143,7 @@ function API.ReadRoster()
             return nil, "row " .. i .. " incomplete"
         end
         if members[guid] then return nil, "duplicate GUID at row " .. i end
+        if rankIndex < 0 or rankIndex >= numRanks then return nil, "row " .. i .. " has a rank not loaded yet" end
         members[guid] = {
             name = name, rank = rankIndex, level = level, class = class,
             note = note or "", onote = canView and (onote or "") or nil,
@@ -146,7 +158,10 @@ function API.MOTD()
     local ns = rawget(_G, "C_GuildInfo")
     if type(ns) ~= "table" or type(ns.GetMOTD) ~= "function" then return nil end
     local ok, v = pcall(ns.GetMOTD)
-    return ok and type(v) == "string" and v or nil
+    -- "" is what it reads before the MOTD has loaded at login: unknown, not
+    -- cleared (a guild clearing its MOTD on purpose is the rarer case).
+    if not ok or type(v) ~= "string" or v == "" then return nil end
+    return v
 end
 
 function API.QueryEventLog()
@@ -162,8 +177,7 @@ function API.ReadEventLog()
     for i = 1, (type(n) == "number" and n or 0) do
         local kind, p1, p2, rank, y, m, d, h = GetGuildEventInfo(i)
         if type(kind) == "string" then
-            out[#out + 1] = { kind = kind, p1 = p1, p2 = p2, rank = rank,
-                              ageHours = (y or 0) * 8760 + (m or 0) * 730 + (d or 0) * 24 + (h or 0) }
+            out[#out + 1] = { kind = kind, p1 = p1, p2 = p2, rank = rank, ageHours = hours(y, m, d, h) }
         end
     end
     return out

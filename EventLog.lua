@@ -74,7 +74,9 @@ function EventLog.MatchLog(ev, entries, now)
                 local rankOk = (e.kind ~= "promote" and e.kind ~= "demote") or not ev.to or e.rank == ev.to
                 if rankOk then
                     if found then return nil end
-                    found = { actor = actor, at = t, approx = true,
+                    -- The hour-rounded time, kept inside the interval it explains.
+                    local at = math.max(ev.lo + 1, math.min(t, ev.hi))
+                    found = { actor = actor, at = at, approx = true,
                               how = (e.kind == "remove" and "kick") or (e.kind == "quit" and "quit") or nil }
                 end
             end

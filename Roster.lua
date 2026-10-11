@@ -27,8 +27,9 @@ local Roster = {}
 GuildSpy.Roster = Roster
 
 local HOUR, DAY = 3600, 86400
--- Last-online is measured to the hour; a move inside two hours is rounding, not a login.
-local PRECISION = 2 * HOUR
+-- Last-online is whole hours, rounded down (an hour of slack), and a month is
+-- counted as 730 h where the client may count calendar months (up to ~2% off).
+local MONTH_WOBBLE = 0.02
 
 Roster.KINDS = { "JOIN", "REJOIN", "LEAVE", "PROMOTE", "DEMOTE", "RANK", "RANKS", "NOTE", "ONOTE",
                  "LEVEL", "NAME", "RETURN", "MOTD" }
@@ -175,11 +176,16 @@ function Roster.Apply(state, scan, now, opts)
             -- Back after a long absence: only with proof. This member's own last
             -- observation (not the guild's: they may have been missing from it)
             -- must already have shown N days away, and this one real activity.
+            -- Activity means they logged in since we last looked at them: online
+            -- now, or last online more recently than our last look (by a margin
+            -- for the whole-hour rounding). A wobble in a month-sized total is not.
             local seen = lastSeen(cur, now)
             local seenAt = prev.seenAt or prevObs
             if seen and prev.lastSeenAt then
                 local awayProven = (not prev.online) and (seenAt - prev.lastSeenAt) >= returnSecs
-                local active = cur.online or (seen - prev.lastSeenAt) > PRECISION
+                local active = cur.online
+                    or (type(cur.lastOnlineHours) == "number"
+                        and cur.lastOnlineHours * HOUR * (1 + MONTH_WOBBLE) + HOUR < now - seenAt)
                 if awayProven and active then
                     add({ kind = "RETURN", guid = guid, name = cur.name,
                           days = math.floor((seenAt - prev.lastSeenAt) / DAY) })
