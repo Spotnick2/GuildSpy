@@ -3,10 +3,9 @@
 -- put in _G. Helpers lifted from ..\Gnomesweeper\Compat.lua and
 -- ..\AltStable\Compat.lua; lift more from there rather than rewriting them.
 --
--- Guild API shapes (GetGuildRosterInfo's tuple, GetGuildEventInfo's) are NOT
--- measured yet: phase 0's /gspy probe measures them (docs/FOREVER-PROBE.md).
--- Until then nothing reads them by position except the probe, which dumps
--- every position it finds.
+-- Guild API shapes are measured (docs/FOREVER-PROBE.md, 1.60.1.70338), and
+-- this file is the only one that knows their positions: everything else gets
+-- named structs from API.ReadRoster and API.ReadEventLog.
 
 local ADDON = ...
 GuildSpy = GuildSpy or {}
@@ -86,4 +85,86 @@ end
 function API.RegisterEvent(frame, event)
     local ok, res = pcall(frame.RegisterEvent, frame, event)
     return ok and res ~= false
+end
+
+local function isGuid(v) return type(v) == "string" and v:find("^Player%-") ~= nil end
+
+-- The guild's key: "<guild name>-<guild realm>". The realm is GetGuildInfo's
+-- 4th return, the GUILD's realm (it can differ from the player's). nil while
+-- the client doesn't know yet, or out of a guild.
+function API.GuildKey()
+    if not IsInGuild() then return nil end
+    local name, _, _, realm = GetGuildInfo("player")
+    if type(name) ~= "string" or name == "" then return nil end
+    if type(realm) ~= "string" or realm == "" then realm = GetRealmName() end
+    if type(realm) ~= "string" or realm == "" then return nil end
+    return name .. "-" .. realm, name
+end
+
+local function lastOnlineHours(i)
+    local y, m, d, h = GetGuildRosterLastOnline(i)
+    if y == nil and m == nil and d == nil and h == nil then return nil end   -- online: four nils
+    return (y or 0) * 8760 + (m or 0) * 730 + (d or 0) * 24 + (h or 0)
+end
+
+-- The whole roster, or nil and why it isn't complete. Measured (70338):
+-- GetGuildRosterInfo returns 17 values in Retail's order, the GUID 17th, the
+-- name "First Surname" with no realm, rankIndex 0-based (0 = Guild Master),
+-- the officer note "" when this character can't view it (so it is reported
+-- as nil here: unreadable is not empty). GuildControlGetRankName is 1-based.
+function API.ReadRoster()
+    local total = GetNumGuildMembers()
+    if type(total) ~= "number" or total <= 0 then return nil, "no members yet" end
+    local numRanks = GuildControlGetNumRanks()
+    if type(numRanks) ~= "number" or numRanks <= 0 then return nil, "no ranks yet" end
+    local ranks = {}
+    for r = 1, numRanks do
+        local rn = GuildControlGetRankName(r)
+        if type(rn) ~= "string" then return nil, "rank " .. r .. " not loaded" end
+        ranks[r] = rn
+    end
+    local canView = API.CanViewOfficerNote() == true
+    local members, count = {}, 0
+    for i = 1, total do
+        local name, _, rankIndex, level, _, _, note, onote, online, _, class,
+              _, _, _, _, _, guid = GetGuildRosterInfo(i)
+        if type(name) ~= "string" or name == "" or not isGuid(guid) or type(rankIndex) ~= "number" then
+            return nil, "row " .. i .. " incomplete"
+        end
+        if members[guid] then return nil, "duplicate GUID at row " .. i end
+        members[guid] = {
+            name = name, rank = rankIndex, level = level, class = class,
+            note = note or "", onote = canView and (onote or "") or nil,
+            online = online == true, lastOnlineHours = (online ~= true) and lastOnlineHours(i) or nil,
+        }
+        count = count + 1
+    end
+    return { members = members, count = count, ranks = ranks, canViewOfficer = canView, motd = API.MOTD() }
+end
+
+function API.MOTD()
+    local ns = rawget(_G, "C_GuildInfo")
+    if type(ns) ~= "table" or type(ns.GetMOTD) ~= "function" then return nil end
+    local ok, v = pcall(ns.GetMOTD)
+    return ok and type(v) == "string" and v or nil
+end
+
+function API.QueryEventLog()
+    if type(rawget(_G, "QueryGuildEventLog")) == "function" then pcall(QueryGuildEventLog) end
+end
+
+-- The server's guild event log, oldest first, capped at 100 (measured). Names
+-- are nil until the burst of GUILD_EVENT_LOG_UPDATE has settled: read it only
+-- after that. Ages are whole hours (years/months/days/hours ago).
+function API.ReadEventLog()
+    local n = GetNumGuildEvents()
+    local out = {}
+    for i = 1, (type(n) == "number" and n or 0) do
+        local kind, p1, p2, rank, y, m, d, h = GetGuildEventInfo(i)
+        if type(kind) == "string" then
+            out[#out + 1] = { kind = kind, p1 = p1, p2 = p2, rank = rank,
+                              ageHours = (y or 0) * 8760 + (m or 0) * 730 + (d or 0) * 24 + (h or 0) }
+        end
+    end
+    return out
 end

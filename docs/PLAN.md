@@ -219,6 +219,28 @@ is reset to "baseline needed". No per-character SV.
 - Tests are `test_toc.lua` and `test_probe.lua`; the Roster/Patterns/EventLog/Scanner tests and their
   fixtures come with phase 1's files.
 
+### Phase 1 as built (reviewed by Codex, gpt-6-astra high)
+
+The review raised 11 findings and 9 were fixed:
+- officer-note permission is checked at display time;
+- missing members keep their rank by name across a structure change;
+- RETURN uses the member's own last observation;
+- live multi-step promotions are marked "last step";
+- ambiguous live evidence blocks the log fallback;
+- the interval is strictly `(lo, hi + 10 s]`, and a message is used up once it has explained an event;
+- saved records are validated;
+- each guild session has its own digest deadline;
+- caps hold mid-session.
+
+Two were declined, deliberately:
+- **A live leave/kick message confirms a departure on the first missing scan.** The two-scan rule
+  guards against a roster that looks short. A server message saying the member left is proof on
+  its own, and waiting made kicks show 30 s late. The completeness gate still applies.
+- **The guild key falls back to the player's realm when `GetGuildInfo` gives no guild realm.** On
+  Retail that return is empty for a guild on the player's own realm, so refusing would never track
+  such guilds. The measured guild (connected realms) returns its realm. If a same-realm guild ever
+  shows both keys, revisit.
+
 ## Other ideas (not v1)
 
 GRM-derived: "in guild since" / "at this rank since" in roster tooltips (from our own observations);

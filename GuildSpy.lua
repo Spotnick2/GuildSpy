@@ -1,8 +1,7 @@
 -- GuildSpy.lua: the entry point. Loads last (see the TOC).
 --
--- Phase 0 (docs/PLAN.md): the saved table, the slash commands and the build
--- check. The roster tracking (Roster, Scanner, Log) comes in phase 1, on the
--- shapes /gspy probe measures.
+-- The saved table, the slash commands and the build check. The tracking is
+-- Scanner.lua's (on Roster, Patterns, EventLog and Log).
 
 local ADDON = ...
 GuildSpy = GuildSpy or {}
@@ -14,6 +13,10 @@ GuildSpy.Print = say
 
 GuildSpy.HELP = {
     { "/gspy help", "this list" },
+    { "/gspy log [n]", "the last n changes (default 15)" },
+    { "/gspy status", "what GuildSpy knows about your guild" },
+    { "/gspy scan", "look at the roster now" },
+    { "/gspy rebaseline", "start over from the current roster (the log is kept)" },
     { "/gspy version", "the addon's version and the client build" },
     { "/gspy probe", "dump the guild API's shapes (for measuring)" },
     { "/gspy probe watch", "record every system message (for measuring)" },
@@ -21,11 +24,17 @@ GuildSpy.HELP = {
     { "/gspy probe recipes", "open a guildmate's recipe book through the guild API (for measuring)" },
 }
 
--- GuildSpyDB: account-wide. Phase 1 adds `guilds` (docs/PLAN.md "Storage").
--- A table that isn't one is replaced: a damaged file must not stop the load.
+-- GuildSpyDB: account-wide (docs/PLAN.md "Storage"). A part that isn't the
+-- right type is replaced: a damaged file must not stop the load. Each guild's
+-- own table is checked when it is first used (Scanner).
 local function initDB()
     if type(GuildSpyDB) ~= "table" then GuildSpyDB = {} end
-    GuildSpyDB.version = GuildSpyDB.version or 1
+    local db = GuildSpyDB
+    db.version = db.version or 1
+    if type(db.settings) ~= "table" then db.settings = {} end
+    if type(db.settings.chat) ~= "table" then db.settings.chat = {} end
+    if type(db.guilds) ~= "table" then db.guilds = {} end
+    if type(db.nextSeq) ~= "number" then db.nextSeq = 1 end
 end
 
 local function slash(msg)
@@ -37,6 +46,15 @@ local function slash(msg)
         elseif rest == "log" and GuildSpyDB.probe then GuildSpy.Probe.DumpEventLog()
         elseif rest == "recipes" then GuildSpy.Probe.MemberRecipes()
         else GuildSpy.Probe.Run() end
+    elseif cmd == "log" then
+        GuildSpy.Scanner.PrintLog(tonumber(rest))
+    elseif cmd == "status" then
+        GuildSpy.Scanner.Status()
+    elseif cmd == "scan" then
+        GuildSpy.Scanner.Request()
+        say("asked the server for the roster.")
+    elseif cmd == "rebaseline" then
+        GuildSpy.Scanner.Rebaseline()
     elseif cmd == "version" then
         say(API.AddOnVersion(ADDON) .. " on client " .. tostring(API.ClientBuild())
             .. " (measured on " .. GuildSpy.MEASURED_ON_BUILD .. ")")

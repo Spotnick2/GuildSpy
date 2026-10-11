@@ -2,8 +2,8 @@
 
 **Know what's going on in your guild.** A World of Warcraft: Forever addon (1.60.1).
 
-> **Work in progress.** Today GuildSpy only measures how the client reports the guild (`/gspy probe`).
-> The tracking below is what it is being built to do.
+> **Work in progress.** The tracking works from chat (`/gspy log`); the log window, options and
+> minimap button are next.
 
 - **Who joined, left or was kicked**, and who rejoined.
 - **Who was promoted or demoted**, and by whom when the game says so.
@@ -20,6 +20,10 @@ It keeps the informational side of Guild Roster Manager and nothing else.
 | Command | What it does |
 |---|---|
 | `/gspy` or `/guildspy` | the list of commands |
+| `/gspy log [n]` | the last n changes (default 15) |
+| `/gspy status` | what GuildSpy knows about your guild |
+| `/gspy scan` | look at the roster now |
+| `/gspy rebaseline` | start over from the current roster (the log is kept) |
 | `/gspy version` | the addon's version and the client build |
 | `/gspy probe` | dump how the client reports the guild (for measuring) |
 
