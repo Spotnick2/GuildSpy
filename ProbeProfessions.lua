@@ -240,25 +240,66 @@ function Probe.MemberRecipes()
     local skillLine = pick["profession" .. slot .. "ID"]
     local cgi = g("C_GuildInfo") or {}
     local r = API.Pack(cgi.QueryGuildMemberRecipes, pick.guid, skillLine)
+    -- What was open before asking: a guildmate's book already open can't be told
+    -- apart from the one asked for, unless a new one shows after the request.
+    local ts = g("C_TradeSkillUI") or {}
+    local before = API.Pack(ts.IsTradeSkillGuildMember)
+    Probe.recipeRequest = (Probe.recipeRequest or 0) + 1
+    local request = Probe.recipeRequest
     o.memberRecipes = { member = pick.name, guid = pick.guid, skillLine = skillLine, presence = pick.presence,
                         profession = pick["profession" .. slot .. "Name"], rank = pick["profession" .. slot .. "Rank"],
-                        query = packData(r), events = {} }
-    Probe.wantMemberRecipes = true
-    say("asked for " .. tostring(pick.name) .. "'s " .. tostring(pick.profession1Name)
-        .. " recipes; reading them in " .. SETTLE .. " s")
-    C_Timer.After(SETTLE + 1, function() Probe.DumpMemberRecipes() end)
+                        query = packData(r), events = {}, request = request,
+                        guildViewBefore = before.ok and before[1] == true or nil }
+    say("asked for " .. tostring(pick.name) .. "'s " .. tostring(o.memberRecipes.profession)
+        .. " recipes; reading them in " .. (SETTLE + 1) .. " s")
+    -- Bound to this request: a second /gspy probe recipes makes this timer a no-op.
+    C_Timer.After(SETTLE + 1, function() Probe.DumpMemberRecipes(request) end)
 end
 
-function Probe.DumpMemberRecipes()
+-- Whether the open trade skill view is provably the book `mr` asked for: a
+-- view shown after the request, a guildmate's, ready, of the asked skill
+-- line, and (when the client names the linked player) that member. Returns
+-- true, or false and why.
+local function isRequestedBook(mr, ts)
+    local shown = false
+    for _, e in ipairs(mr.events) do
+        if e == "TRADE_SKILL_SHOW" or e == "TRADE_SKILL_DATA_SOURCE_CHANGED" then shown = true end
+    end
+    if not shown then return false, "no trade skill view opened after the request" end
+    local gm = API.Pack(ts.IsTradeSkillGuildMember)
+    if not (gm.ok and gm[1] == true) then return false, "the open view isn't a guildmate's" end
+    local ready = API.Pack(ts.IsTradeSkillReady)
+    if not (ready.ok and ready[1] == true) then return false, "the view isn't ready" end
+    local base = API.Pack(ts.GetBaseProfessionInfo)
+    local id = base.ok and type(base[1]) == "table" and base[1].professionID
+    if id ~= mr.skillLine then return false, "the open view is skill line " .. tostring(id) end
+    local linked = API.Pack(ts.IsTradeSkillLinked)
+    local name = linked.ok and linked[2]
+    mr.linkedName = name
+    if type(name) == "string" and name ~= "" and name ~= mr.member then
+        return false, "the open view is " .. name .. "'s"
+    end
+    return true
+end
+
+function Probe.DumpMemberRecipes(request)
     local o = out()
     local mr = o and o.memberRecipes
-    if not mr or not Probe.wantMemberRecipes then return end
-    Probe.wantMemberRecipes = nil
+    if not mr or mr.request ~= request or mr.done then return end
+    mr.done = true
     local ts = g("C_TradeSkillUI") or {}
     mr.isGuildMember = packData(API.Pack(ts.IsTradeSkillGuildMember))
     mr.isReady = packData(API.Pack(ts.IsTradeSkillReady))
     local base = API.Pack(ts.GetBaseProfessionInfo)
     mr.baseProfession = (base.ok and type(base[1]) == "table") and scalarsOf(base[1]) or packData(base)
+    local ok, why = isRequestedBook(mr, ts)
+    if not ok then
+        -- Not provably ours: nothing is read as this member's, nothing is closed.
+        mr.inconclusive = why
+        say(string.format("%s's recipes: inconclusive (%s); the open view was left alone",
+            tostring(mr.member), why))
+        return
+    end
     local all = API.Pack(ts.GetAllRecipeIDs)
     local ids = (all.ok and type(all[1]) == "table") and all[1] or {}
     mr.recipeIDs, mr.learned, mr.learnedNames = #ids, 0, {}
@@ -270,15 +311,11 @@ function Probe.DumpMemberRecipes()
             if #mr.learnedNames < 15 then mr.learnedNames[#mr.learnedNames + 1] = ri.name end
         end
     end
-    -- Close the guildmate's book this probe opened, and only that.
-    local gm = API.Pack(ts.IsTradeSkillGuildMember)
-    if gm.ok and gm[1] == true then
-        API.Pack(ts.CloseTradeSkill)
-        mr.closed = true
-    end
-    say(string.format("%s's recipes: guild-member view %s, %d recipe ids, %d learned (%s)",
-        tostring(mr.member), packText(API.Pack(ts.IsTradeSkillGuildMember)), mr.recipeIDs, mr.learned,
-        table.concat(mr.learnedNames, ", ")))
+    -- The book this request opened, and only that, is closed.
+    API.Pack(ts.CloseTradeSkill)
+    mr.closed = true
+    say(string.format("%s's recipes: %d recipe ids, %d learned (%s)",
+        tostring(mr.member), mr.recipeIDs, mr.learned, table.concat(mr.learnedNames, ", ")))
 end
 
 local frame = CreateFrame("Frame")
@@ -301,6 +338,6 @@ frame:SetScript("OnEvent", function(_, event)
         recipeAnswered()
     else
         local mr = out() and out().memberRecipes
-        if mr and Probe.wantMemberRecipes then mr.events[#mr.events + 1] = event end
+        if mr and not mr.done then mr.events[#mr.events + 1] = event end
     end
 end)
