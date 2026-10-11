@@ -15,7 +15,9 @@ the shared `$wow-addon-review` skill governs routing (see "Review policy" in AGE
 For a second opinion on a **plan or design**, the value is decorrelated blind spots:
 
 1. **First choice: Codex / GPT** via `/codex-consult` (`.claude/skills/codex-consult`). The owner
-   reviews with `gpt-6-astra` at `high`; ask before using `high` unless they already said so.
+   critiques plans and designs with `gpt-6-astra` at `high` (asked for on this project's plan);
+   ask before using `high` elsewhere. **PR code reviews are routed by `$wow-addon-review`**, not by
+   this line (`docs/WORKFLOW.md`).
 2. **Fallback when Codex is unavailable:** Fable. Same family, so a weaker adversary.
 3. **Stay in the main thread** when the question is about this codebase's specifics (below).
 
