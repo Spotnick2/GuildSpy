@@ -85,7 +85,7 @@ eq(mr.skillLine, 171, "...in their first profession")
 WoW.fire("TRADE_SKILL_SHOW")
 WoW.advance(5)
 eq(mr.events[1], "TRADE_SKILL_SHOW", "the frame's events recorded")
-eq(mr.recipeIDs, 0, "no recipe API here: zero, not an error")
+check(mr.inconclusive ~= nil, "no recipe API here: inconclusive, not an error")
 
 -- The client as measured on 70338: C_TradeSkillUI is there, the switch is off.
 local closes, expanded, collapsed = 0, {}, {}
@@ -146,15 +146,49 @@ eq(#collapsed, 2, "...and collapsed again afterwards")
 -- A guildmate's book: the crafting profession may be the second one; the book is read, then closed.
 WoW.guild.club[3].profession1ID, WoW.guild.club[3].profession1Name = 182, "Herbalism"
 WoW.guild.club[3].profession2ID, WoW.guild.club[3].profession2Name = 171, "Alchemy"
+C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Akka Avery" end
 WoW.slash("/gspy probe recipes")
 local mr = GuildSpyDB.probe.memberRecipes
 eq(mr.member, "Akka Avery", "an online crafter whose craft is in slot 2")
 eq(mr.skillLine, 171, "...asked for that craft")
+check(WoW.chat[#WoW.chat]:find("Alchemy recipes", 1, true), "...named by that slot's profession")
+WoW.fire("TRADE_SKILL_SHOW")
 WoW.advance(5)
+eq(mr.inconclusive, nil, "the book that opened is provably the one asked for")
 eq(mr.recipeIDs, 2, "the recipe ids read")
 eq(mr.learned, 1, "...and which are learned")
 eq(mr.learnedNames[1], "Recipe 2330", "...by name")
 eq(closes, 1, "the book this probe opened is closed")
+
+-- Nothing opened after the request (another book was already open): inconclusive, left alone.
+WoW.slash("/gspy probe recipes")
+mr = GuildSpyDB.probe.memberRecipes
+WoW.advance(5)
+check(mr.inconclusive and mr.inconclusive:find("no trade skill view opened", 1, true), "no new view: inconclusive")
+eq(mr.recipeIDs, nil, "...nothing read as this member's")
+eq(closes, 1, "...and the open view is left alone")
+
+-- Another guildmate's book opened meanwhile: inconclusive, left alone.
+C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Someone Else" end
+WoW.slash("/gspy probe recipes")
+mr = GuildSpyDB.probe.memberRecipes
+WoW.fire("TRADE_SKILL_SHOW")
+WoW.advance(5)
+check(mr.inconclusive and mr.inconclusive:find("Someone Else", 1, true), "someone else's book: inconclusive")
+eq(closes, 1, "...and not closed")
+
+-- A second request within the wait: the first timer does nothing.
+C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Akka Avery" end
+WoW.slash("/gspy probe recipes")
+WoW.advance(2)
+WoW.slash("/gspy probe recipes")
+local second = GuildSpyDB.probe.memberRecipes
+WoW.fire("TRADE_SKILL_SHOW")
+WoW.advance(2.5)                                       -- the first timer fires now
+eq(second.done, nil, "the first request's timer didn't consume the second")
+WoW.advance(3)
+eq(second.done, true, "the second's own timer did")
+eq(closes, 2, "...and closed only its own book")
 unforever()
 
 -- /gspy probe log with no probe yet: says so, runs nothing.
