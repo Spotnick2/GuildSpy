@@ -173,7 +173,7 @@ check(GuildSpyDB.guilds["Parse Partout-Forever"] ~= nil, "...and the first guild
 
 -- A damaged saved file: an unreadable record means a fresh baseline, never a Lua error.
 local broken = { version = 1, guilds = { ["Other Guild-Forever"] = {
-    observedAt = 1, members = { ["Player-1-00000002"] = { name = "Ann Lee" } },   -- no rank
+    observedAt = 1, members = { ["Player-1-00000002"] = { name = "Ann Lee", rank = 2, lastSeenAt = "soon" } },   -- a text time
     log = { { seq = 1, at = 1790000000, kind = "JOIN", name = "x" }, "garbage", { kind = 5 } },
     formers = { G = "garbage" } } } }
 WoW.chat = {}
@@ -273,6 +273,38 @@ gs3.shownSeq = top
 eq(topOnote, nil, "a non-officer moves no officer-note boundary")
 local lines = L.Digest(gs3, true, WoW.epoch)
 check(#lines > 0 and lines[2]:find("officer note", 1, true), "the officer's next digest still has it")
+
+-- "Show offline members" off: GuildSpy pauses and says so; nobody is declared gone.
+WoW.chat = {}
+local n1 = #GuildSpyDB.guilds["Parse Partout-Forever"].log
+R2.hideOffline = true
+for _ = 1, 3 do WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(40) end
+check(chatHas("Show Offline Members"), "show offline off: paused, and said so")
+local warned = 0
+for _, l in ipairs(WoW.chat) do if l:find("Show Offline Members", 1, true) then warned = warned + 1 end end
+eq(warned, 1, "...once")
+eq(#GuildSpyDB.guilds["Parse Partout-Forever"].log, n1, "...and nothing recorded")
+R2.hideOffline = nil
+
+-- Two members share a name and both change: one message credits neither.
+WoW.chat = {}
+local t1 = member("Sam Mahra", 5, "Player-1-00000010")
+local t2 = member("Sam Mahra", 5, "Player-2-00000011")
+table.insert(R2.members, t1); table.insert(R2.members, t2)
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+WoW.fire("CHAT_MSG_SYSTEM", "Enzo Matrix has promoted Sam Mahra to Member.")
+t1.rank, t2.rank = 4, 4
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+check(chatHas("Enzo Matrix promoted Sam Mahra") == nil, "a shared name: no officer credited")
+check(chatHas("Sam Mahra was promoted"), "...the promotions are still reported")
+
+-- The officer-note boundary never jumps an unseen officer-note entry.
+local gsb = { log = { { seq = 10, kind = "ONOTE" }, { seq = 11, kind = "NOTE" }, { seq = 12, kind = "ONOTE" } },
+              shownOnoteSeq = 5 }
+GuildSpy.Scanner.SeenOnote(gsb, 12)
+eq(gsb.shownOnoteSeq, 5, "seq 10 unseen: the boundary stays")
+GuildSpy.Scanner.SeenOnote(gsb, 10)
+eq(gsb.shownOnoteSeq, 10, "seq 10 seen: the boundary moves to it")
 
 -- Status and rebaseline answer.
 WoW.chat = {}

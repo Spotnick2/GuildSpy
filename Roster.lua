@@ -197,14 +197,21 @@ function Roster.Apply(state, scan, now, opts)
         end
     end
 
-    -- Departures: two complete scans, unless a message confirms it.
+    -- Departures: two complete scans, unless a message confirms it. A message
+    -- names a member, not a GUID: it confirms only a name no other missing
+    -- member shares.
+    local missingNames = {}
+    for guid, prev in pairs(state.members) do
+        if not scan.members[guid] then missingNames[prev.name] = (missingNames[prev.name] or 0) + 1 end
+    end
     for guid, prev in pairs(state.members) do
         if not scan.members[guid] then
             if not prev.missingSince then
                 prev.missingSince, prev.missingAfter = now, prevObs
             end
             local lo, hi = prev.missingAfter, prev.missingSince
-            local confirmed = opts.confirmLeave and opts.confirmLeave(prev.name, lo, hi)
+            local confirmed = opts.confirmLeave and missingNames[prev.name] == 1
+                and opts.confirmLeave(prev.name, lo, hi)
             if confirmed or (now - prev.missingSince) >= departSecs then
                 local rankName = (not prev.rankLost) and oldRanks[(prev.rank or 0) + 1] or nil
                 add({ kind = "LEAVE", guid = guid, name = prev.name, from = rankName,

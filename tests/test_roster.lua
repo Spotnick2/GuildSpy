@@ -84,6 +84,14 @@ eq(kinds(Roster.Apply(st, scan(three()), T0 + 510)), "", "(rejoined above; settl
 ev = Roster.Apply(st, scan(two()), T0 + 520, { confirmLeave = function(name) return name == "Cy Dee" end })
 eq(kinds(ev), "LEAVE", "confirmed at once by a message")
 
+-- Two missing members with one name (connected realms): a message confirms neither.
+local twin = {}
+Roster.Apply(twin, scan({ T1 = m("Sam Mahra", 4), T2 = m("Sam Mahra", 4), K = m("Kay Oh", 4) }), T0)
+ev = Roster.Apply(twin, scan({ K = m("Kay Oh", 4) }), T0 + 60, { confirmLeave = function() return true end })
+eq(#ev, 0, "a shared name: no fast confirmation")
+ev = Roster.Apply(twin, scan({ K = m("Kay Oh", 4) }), T0 + 120)
+eq(kinds(ev), "LEAVE,LEAVE", "...both confirmed by the second scan instead")
+
 -- Rejoin: the GUID was a former member.
 ev = Roster.Apply(st, scan(three()), T0 + 600)
 eq(kinds(ev), "REJOIN", "a former member is a rejoin")

@@ -339,7 +339,7 @@ function GetNumGuildMembers()
     for _, m in ipairs(gd.members) do if m.online then online = online + 1 end end
     return #gd.members, online
 end
-function GetGuildRosterShowOffline() return true end
+function GetGuildRosterShowOffline() return not (WoW.guild and WoW.guild.hideOffline) end
 function GetGuildRosterInfo(i)
     local m = WoW.guild and not WoW.guild.loading and WoW.guild.members[i]
     if not m then return nil end

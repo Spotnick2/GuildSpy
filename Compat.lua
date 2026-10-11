@@ -124,6 +124,12 @@ end
 -- the officer note "" when this character can't view it (so it is reported
 -- as nil here: unreadable is not empty). GuildControlGetRankName is 1-based.
 function API.ReadRoster()
+    -- Only "show offline members" ON was measured (70338): with it off the
+    -- roster may list the online members only, and a diff would then take every
+    -- offline member for a departure. Refuse; the shell tells the player. (The
+    -- setting is Blizzard's guild window's, so GuildSpy doesn't flip it.)
+    local showOffline = rawget(_G, "GetGuildRosterShowOffline")
+    if type(showOffline) == "function" and showOffline() == false then return nil, "showOffline" end
     local total = GetNumGuildMembers()
     if type(total) ~= "number" or total <= 0 then return nil, "no members yet" end
     local numRanks = GuildControlGetNumRanks()

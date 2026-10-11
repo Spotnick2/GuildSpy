@@ -44,6 +44,9 @@ function Scanner.Reset()
 end
 Scanner.Reset()
 
+local function numOrNil(v) return v == nil or type(v) == "number" end
+local function strOrNil(v) return v == nil or type(v) == "string" end
+
 -- A saved guild is checked before use: a snapshot with an unreadable record
 -- is dropped (the next complete scan is a fresh baseline), unreadable log and
 -- former entries are dropped. A damaged file must never stop the addon.
@@ -52,7 +55,10 @@ local function validGuild(gs)
         gs.members, gs.observedAt = nil, nil
     else
         for _, m in pairs(gs.members) do
-            if type(m) ~= "table" or type(m.name) ~= "string" or type(m.rank) ~= "number" then
+            if type(m) ~= "table" or type(m.name) ~= "string" or type(m.rank) ~= "number"
+                or not numOrNil(m.level) or not numOrNil(m.lastSeenAt) or not numOrNil(m.seenAt)
+                or not numOrNil(m.missingSince) or not numOrNil(m.missingAfter)
+                or not strOrNil(m.note) or not strOrNil(m.onote) then
                 gs.members, gs.observedAt = nil, nil
                 break
             end
@@ -229,6 +235,13 @@ function Scanner.Scan(force)
     local scan, why = API.ReadRoster()
     if not scan then
         S.incomplete = S.incomplete + 1
+        if why == "showOffline" then
+            if not S.warnedOffline then
+                S.warnedOffline = true
+                say("paused: turn on \"Show Offline Members\" in the guild roster so GuildSpy can see the whole guild.")
+            end
+            return
+        end
         if S.incomplete >= Scanner.WARN_AFTER and not S.warned then
             S.warned = true
             say("can't read the whole guild roster (" .. tostring(why) .. "). Is \"Show offline members\" on? "
@@ -241,15 +254,23 @@ function Scanner.Scan(force)
     prunePending(t)
     local events, wasBaseline = Roster.Apply(S.state, scan, t, opts())
     if wasBaseline then S.baselined = scan.count end
+    -- Names can repeat across connected realms: evidence (a message, a log
+    -- row) names a member, not a GUID, so it explains a change only when one
+    -- changed GUID carries that name in this scan.
+    local named = {}
+    for _, ev in ipairs(events) do
+        if ev.guid and ev.name then named[ev.name] = (named[ev.name] or 0) + 1 end
+    end
     for _, ev in ipairs(events) do
         local m = ev.guid and scan.members[ev.guid]
         if m then ev.class = m.class end
-        local attr = Scanner.ATTRIBUTABLE[ev.kind] and attribute(ev)
+        if ev.name and (named[ev.name] or 0) > 1 then ev.sharedName = true end
+        local attr = Scanner.ATTRIBUTABLE[ev.kind] and not ev.sharedName and attribute(ev)
         if attr then
             ev.actor, ev.how, ev.lastStep, ev.at, ev.approx = attr.actor, attr.how, attr.lastStep, attr.at, attr.approx
         end
         local entry = Log.Add(db(), S.state, ev, t)
-        if Scanner.ATTRIBUTABLE[ev.kind] and not attr then
+        if Scanner.ATTRIBUTABLE[ev.kind] and not attr and not ev.sharedName then
             S.enrichable[#S.enrichable + 1] = { entry = entry, ev = ev, recordedAt = t }
         end
         Scanner.Print(entry)
@@ -257,7 +278,7 @@ function Scanner.Scan(force)
         -- digest starts after them (officer notes only for whoever can read them).
         if S.digestShown then
             S.state.shownSeq, S.state.shownAt = entry.seq, t
-            if canView() then S.state.shownOnoteSeq = entry.seq end
+            if entry.kind == "ONOTE" and canView() then Scanner.SeenOnote(S.state, entry.seq) end
         end
     end
     Roster.PruneFormers(S.state, t)
@@ -273,6 +294,17 @@ function Scanner.ReadEventLog()
     Scanner.Enrich()
     if not S.firstScanDone then Scanner.Scan() end      -- the held first scan
     Scanner.MaybeDigest(false)
+end
+
+-- The officer-note boundary means "every officer-note entry up to here was
+-- shown to someone who can read it". It moves to `seq` only if no older
+-- officer-note entry past the boundary is still unseen.
+function Scanner.SeenOnote(gs, seq)
+    local from = gs.shownOnoteSeq or 0
+    for _, e in ipairs(gs.log or {}) do
+        if e.kind == "ONOTE" and e.seq > from and e.seq < seq then return end
+    end
+    if seq > from then gs.shownOnoteSeq = seq end
 end
 
 -- The digest ------------------------------------------------------------------
