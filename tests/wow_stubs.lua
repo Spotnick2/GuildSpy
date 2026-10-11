@@ -311,10 +311,15 @@ end
 --   events = { { type, p1, p2, rank, y, m, d, h }, ... }, canViewOfficerNote,
 --   isOfficer, motd, clubId }.
 --
--- UNMEASURED: the tuple orders below are Retail's (GetGuildRosterInfo's 17
--- returns with the GUID last, GetGuildEventInfo's 8). They are in the dump by
--- NAME only (no signatures). Phase 0's /gspy probe measures them; update these
--- stubs from docs/FOREVER-PROBE.md before anything relies on a position.
+-- MEASURED (1.60.1.70338, docs/FOREVER-PROBE.md): GetGuildRosterInfo returns 17
+-- values in Retail's order, the GUID last, the name with its surname and no
+-- realm, the rank index 0-based (0 = Guild Master), the officer note "" for a
+-- character that can't view it. GetGuildRosterLastOnline is four nils for an
+-- online member, else years, months, days, hours. GetNumGuildMembers returns
+-- two values. GetGuildEventInfo returns 8 values (type, player1, player2, rank,
+-- years, months, days, hours), oldest first. player1/player2 are nil until the
+-- burst of GUILD_EVENT_LOG_UPDATE has settled, then named: WoW.guild.eventNames
+-- (nil: still settling) models both.
 --------------------------------------------------------------------------------
 
 function IsInGuild() return WoW.guild ~= nil end
@@ -326,10 +331,10 @@ function GetGuildInfo(unit)
 end
 function GetNumGuildMembers()
     local gd = WoW.guild
-    if not gd or gd.loading then return 0, 0, 0 end
+    if not gd or gd.loading then return 0, 0 end
     local online = 0
     for _, m in ipairs(gd.members) do if m.online then online = online + 1 end end
-    return #gd.members, online, online
+    return #gd.members, online
 end
 function GetGuildRosterShowOffline() return true end
 function GetGuildRosterInfo(i)
@@ -337,11 +342,12 @@ function GetGuildRosterInfo(i)
     if not m then return nil end
     local onote = WoW.guild.canViewOfficerNote and m.onote or ""
     return m.name, WoW.guild.ranks[m.rank + 1], m.rank, m.level, m.class, m.zone or "",
-        m.note or "", onote, m.online and true or false, 0, m.class, 0, 0, false, false, 4, m.guid
+        m.note or "", onote, m.online and true or false, 0, m.class, -1, 0, false, false, 3, m.guid
 end
 function GetGuildRosterLastOnline(i)
     local m = WoW.guild and WoW.guild.members[i]
-    if not m or m.online or not m.lastOnline then return nil end
+    if not m then return nil end
+    if m.online or not m.lastOnline then return nil, nil, nil, nil end
     return m.lastOnline[1], m.lastOnline[2], m.lastOnline[3], m.lastOnline[4]
 end
 function GuildControlGetNumRanks() return WoW.guild and #WoW.guild.ranks or 0 end
@@ -351,7 +357,8 @@ function GetNumGuildEvents() return WoW.guild and WoW.guild.events and #WoW.guil
 function GetGuildEventInfo(i)
     local e = WoW.guild and WoW.guild.events and WoW.guild.events[i]
     if not e then return nil end
-    return e[1], e[2], e[3], e[4], e[5], e[6], e[7], e[8]
+    local names = WoW.guild.eventNames
+    return e[1], names and e[2] or nil, names and e[3] or nil, e[4], e[5], e[6], e[7], e[8]
 end
 C_GuildInfo = {
     GuildRoster = function() WoW.rosterRequests = WoW.rosterRequests + 1 end,
@@ -359,18 +366,23 @@ C_GuildInfo = {
     IsGuildOfficer = function() return WoW.guild ~= nil and WoW.guild.isOfficer == true end,
     GetMOTD = function() return WoW.guild and WoW.guild.motd or "" end,
 }
+-- WoW.guild.club = { { ClubMemberInfo fields }, ... } (memberId = its index).
 C_Club = {
     GetGuildClubId = function() return WoW.guild and WoW.guild.clubId end,
-    GetClubMembers = function(clubId) return {} end,
-    GetMemberInfo = function(clubId, memberId) return nil end,
+    GetClubMembers = function(clubId)
+        local ids = {}
+        for i in ipairs(WoW.guild and WoW.guild.club or {}) do ids[i] = i end
+        return ids
+    end,
+    GetMemberInfo = function(clubId, memberId) return WoW.guild and WoW.guild.club and WoW.guild.club[memberId] end,
 }
--- Localized system strings: enUS as GRM parses them, NOT yet read from this
--- client (the probe records the real values in GuildSpyDB.probe.globals).
+-- Localized system strings: enUS, as read from the client (70338, the probe).
 ERR_GUILD_JOIN_S = "%s has joined the guild."
 ERR_GUILD_LEAVE_S = "%s has left the guild."
 ERR_GUILD_REMOVE_SS = "%s has been kicked out of the guild by %s."
 ERR_GUILD_PROMOTE_SSS = "%s has promoted %s to %s."
 ERR_GUILD_DEMOTE_SSS = "%s has demoted %s to %s."
+ERR_GUILD_LEADER_CHANGED_SS = "%s has made %s the new Guild Master."
 
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }

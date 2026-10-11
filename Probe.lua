@@ -218,25 +218,64 @@ function Probe.Run()
     end
     say("ERR_GUILD_PROMOTE_SSS = " .. show(g("ERR_GUILD_PROMOTE_SSS")))
 
-    -- The event log answers asynchronously: ask, and dump on GUILD_EVENT_LOG_UPDATE.
+    -- The event log answers asynchronously, in a burst of GUILD_EVENT_LOG_UPDATE
+    -- (about 55 in a second, measured on 70338): ask, and dump once it settles.
+    -- The first dump, taken on the first update, had every name nil: the names
+    -- may arrive later in the burst.
     Probe.wantEventLog = true
+    Probe.eventLogUpdates = 0          -- count this probe's burst, not the session's
     local q = API.Pack(g("QueryGuildEventLog"))
     out.queryEventLog = packData(q)
     API.RequestRoster()
+    if Probe.Professions then Probe.Professions(out) end
     say("event log requested; full dump in GuildSpyDB.probe (/reload, then read SavedVariables\\GuildSpy.lua)")
 end
 
+-- Every entry of the event log, and how many carry names. `/gspy probe log`
+-- runs it again later, to see whether names fill in over time.
 function Probe.DumpEventLog()
     local out = GuildSpyDB and GuildSpyDB.probe
     if not out then return end
     local n = API.Pack(g("GetNumGuildEvents"))
     local count = (n.ok and type(n[1]) == "number") and n[1] or 0
-    out.eventLog = { num = packData(n), entries = {} }
-    for i = 1, math.min(10, count) do
-        out.eventLog.entries[i] = packData(API.Pack(g("GetGuildEventInfo"), i))
+    out.eventLog = { num = packData(n), entries = {}, named = 0, at = time(),
+                     updates = Probe.eventLogUpdates, byType = {} }
+    -- "Named" means every name the type needs: actor and member for promote,
+    -- demote, remove and invite; the member for join and quit. "" is no name.
+    local function has(v) return type(v) == "string" and v ~= "" end
+    for i = 1, count do
+        local e = API.Pack(g("GetGuildEventInfo"), i)
+        out.eventLog.entries[i] = packData(e)
+        if e.ok and type(e[1]) == "string" then
+            local both = e[1] ~= "join" and e[1] ~= "quit"
+            local complete = has(e[2]) and (not both or has(e[3]))
+            if complete then out.eventLog.named = out.eventLog.named + 1 end
+            local bt = out.eventLog.byType[e[1]] or { count = 0, named = 0 }
+            bt.count = bt.count + 1
+            if complete then bt.named = bt.named + 1 end
+            bt.sample = bt.sample or packData(e)
+            out.eventLog.byType[e[1]] = bt
+        end
     end
-    print("|cff7fd4ffGuildSpy probe:|r event log: " .. count .. " entries; first: "
-        .. (count > 0 and packText(API.Pack(g("GetGuildEventInfo"), 1)) or "none"))
+    local types = {}
+    for t, bt in pairs(out.eventLog.byType) do types[#types + 1] = t .. " " .. bt.named .. "/" .. bt.count end
+    table.sort(types)
+    print("|cff7fd4ffGuildSpy probe:|r event log: " .. count .. " entries, " .. out.eventLog.named
+        .. " with every name they need (" .. table.concat(types, ", ") .. ")")
+end
+
+-- Dump once the burst has been quiet for EVENT_LOG_SETTLE seconds.
+local EVENT_LOG_SETTLE = 3
+function Probe.EventLogUpdated()
+    Probe.eventLogUpdates = (Probe.eventLogUpdates or 0) + 1
+    if not Probe.wantEventLog then return end
+    Probe.eventLogGen = (Probe.eventLogGen or 0) + 1
+    local gen = Probe.eventLogGen
+    C_Timer.After(EVENT_LOG_SETTLE, function()
+        if gen ~= Probe.eventLogGen or not Probe.wantEventLog then return end
+        Probe.wantEventLog = nil
+        Probe.DumpEventLog()
+    end)
 end
 
 function Probe.ToggleWatch()
@@ -265,9 +304,9 @@ frame:SetScript("OnEvent", function(_, event, ...)
         if GuildSpyDB and GuildSpyDB.probeWatch then log({ e = event, msg = (...) }) end
         return
     end
-    if event == "GUILD_EVENT_LOG_UPDATE" and Probe.wantEventLog then
-        Probe.wantEventLog = nil
-        Probe.DumpEventLog()
+    if event == "GUILD_EVENT_LOG_UPDATE" then
+        Probe.EventLogUpdated()   -- counted, not logged: it comes in bursts of dozens
+        return
     end
     local timed = Probe.loginAt and (GetTime() - Probe.loginAt) <= TIMELINE_SECONDS
     if not timed then return end
@@ -282,3 +321,7 @@ end)
 
 GuildSpy._test = GuildSpy._test or {}
 GuildSpy._test.Probe = { isGuid = isGuid, packText = packText }
+
+-- For ProbeProfessions.lua.
+Probe.g, Probe.show, Probe.packText, Probe.packData, Probe.scalarsOf, Probe.log =
+    g, show, packText, packData, scalarsOf, log
