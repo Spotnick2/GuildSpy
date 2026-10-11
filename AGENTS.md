@@ -42,14 +42,15 @@ before touching an unfamiliar API.
 - **SavedVariables:** `GuildSpyDB`, account-wide (so alts in the same guild share one baseline).
   Its shape is in `docs/PLAN.md` "Storage". Once released, the shape is a contract: add fields,
   don't repurpose them. Verify persistence with a **full client exit**, never a `/reload`.
-- **Status:** phase 0 (repo + `/gspy probe`). Phase 1 (detection, log, digest) is built only on
-  shapes the probe has measured.
+- **Status:** phase 1 (detection, log, chat lines, digest, `/gspy log`). Phase 2 adds the log
+  window, the options page and the minimap button. The guild API shapes are measured:
+  `docs/FOREVER-PROBE.md`.
 
 ## Layout
 
-TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Probe.lua` →
-`ProbeProfessions.lua` → `GuildSpy.lua`. Phase 1 adds `Roster.lua`, `Patterns.lua`, `EventLog.lua` (pure), `Scanner.lua`,
-`Log.lua`; phase 2 `UI.lua`, `Options.lua`, `Minimap.lua` (see `docs/PLAN.md` "Architecture").
+TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Roster.lua` →
+`Patterns.lua` → `EventLog.lua` → `Log.lua` → `Scanner.lua` → `Probe.lua` → `ProbeProfessions.lua` →
+`GuildSpy.lua`. Phase 2 adds `UI.lua`, `Options.lua`, `Minimap.lua` (see `docs/PLAN.md` "Architecture").
 
 - **`Compat.lua`**: `GuildSpy.API`, the only route to client APIs that moved or may be absent, and
   `MEASURED_ON_BUILD`. **The only place that will know a guild tuple's positions.** Nothing is
@@ -61,8 +62,21 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   (finding the GUID by looking), last-online, ranks, `C_Club`, the event log and the `ERR_GUILD_*`
   strings into `GuildSpyDB.probe`; a login timeline of roster completeness is always kept in
   `GuildSpyDB.probeLog`; `/gspy probe watch` also records every system message.
-- **Pure files** (phase 1: `Roster.lua`, `Patterns.lua`, `EventLog.lua`) use **no WoW API**; tests
-  load them with every global forbidden (`newPureEnv` in `tests/harness.lua`).
+- **Pure files** use **no WoW API**; tests load them with every global forbidden (`newPureEnv` in
+  `tests/harness.lua`):
+  - `Roster.lua`: `Roster.Apply(state, scan, now, opts)`, the diff. It updates one guild's saved
+    state in place and returns events `{ kind, guid, name, from, to, lo, hi }`.
+  - `Patterns.lua`: system message → `{ kind, actor, target, rank }`, built from the client's
+    `ERR_GUILD_*` strings.
+  - `EventLog.lua`: `Attribute(ev, pending, entries, now)` attaches an actor only from a unique
+    match in the interval.
+- **`Log.lua`**: entries (stored as data, rendered at display), caps on append, chat lines, and
+  the digest.
+- **`Scanner.lua`**: the shell. It handles events and debounces, polls every 60 s, applies the
+  completeness gate (`API.ReadRoster`), keeps the pending live messages, reads the event log once
+  its burst settles, enriches entries in place, and times the digest.
+- **`ProbeProfessions.lua`**: measuring only. It records whether the server serves guild
+  professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
   None of them ship (`.pkgmeta`).
 

@@ -281,7 +281,8 @@ function GetBuildInfo() return unpack(WoW.build) end
 function GetFileIDFromPath(path) return WoW.fileIDs[path] end
 C_AddOns = { GetAddOnMetadata = function(name, key) return WoW.metadata[key] end }
 
--- Timers run when WoW.advance moves the clock past them, in order.
+-- Timers run when WoW.advance moves the clock past them, in order. The
+-- calendar clock (time()) moves with it.
 C_Timer = {
     After = function(seconds, fn)
         WoW.timers[#WoW.timers + 1] = { at = WoW.now + seconds, fn = fn, seq = #WoW.timers }
@@ -296,9 +297,11 @@ function WoW.advance(seconds)
         end
         if not best then break end
         table.remove(WoW.timers, bi)
+        WoW.epoch = WoW.epoch + (math.max(WoW.now, best.at) - WoW.now)
         WoW.now = math.max(WoW.now, best.at)
         best.fn()
     end
+    WoW.epoch = WoW.epoch + (target - WoW.now)
     WoW.now = target
 end
 
@@ -336,7 +339,7 @@ function GetNumGuildMembers()
     for _, m in ipairs(gd.members) do if m.online then online = online + 1 end end
     return #gd.members, online
 end
-function GetGuildRosterShowOffline() return true end
+function GetGuildRosterShowOffline() return not (WoW.guild and WoW.guild.hideOffline) end
 function GetGuildRosterInfo(i)
     local m = WoW.guild and not WoW.guild.loading and WoW.guild.members[i]
     if not m then return nil end
