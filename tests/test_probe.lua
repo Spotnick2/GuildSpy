@@ -19,7 +19,7 @@ local function guild(n, opts)
     return g
 end
 
--- A guild: the survey finds the GUID at the stub's (Retail's) position 17, unique per member.
+-- A guild: the survey finds the GUID at position 17 (measured on 70338), unique per member.
 loadAddon({ setup = function() WoW.guild = guild(6) end })
 WoW.fire("PLAYER_LOGIN")
 WoW.slash("/gspy probe")
@@ -41,11 +41,24 @@ check(you ~= nil, "your own row dumped")
 eq(p.rows[2].lastOnline[1], nil, "an online member's last online is nil, not an error")
 eq(p.rows[1].info.n, 17, "the whole tuple, counted with select('#')")
 
--- The event log arrives later and is dumped then, once.
+-- The event log arrives in a burst and is dumped once it has settled.
+for _ = 1, 20 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
+WoW.advance(1)
+eq(p.eventLog, nil, "not dumped mid-burst")
 WoW.fire("GUILD_EVENT_LOG_UPDATE")
+WoW.advance(3)
 eq(p.eventLog.num[1], 1, "event log count")
 eq(p.eventLog.entries[1][1], "promote", "event log entry dumped")
 eq(p.eventLog.entries[1].n, 8, "the whole event tuple")
+eq(p.eventLog.named, 0, "no names, as measured")
+eq(p.eventLog.updates, 21, "the burst counted")
+WoW.advance(10)
+WoW.guild.eventNames = true
+WoW.fire("GUILD_EVENT_LOG_UPDATE")
+WoW.advance(5)
+eq(p.eventLog.named, 0, "a later update doesn't redump on its own")
+WoW.slash("/gspy probe log")
+eq(GuildSpyDB.probe.eventLog.named, 1, "/gspy probe log redumps, names and all")
 
 -- The login timeline records how complete the roster was at each update.
 WoW.now = 5
