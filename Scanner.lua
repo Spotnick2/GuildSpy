@@ -257,14 +257,22 @@ function Scanner.Scan(force)
     -- Names can repeat across connected realms: evidence (a message, a log
     -- row) names a member, not a GUID, so it explains a change only when one
     -- changed GUID carries that name in this scan.
-    local named = {}
+    local named = {}                                  -- name -> { [guid] = true }: distinct members, not events
     for _, ev in ipairs(events) do
-        if ev.guid and ev.name then named[ev.name] = (named[ev.name] or 0) + 1 end
+        if ev.guid and ev.name then
+            named[ev.name] = named[ev.name] or {}
+            named[ev.name][ev.guid] = true
+        end
+    end
+    local function shared(name)
+        local n = 0
+        for _ in pairs(named[name] or {}) do n = n + 1 end
+        return n > 1
     end
     for _, ev in ipairs(events) do
         local m = ev.guid and scan.members[ev.guid]
         if m then ev.class = m.class end
-        if ev.name and (named[ev.name] or 0) > 1 then ev.sharedName = true end
+        if ev.name and shared(ev.name) then ev.sharedName = true end
         local attr = Scanner.ATTRIBUTABLE[ev.kind] and not ev.sharedName and attribute(ev)
         if attr then
             ev.actor, ev.how, ev.lastStep, ev.at, ev.approx = attr.actor, attr.how, attr.lastStep, attr.at, attr.approx

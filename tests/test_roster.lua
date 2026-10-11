@@ -115,6 +115,23 @@ ev = Roster.Apply(st, scan({ A = m("Ann Lee", 3, 22), B = m("Bo Kayson", 5, 20, 
     { confirmRank = function() return false end })
 eq(kinds(ev), "RANKS", "an unconfirmed move during a structure change is suppressed")
 
+-- A structure change with two members of one name: one message can't confirm both.
+local sr = {}
+local RS1 = { "Guild Master", "Officer", "Member", "Initiate" }
+local RS2 = { "Guild Master", "Raider", "Member", "Initiate" }               -- Officer renamed Raider
+Roster.Apply(sr, scan({ S1 = m("Sam Mahra", 2), S2 = m("Sam Mahra", 1) }, { ranks = RS1 }), T0)
+local confirms = 0
+ev = Roster.Apply(sr, scan({ S1 = m("Sam Mahra", 1), S2 = m("Sam Mahra", 1) }, { ranks = RS2 }), T0 + 60,
+    { confirmRank = function() confirms = confirms + 1; return true end })
+eq(kinds(ev), "RANKS", "two Sams changed rank name: neither move confirmed from name-based evidence")
+eq(confirms, 0, "...the evidence isn't even asked")
+-- One Sam among unchanged others: confirmed as before.
+local sr2 = {}
+Roster.Apply(sr2, scan({ S1 = m("Sam Mahra", 2), K = m("Kay Oh", 2) }, { ranks = RS1 }), T0)
+ev = Roster.Apply(sr2, scan({ S1 = m("Sam Mahra", 1), K = m("Kay Oh", 2) }, { ranks = RS2 }), T0 + 60,
+    { confirmRank = function(_, name) return name == "Sam Mahra" end })
+eq(kinds(ev), "PROMOTE,RANKS", "a unique name is still confirmed")
+
 -- Officer notes: unreadable is not empty.
 local o = {}
 local function om(onote) return { X = m("Xi Yu", 3, 30, { onote = onote }) } end

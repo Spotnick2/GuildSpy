@@ -298,6 +298,14 @@ WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
 check(chatHas("Enzo Matrix promoted Sam Mahra") == nil, "a shared name: no officer credited")
 check(chatHas("Sam Mahra was promoted"), "...the promotions are still reported")
 
+-- One member, two changes in one scan: still one member, the officer still named.
+WoW.chat = {}
+WoW.fire("CHAT_MSG_SYSTEM", "Enzo Matrix has promoted Ann Lee to Officer.")
+local ann = find("Ann Lee")
+ann.rank, ann.level = 1, ann.level + 1
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+check(chatHas("Enzo Matrix promoted Ann Lee"), "a promotion plus a level-up: the officer is still named")
+
 -- The officer-note boundary never jumps an unseen officer-note entry.
 local gsb = { log = { { seq = 10, kind = "ONOTE" }, { seq = 11, kind = "NOTE" }, { seq = 12, kind = "ONOTE" } },
               shownOnoteSeq = 5 }

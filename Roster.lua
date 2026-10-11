@@ -104,8 +104,18 @@ function Roster.Apply(state, scan, now, opts)
     -- Rank structure first: a renamed, added or removed rank must not read as
     -- a wave of promotions.
     local structure = not sameList(oldRanks, newRanks)
+    -- During a structure change, a member's move is reported only if evidence
+    -- confirms it, and evidence names a member, not a GUID: it may confirm a
+    -- name only one changed member carries (connected realms repeat names).
+    local rankCandidates = {}
     if structure then
         add({ kind = "RANKS", from = table.concat(oldRanks, ", "), to = table.concat(newRanks, ", ") })
+        for guid, cur in pairs(scan.members) do
+            local prev = state.members[guid]
+            if prev and not prev.rankLost and oldRanks[prev.rank + 1] ~= newRanks[cur.rank + 1] then
+                rankCandidates[cur.name] = (rankCandidates[cur.name] or 0) + 1
+            end
+        end
     end
 
     for guid, cur in pairs(scan.members) do
@@ -142,7 +152,8 @@ function Roster.Apply(state, scan, now, opts)
                     -- what the shell can confirm (a message or the server log).
                     local was = fromName and indexOf(newRanks, fromName)
                     local kind = (was == nil) and "RANK" or (cur.rank + 1 < was and "PROMOTE" or "DEMOTE")
-                    local confirmed = opts.confirmRank and opts.confirmRank(kind, cur.name, toName, prevObs, now)
+                    local confirmed = opts.confirmRank and rankCandidates[cur.name] == 1
+                        and opts.confirmRank(kind, cur.name, toName, prevObs, now)
                     if confirmed then
                         add({ kind = kind, guid = guid, name = cur.name, from = fromName, to = toName })
                     end
