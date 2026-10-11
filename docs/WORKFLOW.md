@@ -19,10 +19,10 @@ issue  ->  branch  ->  PR  ->  Codex review  ->  address  ->  owner merges
 2. **Branch off `main`**, named for the work: `phase2/log-window`, `fix/digest-twice`. Never commit
    to `main`. A branch that builds on an unmerged one is a **stacked PR**: its base is that branch,
    and GitHub retargets it to `main` when the base merges.
-3. **Before pushing:** `pwsh tests/run.ps1` green (`luac -p` on every TOC file, then the tests).
+3. **Before every commit:** `pwsh tests/run.ps1` green (`luac -p` on every TOC file, then the tests).
    For a behaviour change, prove the new test bites: break the behaviour and watch it go red.
 4. **Open the PR** with `Closes #N`, a short summary, and how it was tested (unit, in game).
-5. **Run the Codex review** (below) and post its verdict as a PR comment.
+5. **Run the review** (below) and post its verdict as a PR comment.
 6. **Address or rebut** each finding: fix it in a commit on the branch, or say in the thread why
    not. Declined findings with a lasting reason also go in `docs/PLAN.md`.
 7. **The owner merges.** Commit and push only as part of this loop.
@@ -30,24 +30,37 @@ issue  ->  branch  ->  PR  ->  Codex review  ->  address  ->  owner merges
 In-game measurements (`/gspy probe`) go in `docs/FOREVER-PROBE.md`. Findings that hold for every
 Forever addon go in `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
 
-## Codex review on a PR
+## The review on a PR
 
-Codex is a *different model family*, so it brings different blind spots. It is a local CLI, not a
-GitHub App, so the review is generated locally and posted to the PR for the record. The owner reviews
-with `gpt-6-astra`: `high` for logic (detection, attribution, the saved shape), `medium` for small or
-mechanical changes. See `.claude/skills/codex-consult` for the flags and their reasons.
+**Routing.** The model, the effort and whether a review is needed follow the shared
+`$wow-addon-review` skill (AGENTS.md "Review policy"). This section is only the Codex invocation it
+calls for.
+- Codex is a *different model family*, so it brings different blind spots.
+- The owner's reviewer is `gpt-6-astra`.
+- Ask before `high` unless the owner has already said so for that work.
+- Codex is a local CLI, not a GitHub App: the review runs locally and is posted to the PR for the
+  record.
+- `.claude/skills/codex-consult` has the flags and why each one is there.
+
+**Scope: the PR's committed diff against its actual base.** For a stacked PR, the base is the
+branch it sits on, not `main`. It is never the working tree.
 
 ```bash
-git fetch origin main
-# Write the prompt to a file: the files to read, numbered questions (below).
-timeout 900 codex exec -m gpt-6-astra -c model_reasoning_effort=high \
+base=$(gh pr view <N> --json baseRefName -q .baseRefName)
+git fetch origin "$base"
+git diff "origin/$base...<branch>"      # what the PR contains; Codex reads files with git show <branch>:<path>
+# Write the prompt to a file: that diff command, the files, numbered questions (below).
+timeout 900 codex exec -m gpt-6-astra -c model_reasoning_effort=<effort> \
   --ephemeral --skip-git-repo-check -s read-only \
   -o <scratchpad>/verdict.md < <scratchpad>/prompt.txt > <scratchpad>/progress.log 2>&1
 gh pr comment <N> --body-file <scratchpad>/verdict.md
 ```
 
-- **Feed the prompt on stdin** (`< file`). As an argument, it hangs waiting for stdin.
+- **Feed the prompt on stdin** (`< file`). On this machine, a prompt passed as an argument in a
+  non-TTY shell has hung waiting for stdin (codex-consult).
 - **Read the answer from `-o`**, not stdout.
+- **`--ephemeral`** keeps no session log; `-s read-only` stops Codex editing the tree. The `-o` file
+  is still written.
 - **Never say "review the code" and "do not run commands" together.** Codex reads files through
   shell commands, so that contradiction makes it refuse.
 
@@ -74,5 +87,6 @@ Take its bug-catching seriously; be skeptical when it wants more rigor.
 
 ## Fallback
 
-If `codex` is unavailable, use Fable for the adversarial pass. It is the same family, so a weaker
+If `codex` is unavailable (usage limits, disabled), the PR still gets its independent review:
+Fable runs it instead, and the posted comment says so. It is the same family, so a weaker
 adversary, but better than none.
