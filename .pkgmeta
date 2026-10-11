@@ -1,0 +1,41 @@
+package-as: GuildSpy
+
+enable-nolib-creation: no
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+# The glass material. Pinned, never `tag: latest` (the packager picks the newest
+# tag by creation date and falls back to the branch HEAD). CI and the dev tools
+# read the pin from here, so it is written once.
+#
+# No comment on a value line: the packager's YAML reader keeps it as part of
+# the value.
+externals:
+  Libs/LibGlass-1.0:
+    url: https://github.com/Spotnick2/LibGlass
+    tag: r5
+
+# YAML list, not markdown bullets: a `*` here silently ignores nothing, which
+# is how development files end up in a published zip.
+ignore:
+  - .github
+  - .claude
+  - docs
+  - tests
+  - Tools
+  - AGENTS.md
+  - CLAUDE.md
+  - README.md
+  - CHANGELOG.md
+  # Every pattern matches the WHOLE path from the package root, so the names
+  # above never reach inside Libs/ (Libs/LibGlass-1.0/LICENSE must ship: MIT).
+  # CurseForge's packager ignores the library's own .pkgmeta ignores, so they
+  # are named from here; CI asserts what the zip holds under Libs/LibGlass-1.0/.
+  - Libs/LibGlass-1.0/tests
+  - Libs/LibGlass-1.0/docs
+  - Libs/LibGlass-1.0/Tools
+  - Libs/LibGlass-1.0/AGENTS.md
+  - Libs/LibGlass-1.0/CLAUDE.md
+  - Libs/LibGlass-1.0/README.md

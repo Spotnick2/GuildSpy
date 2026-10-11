@@ -1,0 +1,16 @@
+# Compiled Lua / syntax-check output
+luac.out
+
+# Per-machine Claude Code settings
+.claude/settings.local.json
+.claude/worktrees/
+
+# Packager output
+.release/
+dist/
+*.zip
+
+# The embedded LibGlass-1.0: fetched by the packager (.pkgmeta externals),
+# copied from ..\LibGlass by Tools/deploy.ps1. Never commit a copy. Any other
+# Libs\ are vendored and stay committed.
+Libs/LibGlass-1.0/

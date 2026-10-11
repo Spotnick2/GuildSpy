@@ -1,0 +1,54 @@
+name: Bug report
+description: Something in GuildSpy doesn't work, looks wrong, or shows a Lua error.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time! GuildSpy is made and tested by one person on one setup,
+        so your report is how problems on other setups get found.
+  - type: input
+    id: version
+    attributes:
+      label: GuildSpy version
+      description: In game, Options > AddOns > GuildSpy > About, or the AddOns list.
+      placeholder: v0.1.0-beta
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      description: What happened in the guild (a promotion, a note edit...), whether you were online, your guild rank, the settings you changed...
+      placeholder: |
+        1. Log in with /gspy log open
+        2. ...
+  - type: textarea
+    id: error
+    attributes:
+      label: Lua error (if any)
+      description: |
+        Turn errors on with `/console scriptErrors 1`, or use BugSack. Paste the whole error, the stack included.
+      render: text
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: For anything that looks wrong, a screenshot helps a lot (drag it in here).
+  - type: input
+    id: language
+    attributes:
+      label: Game language
+      description: The client's language (English, Français, Deutsch...), especially if guild messages are missed or misread.
+  - type: textarea
+    id: addons
+    attributes:
+      label: Other addons
+      description: UI replacements or minimap and action bar addons in particular (Guild Roster Manager, ElvUI, a chat or minimap addon...).

@@ -1,0 +1,11 @@
+name: Idea or suggestion
+description: Something you'd like GuildSpy to do, or to do differently.
+labels: ["idea"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you'd like, and the moment in play where you'd want it.
+    validations:
+      required: true
