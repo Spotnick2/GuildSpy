@@ -141,10 +141,15 @@ packager on PRs and `main` and checks the zip's shape. Check the published zip b
 
 ## Git conventions
 
-- Branch off `main`, named for the work (`phase1/roster-diff`). Never commit directly to `main`
-  (the initial scaffold was the one exception). Commit or push only when asked.
+- **Every change goes through an issue and a pull request, always** (owner's decision):
+  issue → branch → PR (`Closes #N`) → review posted on the PR (routed by `$wow-addon-review`;
+  Codex, or Fable when Codex is unavailable) → the owner merges.
+  `docs/WORKFLOW.md` has the loop, stacked PRs, and the review recipe. Repo:
+  `github.com/Spotnick2/GuildSpy` (private until release).
+- Branch off `main`, named for the work (`phase2/log-window`). Never commit directly to `main` (the
+  initial scaffold was the one exception). Commit and push only as part of that loop.
 - Short imperative subject; body only if it adds something; end with the `Co-Authored-By:` trailer
-  for the model that did the work. PRs say `Closes #N`; the owner merges.
+  for the model that did the work.
 
 ## Cost control & model usage
 
