@@ -36,25 +36,38 @@ Forever addon go in `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
 `$wow-addon-review` skill (AGENTS.md "Review policy"). This section is only the Codex invocation it
 calls for.
 - Codex is a *different model family*, so it brings different blind spots.
-- The owner's reviewer is `gpt-6-astra`.
-- Ask before `high` unless the owner has already said so for that work.
+- **The skill picks `<model>` and `<effort>`**, from the PR's shape and consequence:
+
+  | Model / effort | For |
+  |---|---|
+  | `gpt-6.1-sol` / `medium` | routine reviews |
+  | `gpt-6.1-sol` / `high` | dense local logic |
+  | `gpt-6-astra` / `medium` | broad, cross-component work |
+  | `gpt-6-astra` / `high` | high-consequence work: here, member identity, officer-note privacy, anything that could silently corrupt the log or the saved state |
+
+  Recommend the pair before starting; never switch it silently.
 - Codex is a local CLI, not a GitHub App: the review runs locally and is posted to the PR for the
   record.
 - `.claude/skills/codex-consult` has the flags and why each one is there.
 
-**Scope: the PR's committed diff against its actual base.** For a stacked PR, the base is the
-branch it sits on, not `main`. It is never the working tree.
+**Scope: the PR's pushed head against its actual base.** For a stacked PR, the base is the branch
+it sits on, not `main`. Review one exact SHA, never a local branch (another clone may have pushed
+since) and never the working tree. Check that SHA is still the PR's head before posting.
 
 ```bash
-base=$(gh pr view <N> --json baseRefName -q .baseRefName)
-git fetch origin "$base"
-git diff "origin/$base...<branch>"      # what the PR contains; Codex reads files with git show <branch>:<path>
-# Write the prompt to a file: that diff command, the files, numbered questions (below).
-timeout 900 codex exec -m gpt-6-astra -c model_reasoning_effort=<effort> \
+read base head < <(gh pr view <N> --json baseRefName,headRefOid -q '"\(.baseRefName) \(.headRefOid)"')
+git fetch origin "$base" "$head"
+git diff "origin/$base...$head"          # what the PR contains; Codex reads files with git show $head:<path>
+# Write the prompt to a file: that diff command with the SHA, the files, numbered questions (below).
+timeout 900 codex exec -m <model> -c model_reasoning_effort=<effort> \
   --ephemeral --skip-git-repo-check -s read-only \
   -o <scratchpad>/verdict.md < <scratchpad>/prompt.txt > <scratchpad>/progress.log 2>&1
-gh pr comment <N> --body-file <scratchpad>/verdict.md
+# Still the head? If not, review again: the verdict would describe a version the PR no longer has.
+test "$(gh pr view <N> --json headRefOid -q .headRefOid)" = "$head" &&
+  gh pr comment <N> --body-file <scratchpad>/verdict.md
 ```
+
+Start the posted verdict with the reviewed SHA and the model/effort used.
 
 - **Feed the prompt on stdin** (`< file`). On this machine, a prompt passed as an argument in a
   non-TTY shell has hung waiting for stdin (codex-consult).
