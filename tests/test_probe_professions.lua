@@ -177,6 +177,16 @@ WoW.advance(5)
 check(mr.inconclusive and mr.inconclusive:find("Someone Else", 1, true), "someone else's book: inconclusive")
 eq(closes, 1, "...and not closed")
 
+-- A same-profession book that doesn't name its member: inconclusive, left alone.
+C_TradeSkillUI.IsTradeSkillLinked = function() return false, nil end
+WoW.slash("/gspy probe recipes")
+mr = GuildSpyDB.probe.memberRecipes
+WoW.fire("TRADE_SKILL_SHOW")
+WoW.advance(5)
+check(mr.inconclusive and mr.inconclusive:find("doesn't name its member", 1, true), "an unnamed view: inconclusive")
+eq(mr.recipeIDs, nil, "...nothing read as the asked member's")
+eq(closes, 1, "...and not closed")
+
 -- A second request within the wait: the first timer does nothing.
 C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Akka Avery" end
 WoW.slash("/gspy probe recipes")

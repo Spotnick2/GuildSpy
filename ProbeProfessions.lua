@@ -240,8 +240,8 @@ function Probe.MemberRecipes()
     local skillLine = pick["profession" .. slot .. "ID"]
     local cgi = g("C_GuildInfo") or {}
     local r = API.Pack(cgi.QueryGuildMemberRecipes, pick.guid, skillLine)
-    -- What was open before asking: a guildmate's book already open can't be told
-    -- apart from the one asked for, unless a new one shows after the request.
+    -- Recorded for the measurement only (was a guildmate's book already open?);
+    -- the identity check below decides what is read.
     local ts = g("C_TradeSkillUI") or {}
     local before = API.Pack(ts.IsTradeSkillGuildMember)
     Probe.recipeRequest = (Probe.recipeRequest or 0) + 1
@@ -258,8 +258,7 @@ end
 
 -- Whether the open trade skill view is provably the book `mr` asked for: a
 -- view shown after the request, a guildmate's, ready, of the asked skill
--- line, and (when the client names the linked player) that member. Returns
--- true, or false and why.
+-- line, and named as that member. Returns true, or false and why.
 local function isRequestedBook(mr, ts)
     local shown = false
     for _, e in ipairs(mr.events) do
@@ -273,12 +272,14 @@ local function isRequestedBook(mr, ts)
     local base = API.Pack(ts.GetBaseProfessionInfo)
     local id = base.ok and type(base[1]) == "table" and base[1].professionID
     if id ~= mr.skillLine then return false, "the open view is skill line " .. tostring(id) end
+    -- The member must be positively identified: an unnamed view could be any
+    -- guildmate's book of the same profession. (Whether this client names the
+    -- player of a guild-member view is itself what a run will show.)
     local linked = API.Pack(ts.IsTradeSkillLinked)
     local name = linked.ok and linked[2]
     mr.linkedName = name
-    if type(name) == "string" and name ~= "" and name ~= mr.member then
-        return false, "the open view is " .. name .. "'s"
-    end
+    if type(name) ~= "string" or name == "" then return false, "the open view doesn't name its member" end
+    if name ~= mr.member then return false, "the open view is " .. name .. "'s" end
     return true
 end
 
