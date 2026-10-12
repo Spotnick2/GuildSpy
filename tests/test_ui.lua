@@ -171,6 +171,23 @@ end
 onRow._scripts.OnEnter(onRow)
 check(not GameTooltip:IsShown(), "a stale row's tooltip never shows it")
 
+-- The summary's tooltip counts a new officer note; it goes with the permission too (#22 review).
+local function tipHas(word)
+    for _, l in ipairs(GameTooltip._lines or {}) do if l:find(word, 1, true) then return true end end
+end
+add({ kind = "ONOTE", name = "Ann Lee", guid = "Player-1-00000002", from = "main tank", to = "off tank" })
+for _, r in ipairs(revokers) do
+    WoW.guild.canViewOfficerNote = true
+    UI.Refresh()
+    panel.summaryHit._scripts.OnEnter(panel.summaryHit)
+    check(GameTooltip:IsShown() and tipHas("note edit"), "an officer's summary tooltip counts the new officer note")
+    WoW.guild.canViewOfficerNote = false
+    r[2]()
+    check(not GameTooltip:IsShown(), "permission lost, " .. r[1] .. ": the summary tooltip goes")
+end
+panel.summaryHit._scripts.OnEnter(panel.summaryHit)
+check(not tipHas("note edit"), "hovered again, it no longer counts the officer note")
+
 -- Leaving the guild with the window open: no old rows, no old boundary.
 local keep = WoW.guild
 WoW.guild = nil

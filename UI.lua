@@ -50,7 +50,7 @@ local panel, win, tab, guildHost
 local category, query, scope = nil, "", "all"
 local newSince = 0             -- entries past this seq are marked new while the panel is open
 local visit                    -- the guild state whose rows the open panel shows
-local tipRow                   -- the row whose tooltip is up
+local tipOwner                 -- the row or summary whose tooltip is up
 
 local function canView() return API.CanViewOfficerNote() == true end
 local function current() return GuildSpy.Scanner.Current() end
@@ -119,14 +119,14 @@ local function buildRow(row)
     row:SetScript("OnEnter", function(self)
         local entry = self.entry
         if not entry or not Log.Visible(entry, canView()) then return end
-        tipRow = self
+        tipOwner = self
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(date("%Y-%m-%d %H:%M", entry.at))
         GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
         GameTooltip:AddLine(Log.Provenance(entry), 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
     end)
-    row:SetScript("OnLeave", function() tipRow = nil; GameTooltip:Hide() end)
+    row:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)
 end
 
 -- One list element: a section heading ({ header }) or an entry ({ entry, odd }).
@@ -263,6 +263,7 @@ local function build()
     hit:SetAllPoints(panel.summary)
     hit:EnableMouse(true)
     hit:SetScript("OnEnter", function(self)
+        tipOwner = self
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
         GameTooltip:SetText("New activity")
         GameTooltip:AddLine("Across every tab, whatever is selected, since you last marked it read.", 0.8, 0.8, 0.8, true)
@@ -271,7 +272,7 @@ local function build()
         end
         GameTooltip:Show()
     end)
-    hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    hit:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)
     panel.summaryHit = hit
 
     panel.footer = font(panel, "GameFontDisableSmall", "RIGHT")
@@ -405,9 +406,9 @@ function UI.Refresh()
         markViewed(visit)
         visitGuild(gs)
     end
-    -- A tooltip up on a row is redrawn from the new rows by hovering again; an
-    -- officer note in it must not outlive the right to read it.
-    if tipRow then tipRow = nil; GameTooltip:Hide() end
+    -- A tooltip up on a row or the summary is redrawn by hovering again; an
+    -- officer note in it, or its count, must not outlive the right to read it.
+    if tipOwner then tipOwner = nil; GameTooltip:Hide() end
     local now = time()
     local keep, below = anchor()
     local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
