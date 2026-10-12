@@ -65,7 +65,7 @@ end
 
 function CreateFrame(ftype, name, parent, template)
     assert(ftype == "Frame" or ftype == "Button" or ftype == "StatusBar" or ftype == "CheckButton" or ftype == "EditBox" or ftype == "ScrollFrame"
-        or ftype == "EventFrame",
+        or ftype == "EventFrame" or ftype == "DropdownButton",
         "CreateFrame: unexpected frame type " .. tostring(ftype))
     local w = newWidget(ftype, parent or UIParent, name)
     w._template = template
@@ -195,6 +195,22 @@ function Methods.SetTexture(w, t) w._texture = t end
 function Methods.SetChecked(w, v) w._checked = v and true or false end
 -- A WowScrollBoxList's data: the list it was given (ScrollBoxListMixin:SetDataProvider).
 function Methods.SetDataProvider(w, dp) w._dataProvider = dp end
+-- Its scroll position in pixels (ScrollBoxBaseMixin), clamped to the content.
+function Methods.GetDerivedScrollOffset(w) return w._offset or 0 end
+function Methods.ScrollToOffset(w, o)
+    local n = w._dataProvider and w._dataProvider:GetSize() or 0
+    local extent = w._extent or 20
+    w._offset = math.max(0, math.min(o, n * extent))
+end
+-- A WowStyle1DropdownTemplate's menu: the generator, run by a test with a fake root.
+function Methods.SetupMenu(w, fn) w._menu = fn end
+-- A FontString's text width: 7 px a visible character (colour codes take none).
+function Methods.GetUnboundedStringWidth(w)
+    local plain = (w._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return #plain * 7
+end
+function Methods.SetEnabled(w, v) w._enabled = v and true or false end
+function Methods.IsEnabled(w) return w._enabled ~= false end
 -- An edit box's selection: HighlightText() selects all, (0, 0) none.
 function Methods.HighlightText(w, a, b) w._selected = not (a == 0 and b == 0) end
 function Methods.GetChecked(w) return w._checked or false end
@@ -288,7 +304,9 @@ function print(...)
 end
 
 function GetTime() return WoW.now end
-function time() return WoW.epoch end
+function time(t) if t then return os.time(t) end return WoW.epoch end
+-- Whether the client has a template (the test can say it's missing).
+function DoesTemplateExist(name) return not WoW.missingTemplates[name] end
 function date(fmt, t) return os.date(fmt, t) end
 function GetLocale() return "enUS" end
 -- The player, on 70009+: the surname comes back in the second return.

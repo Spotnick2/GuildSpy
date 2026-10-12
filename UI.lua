@@ -1,5 +1,7 @@
--- UI.lua: the log window (#3). One panel (filters, a search box, the list),
--- shown in one of two hosts:
+-- UI.lua: the log window (#3, #19). One panel, styled like the guild roster
+-- (a "new" summary, search, time scope, Mark all as read, category tabs, the
+-- list under New / Earlier headings, the last scan's time), shown in one of
+-- two hosts:
 --   - the guild window (J): a GuildSpy side tab under Blizzard's, shown while
 --     the guild is the selected club; the panel covers the content area;
 --   - a standalone glass window: /gspy log, the digest's [open log] link and
@@ -18,7 +20,19 @@ GuildSpy.UI = UI
 local Log, Glass, API = GuildSpy.Log, GuildSpy.Glass, GuildSpy.API
 
 UI.WIDTH, UI.HEIGHT = 640, 440
-UI.ROW_HEIGHT = 18
+UI.ROW_HEIGHT = 20
+-- The panel's rows of controls, from its top (#19).
+UI.SEARCH_Y, UI.TABS_Y, UI.LIST_Y, UI.FOOTER_H = 30, 54, 86, 22
+-- The guild roster's own art (Blizzard_Communities/CommunitiesMemberList.xml),
+-- so the panel looks like the tab next to it.
+UI.ART = {
+    background = "Interface\\FrameGeneral\\UI-Background-Marble",
+    stripe = "Interface\\GuildFrame\\GuildFrame",
+    stripeCoords = { 0.36230469, 0.38183594, 0.95898438, 0.99804688 },
+    highlight = "Interface\\FriendsFrame\\UI-FriendsFrame-HighlightBar",
+    classes = "Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes",
+    newDot = "communities-icon-notification",
+}
 UI.ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 UI.WINDOW_NAME = "GuildSpyLogWindow"
 -- Above everything in the guild window's content area. A frame level alone
@@ -33,10 +47,10 @@ UI.STRATA_ABOVE = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = 
 UI.BLIZZARD_TABS = { "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }
 
 local panel, win, tab, guildHost
-local category, query = nil, ""
+local category, query, scope = nil, "", "all"
 local newSince = 0             -- entries past this seq are marked new while the panel is open
 local visit                    -- the guild state whose rows the open panel shows
-local tipRow                   -- the row whose tooltip is up
+local tipOwner                 -- the row or summary whose tooltip is up
 
 local function canView() return API.CanViewOfficerNote() == true end
 local function current() return GuildSpy.Scanner.Current() end
@@ -50,67 +64,114 @@ local function topVisible(gs)
     return top
 end
 
-local function stamp(e)
-    return date("%m-%d %H:%M", e.at) .. (e.approx and "~" or "")
+-- A Blizzard template, or the fallback when this client doesn't have it.
+local function template(name, fallback)
+    local exists = rawget(_G, "DoesTemplateExist")
+    if exists and not exists(name) then return fallback end
+    return name
+end
+
+local function font(parent, object, justify)
+    local fs = parent:CreateFontString(nil, "ARTWORK", object)
+    if justify then fs:SetJustifyH(justify) end
+    return fs
 end
 
 ------------------------------------------------------------
 -- The panel
 ------------------------------------------------------------
 
-local function initRow(row, e)
-    if not row.text then
-        row.mark = row:CreateTexture(nil, "ARTWORK")
-        row.mark:SetPoint("TOPLEFT", row, "TOPLEFT", 0, -3)
-        row.mark:SetSize(3, UI.ROW_HEIGHT - 6)
-        row.mark:SetColorTexture(0.5, 0.83, 1, 0.9)
-        row.stamp = Glass.Font(row, 11, "LEFT")
-        row.stamp:SetPoint("LEFT", row, "LEFT", 8, 0)
-        row.stamp:SetWidth(84)
-        row.stamp:SetTextColor(0.6, 0.63, 0.7)
-        row.text = Glass.Font(row, 12, "LEFT")
-        row.text:SetPoint("LEFT", row.stamp, "RIGHT", 6, 0)
-        row.text:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        row.text:SetWordWrap(false)
-        local hl = row:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints(row)
-        hl:SetColorTexture(1, 1, 1, 0.06)
-        -- The whole line and the exact time: a long note is cut short in the row.
-        row:SetScript("OnEnter", function(self)
-            local entry = self.entry
-            if not entry or not Log.Visible(entry, canView()) then return end
-            tipRow = self
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(date("%Y-%m-%d %H:%M", entry.at) .. (entry.approx and " (approximate)" or ""))
-            GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        row:SetScript("OnLeave", function() tipRow = nil; GameTooltip:Hide() end)
-    end
+local function classIcon(tex, class)
+    local coords = rawget(_G, "CLASS_ICON_TCOORDS")
+    local c = class and type(coords) == "table" and coords[class]
+    if c then tex:SetTexCoord(unpack(c)) end
+    tex:SetShown(c ~= nil)
+end
+
+local function buildRow(row)
+    row.stripe = row:CreateTexture(nil, "BACKGROUND")
+    row.stripe:SetAllPoints(row)
+    row.stripe:SetTexture(UI.ART.stripe)
+    row.stripe:SetTexCoord(unpack(UI.ART.stripeCoords))
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetTexture(UI.ART.highlight)
+    hl:SetBlendMode("ADD")
+    hl:SetAlpha(0.5)                -- a hover, softer than a selection
+    row.mark = row:CreateTexture(nil, "ARTWORK")
+    row.mark:SetAtlas(UI.ART.newDot)
+    row.mark:SetSize(10, 10)
+    row.mark:SetPoint("LEFT", row, "LEFT", 8, 0)
+    row.icon = row:CreateTexture(nil, "ARTWORK")
+    row.icon:SetTexture(UI.ART.classes)
+    row.icon:SetSize(16, 16)
+    row.icon:SetPoint("LEFT", row, "LEFT", 26, 0)
+    row.when = font(row, "GameFontDisableSmall", "RIGHT")
+    row.when:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row.when:SetWidth(96)
+    row.text = font(row, "GameFontHighlight", "LEFT")
+    row.text:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+    row.text:SetPoint("RIGHT", row.when, "LEFT", -6, 0)
+    row.text:SetWordWrap(false)
+    row.header = font(row, "GameFontNormal", "LEFT")
+    row.header:SetPoint("LEFT", row, "LEFT", 8, 0)
+    -- The whole sentence, the exact time and what it means: the row is short.
+    row:SetScript("OnEnter", function(self)
+        local entry = self.entry
+        if not entry or not Log.Visible(entry, canView()) then return end
+        tipOwner = self
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(date("%Y-%m-%d %H:%M", entry.at))
+        GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
+        GameTooltip:AddLine(Log.Provenance(entry), 0.6, 0.6, 0.6, true)
+        GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)
+end
+
+-- One list element: a section heading ({ header }) or an entry ({ entry, odd }).
+local function initRow(row, el)
+    if not row.text then buildRow(row) end
+    local e = el.entry
     row.entry = e
+    row.header:SetShown(el.header ~= nil)
+    row.header:SetText(el.header or "")
+    for _, part in ipairs({ row.stripe, row.mark, row.icon, row.when, row.text }) do part:SetShown(e ~= nil) end
+    if not e then return end
+    row.stripe:SetShown(el.odd == true)
     row.mark:SetShown(e.seq > newSince)
-    row.stamp:SetText(stamp(e))
-    row.text:SetText(Log.Line(e, time()))
+    classIcon(row.icon, e.class)
+    row.when:SetText(Log.When(e, time()))
+    row.text:SetText(Log.Row(e, time(), panel.classOf))
 end
 
 local function selectPill()
     for _, b in ipairs(panel.pills) do
         local on = b.key == category
-        if on then Glass.SetSurfaceTint(b.glass, 0.25, 0.55, 0.85, 0.55) else Glass.SetSurfaceTint(b.glass) end
-        b.label:SetTextColor(on and 1 or 0.78, on and 1 or 0.8, on and 1 or 0.86)
+        local select, deselect = rawget(_G, "PanelTemplates_SelectTab"), rawget(_G, "PanelTemplates_DeselectTab")
+        if b.isTab and select and deselect then
+            if on then select(b) else deselect(b) end
+        elseif on then
+            b:LockHighlight()
+        else
+            b:UnlockHighlight()
+        end
     end
 end
 
-local function makePill(key, label, width, prev)
-    local b = CreateFrame("Button", nil, panel)
-    b:SetSize(width, 20)
-    if prev then b:SetPoint("LEFT", prev, "RIGHT", 4, 0) else b:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -4) end
+local function makePill(key, label, prev)
+    local tpl = template("PanelTopTabButtonTemplate", "UIPanelButtonTemplate")
+    local b = CreateFrame("Button", nil, panel, tpl)
+    b.isTab = tpl == "PanelTopTabButtonTemplate"
+    b:SetText(label)
+    local resize = rawget(_G, "PanelTemplates_TabResize")
+    if b.isTab and resize then resize(b, 0, nil, 56) else b:SetSize(76, 22) end
+    if prev then
+        b:SetPoint("LEFT", prev, "RIGHT", b.isTab and -4 or 2, 0)
+    else
+        b:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -UI.TABS_Y)
+    end
     b.key = key
-    local _, g = Glass.Pill(b, { size = "small" })
-    b.glass = g
-    b.label = Glass.Font(b, 11, "CENTER")
-    b.label:SetPoint("CENTER", b, "CENTER", 0, 0)
-    b.label:SetText(label)
     b:SetScript("OnClick", function()
         category = key
         selectPill()
@@ -120,17 +181,59 @@ local function makePill(key, label, width, prev)
     return b
 end
 
+-- The time-scope dropdown; a button cycling the scopes where the client has
+-- no dropdown template.
+local function makeScope()
+    local tpl = template("WowStyle1DropdownTemplate", "UIPanelButtonTemplate")
+    local dd = CreateFrame(tpl == "UIPanelButtonTemplate" and "Button" or "DropdownButton", nil, panel, tpl)
+    dd:SetSize(130, 22)
+    if tpl == "WowStyle1DropdownTemplate" then
+        dd:SetupMenu(function(_, root)
+            for _, s in ipairs(Log.SCOPES) do
+                root:CreateRadio(s.label, function() return scope == s.key end, function() UI.SetScope(s.key) end)
+            end
+        end)
+    else
+        dd.cycles = true
+        dd:SetText(Log.SCOPES[1].label)
+        dd:SetScript("OnClick", function()
+            for i, s in ipairs(Log.SCOPES) do
+                if s.key == scope then UI.SetScope(Log.SCOPES[i % #Log.SCOPES + 1].key); return end
+            end
+        end)
+    end
+    return dd
+end
+
 local function build()
     panel = CreateFrame("Frame", nil, UIParent)
     panel:Hide()
-    panel.pills = {}
-    local prev = makePill(nil, "All", 40)
-    for _, c in ipairs(Log.CATEGORIES) do prev = makePill(c.key, c.label, 62, prev) end
-    selectPill()
+    panel.bg = panel:CreateTexture(nil, "BACKGROUND")
+    panel.bg:SetAllPoints(panel)
+    panel.bg:SetTexture(UI.ART.background, "REPEAT", "REPEAT")
+    panel.bg:SetHorizTile(true)
+    panel.bg:SetVertTile(true)
+
+    panel.summary = font(panel, "GameFontHighlight", "LEFT")
+    panel.summary:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -10)
+    panel.summary:SetPoint("RIGHT", panel, "RIGHT", -12, 0)
+    panel.summary:SetWordWrap(false)
+
+    local read = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    read:SetSize(120, 22)
+    read:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -10, -UI.SEARCH_Y)
+    read:SetText("Mark all as read")
+    read:SetScript("OnClick", function() UI.MarkAllRead() end)
+    panel.markRead = read
+
+    local dd = makeScope()
+    dd:SetPoint("RIGHT", read, "LEFT", -8, 0)
+    panel.scope = dd
 
     local search = CreateFrame("EditBox", nil, panel, "SearchBoxTemplate")
-    search:SetSize(150, 20)
-    search:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -4)
+    search:SetHeight(20)
+    search:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -UI.SEARCH_Y - 1)
+    search:SetPoint("RIGHT", dd, "LEFT", -10, 0)
     search:SetAutoFocus(false)
     search:HookScript("OnTextChanged", function(self)
         query = self:GetText() or ""
@@ -138,9 +241,14 @@ local function build()
     end)
     panel.search = search
 
+    panel.pills = {}
+    local prev = makePill(nil, "All")
+    for _, c in ipairs(Log.CATEGORIES) do prev = makePill(c.key, c.label, prev) end
+    selectPill()
+
     local box = CreateFrame("Frame", nil, panel, "WowScrollBoxList")
-    box:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, -30)
-    box:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -14, 0)
+    box:SetPoint("TOPLEFT", panel, "TOPLEFT", 4, -UI.LIST_Y)
+    box:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -20, UI.FOOTER_H)
     local bar = CreateFrame("EventFrame", nil, panel, "MinimalScrollBar")
     bar:SetPoint("TOPLEFT", box, "TOPRIGHT", 4, 0)
     bar:SetPoint("BOTTOMLEFT", box, "BOTTOMRIGHT", 4, 0)
@@ -150,10 +258,28 @@ local function build()
     ScrollUtil.InitScrollBoxListWithScrollBar(box, bar, view)
     panel.box = box
 
-    panel.empty = Glass.Font(panel, 12, "CENTER")
-    panel.empty:SetPoint("CENTER", box, "CENTER", 0, 0)
-    panel.empty:SetTextColor(0.6, 0.63, 0.7)
+    -- The summary's tooltip: every group, and that it counts every tab.
+    local hit = CreateFrame("Frame", nil, panel)
+    hit:SetAllPoints(panel.summary)
+    hit:EnableMouse(true)
+    hit:SetScript("OnEnter", function(self)
+        tipOwner = self
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText("New activity")
+        GameTooltip:AddLine("Across every tab, whatever is selected, since you last marked it read.", 0.8, 0.8, 0.8, true)
+        for _, c in ipairs(visit and Log.NewCounts(visit, newSince, canView()) or {}) do
+            GameTooltip:AddLine("|cff" .. c.color .. c.n .. "|r " .. c.word, 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    hit:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)
+    panel.summaryHit = hit
 
+    panel.footer = font(panel, "GameFontDisableSmall", "RIGHT")
+    panel.footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 6)
+
+    panel.empty = font(panel, "GameFontDisable", "CENTER")
+    panel.empty:SetPoint("CENTER", box, "CENTER", 0, 0)
 end
 
 -- A host opening marks what's new since the last look; a host closing makes
@@ -178,6 +304,97 @@ local function closed()
     visit = nil
 end
 
+-- The entry at or below the top of the list, and how far below the top it
+-- sits: redrawn, the list scrolls so it stays put (a heading coming or going
+-- above it doesn't move what's on screen).
+local function anchor()
+    local box, els = panel.box, panel.elements
+    if not els or not box.GetDerivedScrollOffset then return end
+    local offset = box:GetDerivedScrollOffset() or 0
+    if offset <= 0 then return end
+    for i = math.floor(offset / UI.ROW_HEIGHT) + 1, #els do
+        if els[i].entry then return els[i].entry, (i - 1) * UI.ROW_HEIGHT - offset end
+    end
+end
+
+local function restore(entry, below)
+    if not entry then return end
+    for i, el in ipairs(panel.elements) do
+        if el.entry == entry then
+            panel.box:ScrollToOffset(math.max(0, (i - 1) * UI.ROW_HEIGHT - below))
+            return
+        end
+    end
+end
+
+-- The list's elements: the rows under "New" and "Earlier" headings when
+-- something is new, alternate rows striped.
+local function elements(rows)
+    local els, newCount = {}, 0
+    for _, e in ipairs(rows) do if e.seq > newSince then newCount = newCount + 1 end end
+    local odd = false
+    for i, e in ipairs(rows) do
+        if newCount > 0 and i == 1 then els[#els + 1] = { header = "New" } end
+        if newCount > 0 and i == newCount + 1 then els[#els + 1] = { header = "Earlier" } end
+        odd = not odd
+        els[#els + 1] = { entry = e, odd = odd }
+    end
+    return els
+end
+
+-- Newest first by when it happened, within New and within Earlier: an entry
+-- enriched with an older time (the event log's hour) sorts by that time.
+local function byTime(rows)
+    local new, old = {}, {}
+    for _, e in ipairs(rows) do
+        if e.seq > newSince then new[#new + 1] = e else old[#old + 1] = e end
+    end
+    local function later(a, b)
+        if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+        return a.seq > b.seq
+    end
+    table.sort(new, later)
+    table.sort(old, later)
+    for _, e in ipairs(old) do new[#new + 1] = e end
+    return new
+end
+
+-- Why the list is empty, in the terms of what's selected.
+local function emptyText(gs)
+    if #(gs.log or {}) == 0 then return "Nothing recorded yet." end
+    if query:match("%S") then return "No activity matches your search." end
+    local ranged = scope ~= "all"
+    for _, c in ipairs(Log.CATEGORIES) do
+        if c.key == category then
+            return "No " .. c.empty .. (ranged and " in this time range." or " recorded yet.")
+        end
+    end
+    return ranged and "No activity in this time range." or "Nothing recorded yet."
+end
+
+-- The summary: as many groups as fit, then "+N more" (#22 review).
+local function fitSummary(gs)
+    local s = panel.summary
+    if not gs then s:SetText(""); return end
+    local width = s:GetWidth() or 0
+    local measure = s.GetUnboundedStringWidth and "GetUnboundedStringWidth" or "GetStringWidth"
+    local limit = #Log.NewCounts(gs, newSince, canView())
+    s:SetText(Log.NewSummary(gs, newSince, canView()))
+    while width > 0 and limit > 1 and (s[measure](s) or 0) > width do
+        limit = limit - 1
+        s:SetText(Log.NewSummary(gs, newSince, canView(), limit))
+    end
+end
+
+-- A name's class, from the roster we last saw (to colour an actor).
+local function classLookup(gs)
+    local byName = {}
+    for _, m in pairs(gs and type(gs.members) == "table" and gs.members or {}) do
+        if type(m) == "table" and m.name then byName[m.name] = m.class end
+    end
+    return function(name) return byName[name] end
+end
+
 -- Fills the list from the current guild's log. Cheap enough to run on every
 -- new entry while the panel is shown.
 function UI.Refresh()
@@ -189,22 +406,49 @@ function UI.Refresh()
         markViewed(visit)
         visitGuild(gs)
     end
-    -- A tooltip up on a row is redrawn from the new rows by hovering again; an
-    -- officer note in it must not outlive the right to read it.
-    if tipRow then tipRow = nil; GameTooltip:Hide() end
-    local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView() }, time()) or {}
+    -- A tooltip up on a row or the summary is redrawn by hovering again; an
+    -- officer note in it, or its count, must not outlive the right to read it.
+    if tipOwner then tipOwner = nil; GameTooltip:Hide() end
+    local now = time()
+    local keep, below = anchor()
+    local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
+                                         since = Log.ScopeSince(scope, now) }, now) or {}
+    rows = byTime(rows)
     panel.rows = rows
+    panel.elements = elements(rows)
+    panel.classOf = classLookup(gs)
     local constants = rawget(_G, "ScrollBoxConstants")
-    panel.box:SetDataProvider(CreateDataProvider(rows), constants and constants.RetainScrollPosition)
-    local why
-    if not gs then why = "No guild seen yet."
-    elseif #rows == 0 then why = (#(gs.log or {}) == 0) and "Nothing recorded yet." or "Nothing matches." end
+    panel.box:SetDataProvider(CreateDataProvider(panel.elements), constants and constants.RetainScrollPosition)
+    restore(keep, below)
+
+    fitSummary(gs)
+    panel.markRead:SetEnabled(gs ~= nil and topVisible(gs) > newSince)
+    panel.footer:SetText(gs and gs.observedAt and ("Updated " .. Log.Relative(gs.observedAt, now)) or "")
+    local why = gs and #rows == 0 and emptyText(gs) or nil
+    if not gs then why = "No guild seen yet." end
     panel.empty:SetText(why or "")
     panel.empty:SetShown(why ~= nil)
     if win and win.title then
         local _, name = API.GuildKey()
         win.title:SetText("|cff7fd4ffGuild|rSpy" .. (name and ("  |cff999999" .. name .. "|r") or ""))
     end
+end
+
+-- "Mark all as read": the dots and the summary go; the filters, the search
+-- and the rows on screen stay. The digest's own boundary (shownSeq) is untouched.
+function UI.MarkAllRead()
+    if not visit then return end
+    markViewed(visit)
+    newSince = visit.viewedSeq or 0
+    UI.Refresh()
+end
+
+function UI.SetScope(key)
+    scope = key
+    if panel and panel.scope.cycles then
+        for _, s in ipairs(Log.SCOPES) do if s.key == key then panel.scope:SetText(s.label) end end
+    end
+    UI.Refresh()
 end
 
 local function setHost(host, level)
@@ -402,4 +646,5 @@ frame:SetScript("OnEvent", function(_, event, name)
 end)
 
 GuildSpy._test = GuildSpy._test or {}
-GuildSpy._test.UI = { onLink = onLink, panel = function() return panel end, window = function() return win end }
+GuildSpy._test.UI = { onLink = onLink, panel = function() return panel end, window = function() return win end,
+                      scope = function() return scope end }

@@ -4,6 +4,11 @@
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
 
+-- Class art and colours, as the client has them (Blizzard_SharedXML/SharedConstants.lua).
+-- Here only: the other tests match chat lines without class colours.
+CLASS_ICON_TCOORDS = { WARRIOR = { 0, 0.25, 0, 0.25 }, MAGE = { 0.25, 0.49609375, 0, 0.25 } }
+RAID_CLASS_COLORS = { WARRIOR = { colorStr = "ffc69b6d" }, MAGE = { colorStr = "ff3fc7eb" } }
+
 local function member(name, rank, guid)
     return { name = name, rank = rank, level = 30, class = "MAGE", online = true, guid = guid, note = "" }
 end
@@ -66,7 +71,7 @@ local function add(ev) return Log.Add(GuildSpyDB, gs, ev, now) end
 add({ kind = "JOIN", name = "Bo Kay", guid = "Player-1-00000003" })
 add({ kind = "PROMOTE", name = "Bo Kay", guid = "Player-1-00000003", actor = "Enzo Matrix", from = "Initiate", to = "Member" })
 add({ kind = "ONOTE", name = "Ann Lee", guid = "Player-1-00000002", from = "", to = "main tank" })
-add({ kind = "LEVEL", name = "Ann Lee", guid = "Player-1-00000002", from = 29, to = 30 })
+add({ kind = "LEVEL", name = "Ann Lee", guid = "Player-1-00000002", class = "MAGE", from = 29, to = 30 })
 
 -- The filter: newest first, by category, by text, officer notes only for those who may read them.
 local rows = Log.Filter(gs, {}, now)
@@ -87,7 +92,7 @@ local win = T.window()
 check(win and win:IsShown(), "/gspy log opens the window")
 local panel = T.panel()
 eq(#panel.rows, 3, "...listing what this character may see")
-eq(panel.box._dataProvider:GetSize(), 3, "...handed to the scroll box")
+eq(panel.box._dataProvider:GetSize(), 4, "...handed to the scroll box under a \"New\" heading")
 check(not panel.empty:IsShown(), "...no empty text")
 local found = false
 for _, name in ipairs(UISpecialFrames) do if name == "GuildSpyLogWindow" then found = true end end
@@ -96,9 +101,12 @@ eq(#WoW.chat, 0, "...and nothing printed")
 
 -- Rows: the initializer draws an entry, with the "new" marker past the last look.
 local view = panel.box._view
+local function draw(row, e) view.initializer(row, { entry = e }) end
 local row = CreateFrame("Button", nil, panel)
-view.initializer(row, panel.rows[1])
-check(row.text:GetText():find("Ann Lee reached level 30", 1, true), "a row shows the entry's line")
+draw(row, panel.rows[1])
+eq(Log.Plain(row.text:GetText()), "Ann Lee reached level 30", "a row shows the entry")
+check(row.text:GetText():find("|cff3fc7ebAnn Lee|r", 1, true), "...the name in its class colour")
+check(row.icon:IsShown() and row.icon._texCoord[1] == 0.25, "...and its class icon")
 check(row.mark:IsShown(), "...marked new: never looked at")
 row._scripts.OnEnter(row)
 check(GameTooltip._text and GameTooltip._lines[1]:find("reached level 30", 1, true), "its tooltip has the whole line")
@@ -111,9 +119,9 @@ check(onote.kind == "ONOTE" and gs.viewedSeq > onote.seq, "(the officer note is 
 add({ kind = "LEAVE", name = "Bo Kay", guid = "Player-1-00000003", how = "quit" })
 WoW.slash("/gspy log")
 eq(#panel.rows, 4, "a new entry shows")
-view.initializer(row, panel.rows[1])
+draw(row, panel.rows[1])
 check(row.mark:IsShown(), "...marked new")
-view.initializer(row, panel.rows[2])
+draw(row, panel.rows[2])
 check(not row.mark:IsShown(), "an entry seen before isn't")
 
 -- A pill narrows the list; the search box too.
@@ -121,7 +129,7 @@ panel.pills[2]._scripts.OnClick(panel.pills[2])          -- Members
 eq(#panel.rows, 2, "the Members pill: the join and the leave")
 panel.search._text = "zzz"
 panel.search._scripts.OnTextChanged(panel.search)
-check(panel.empty:IsShown() and panel.empty:GetText() == "Nothing matches.", "no match says so")
+check(panel.empty:IsShown() and panel.empty:GetText() == "No activity matches your search.", "no match says so")
 panel.search._text = ""
 panel.search._scripts.OnTextChanged(panel.search)
 panel.pills[1]._scripts.OnClick(panel.pills[1])          -- All
@@ -140,7 +148,7 @@ end
 local on = hasOnote()
 check(on, "an officer sees the officer note in the window")
 local onRow = CreateFrame("Button", nil, panel)
-view.initializer(onRow, on)
+draw(onRow, on)
 onRow._scripts.OnEnter(onRow)
 check(GameTooltip:IsShown(), "...and its tooltip")
 -- Each way the permission can go, without a roster update (follow-up review),
@@ -153,7 +161,7 @@ local revokers = {
 for _, r in ipairs(revokers) do
     WoW.guild.canViewOfficerNote = true
     UI.Refresh()
-    view.initializer(onRow, hasOnote())
+    draw(onRow, hasOnote())
     onRow._scripts.OnEnter(onRow)
     WoW.guild.canViewOfficerNote = false
     r[2]()
@@ -162,6 +170,23 @@ for _, r in ipairs(revokers) do
 end
 onRow._scripts.OnEnter(onRow)
 check(not GameTooltip:IsShown(), "a stale row's tooltip never shows it")
+
+-- The summary's tooltip counts a new officer note; it goes with the permission too (#22 review).
+local function tipHas(word)
+    for _, l in ipairs(GameTooltip._lines or {}) do if l:find(word, 1, true) then return true end end
+end
+add({ kind = "ONOTE", name = "Ann Lee", guid = "Player-1-00000002", from = "main tank", to = "off tank" })
+for _, r in ipairs(revokers) do
+    WoW.guild.canViewOfficerNote = true
+    UI.Refresh()
+    panel.summaryHit._scripts.OnEnter(panel.summaryHit)
+    check(GameTooltip:IsShown() and tipHas("note edit"), "an officer's summary tooltip counts the new officer note")
+    WoW.guild.canViewOfficerNote = false
+    r[2]()
+    check(not GameTooltip:IsShown(), "permission lost, " .. r[1] .. ": the summary tooltip goes")
+end
+panel.summaryHit._scripts.OnEnter(panel.summaryHit)
+check(not tipHas("note edit"), "hovered again, it no longer counts the officer note")
 
 -- Leaving the guild with the window open: no old rows, no old boundary.
 local keep = WoW.guild
@@ -188,6 +213,204 @@ EventRegistry:TriggerEvent("SetItemRef", "item:1234", "[thing]", "LeftButton")
 check(not win:IsShown(), "another link does nothing")
 EventRegistry:TriggerEvent("SetItemRef", "addon:guildspy:log", "[open log]", "LeftButton")
 check(win:IsShown(), "the link opens the window")
+win:Hide()
+
+------------------------------------------------------------
+-- #19: the summary, times, scopes, row text, sections, Mark all as read
+------------------------------------------------------------
+
+-- The summary counts entries past the boundary, levels as "level changes".
+local sg = { log = {} }
+local sdb = { nextSeq = 1 }
+for _, ev in ipairs({
+    { kind = "JOIN", name = "A" }, { kind = "REJOIN", name = "B" }, { kind = "LEAVE", name = "C" },
+    { kind = "PROMOTE", name = "D", to = "Member" }, { kind = "DEMOTE", name = "E", to = "Initiate" },
+    { kind = "LEVEL", name = "F", from = 10, to = 13 }, { kind = "LEVEL", name = "G", from = 20, to = 21 },
+    { kind = "ONOTE", name = "H", to = "alt" }, { kind = "NOTE", name = "I", to = "hi" },
+}) do Log.Add(sdb, sg, ev, now) end
+eq(Log.Plain(Log.NewSummary(sg, 0, false)),
+    "New: 2 joined  \194\183  1 left  \194\183  2 rank changes  \194\183  1 note edit  \194\183  2 level changes",
+    "summary: entries per group; a three-level entry counts once; no officer note for a non-officer")
+check(Log.Plain(Log.NewSummary(sg, 0, true)):find("2 note edits", 1, true), "...an officer counts it")
+eq(Log.Plain(Log.NewSummary(sg, 5, false)), "New: 1 note edit  \194\183  2 level changes", "...only past the boundary")
+eq(Log.Plain(Log.NewSummary(sg, 9, true)), "No new activity", "...nothing past it")
+eq(sg.log[1].after, nil, "(no interval given: no 'after')")
+eq(Log.Add(sdb, sg, { kind = "JOIN", name = "J", lo = now - 99 }, now).after, now - 99, "an entry keeps the previous scan's time")
+
+-- Times: relative, "about" when a guess, provenance in words.
+local base = os.time({ year = 2026, month = 10, day = 12, hour = 10, min = 0, sec = 0 })
+local function at(h, extra)
+    local e = { at = base - h * 3600 }
+    for k, v in pairs(extra or {}) do e[k] = v end
+    return e
+end
+eq(Log.When(at(0), base), "just now", "under a minute: just now")
+eq(Log.When({ at = base - 300 }, base), "5m ago", "minutes")
+eq(Log.When(at(3), base), "3h ago", "hours")
+eq(Log.When(at(3, { approx = true }), base), "about 3h ago", "the event log's hour: about")
+eq(Log.When(at(3, { approx = false, after = base - 99999 }), base), "3h ago", "seen live: exact, whatever the gap")
+eq(Log.When(at(3, { after = base - 4 * 3600 }), base), "about 3h ago", "a scan long after the last one: about")
+eq(Log.When(at(30, { approx = true }), base), "Yesterday", "a day-level time needs no 'about'")
+eq(Log.When(at(3, { after = base - 3 * 3600 - 60 }), base), "3h ago", "a scan a minute after the last one: exact enough")
+eq(Log.When(at(25), base), "Yesterday", "yesterday (over 24h, after yesterday's midnight)")
+eq(Log.When({ at = os.time({ year = 2026, month = 10, day = 3, hour = 12 }) }, base), "Oct 3", "older: a date")
+check(Log.Provenance(at(3, { approx = false })):find("live", 1, true), "provenance: live")
+check(Log.Provenance(at(3, { approx = true })):find("event log", 1, true), "provenance: the event log")
+check(Log.Provenance(at(3, { after = base - 9 * 3600 })):find("between", 1, true), "provenance: a scan's interval")
+check(Log.Provenance(at(3)):find("scan noticed", 1, true), "provenance: a scan")
+
+-- Time scopes: local midnight for Today.
+local midnight = os.time({ year = 2026, month = 10, day = 12, hour = 0, min = 0, sec = 0 })
+eq(Log.ScopeSince("today", base), midnight, "Today starts at local midnight")
+eq(Log.ScopeSince("week", base), base - 7 * 86400, "Last 7 days")
+-- Clock changes (#22 review): midnight is the calendar's, on the change day and the day after.
+-- The US and EU 2026 dates; they bite where the machine's zone has daylight saving.
+for _, d in ipairs({ { 3, 8 }, { 3, 9 }, { 11, 1 }, { 11, 2 }, { 3, 29 }, { 3, 30 }, { 10, 25 }, { 10, 26 } }) do
+    local noon = os.time({ year = 2026, month = d[1], day = d[2], hour = 12 })
+    local m = os.date("*t", Log.ScopeSince("today", noon))
+    check(m.hour == 0 and m.min == 0 and m.day == d[2], "Today starts at 00:00 on " .. d[1] .. "-" .. d[2])
+    local y = os.date("*t", Log.Midnight(noon, 1))
+    check(y.hour == 0 and y.day == os.date("*t", noon - 86400).day, "...and yesterday at its own 00:00")
+    local justIn = os.time({ year = 2026, month = d[1], day = d[2] - 1, hour = 0, min = 30 })
+    local justOut = os.time({ year = 2026, month = d[1], day = d[2] - 2, hour = 23, min = 30 })
+    eq(Log.When({ at = justIn }, noon + 12 * 3600 - 60), "Yesterday", "...00:30 the day before is Yesterday")
+    check(Log.When({ at = justOut }, noon + 12 * 3600 - 60) ~= "Yesterday", "...23:30 two days before isn't")
+end
+eq(Log.ScopeSince("all", base), nil, "All history: no bound")
+local tg = { log = { { seq = 1, kind = "JOIN", name = "Late", at = midnight - 1 },
+                     { seq = 2, kind = "JOIN", name = "Early", at = midnight, approx = true } } }
+local today = Log.Filter(tg, { since = Log.ScopeSince("today", base) }, base)
+eq(#today, 1, "Today: one second before midnight is out")
+eq(today[1].name, "Early", "...midnight itself (an approximate time too) is in")
+
+-- Row text: the actor, "last step by" when the evidence covers only the last step.
+local classOf = function(name) return name == "Enzo Matrix" and "WARRIOR" or nil end
+local promo = { kind = "PROMOTE", name = "Bo Kay", to = "Raider", from = "Initiate", actor = "Enzo Matrix" }
+eq(Log.Plain(Log.Row(promo, now, classOf)), "Bo Kay promoted to Raider by Enzo Matrix", "row: promoted to, by")
+check(Log.Row(promo, now, classOf):find("|cffc69b6dEnzo Matrix|r", 1, true), "...the actor in their class colour")
+promo.lastStep = true
+eq(Log.Plain(Log.Row(promo, now, classOf)), "Bo Kay promoted to Raider (last step by Enzo Matrix)",
+    "...never a plain 'by' when only the last step is known")
+eq(Log.Plain(Log.Row({ kind = "LEVEL", name = "Saint Anger", from = 16, to = 19 }, now)),
+    "Saint Anger leveled from 16 to 19", "row: several levels")
+check(Log.Row({ kind = "JOIN", name = "No Class" }, now):find("|cffffffffNo Class|r", 1, true),
+    "row: no class, a plain white name")
+eq(Log.Plain(Log.Row({ kind = "LEAVE", name = "Bo Kay", how = "kick", actor = "Enzo Matrix", level = 20 }, now)),
+    "Bo Kay was kicked by Enzo Matrix (level 20)", "row: a kick and who did it")
+
+-- The panel: sections, stripes, summary, footer, Mark all as read.
+gs.viewedSeq = nil
+for i = 1, 30 do add({ kind = "LEVEL", name = "Ann Lee", guid = "Player-1-00000002", from = 30 + i, to = 31 + i }) end
+local top = gs.log[#gs.log].seq
+gs.viewedSeq = top - 3
+WoW.slash("/gspy log")
+local els = panel.elements
+eq(els[1].header, "New", "something new: a New heading first")
+eq(els[5].header, "Earlier", "...an Earlier heading after the three new entries")
+check(els[2].odd and not els[3].odd and els[4].odd, "...alternate rows striped")
+check(Log.Plain(panel.summary:GetText()) == "New: 3 level changes", "the summary counts the new entries")
+check(panel.markRead:IsEnabled(), "Mark all as read: enabled with something new")
+eq(panel.footer:GetText(), "Updated " .. Log.Relative(gs.observedAt, time()), "the footer: the last complete scan")
+draw(row, els[2].entry)
+row._scripts.OnEnter(row)
+eq(GameTooltip._lines[2], Log.Provenance(els[2].entry), "the tooltip says what the time means")
+row._scripts.OnLeave(row)
+view.initializer(row, els[1])
+check(row.header:IsShown() and not row.text:IsShown() and not row.mark:IsShown(), "a heading row shows only its heading")
+
+-- Scrolled down, then marked read: the rows on screen stay put.
+panel.pills[5]._scripts.OnClick(panel.pills[5])          -- Levels
+panel.search._text = "ann"
+panel.search._scripts.OnTextChanged(panel.search)
+els = panel.elements
+panel.box._offset = 10 * UI.ROW_HEIGHT + 5
+local first = els[11].entry
+local shownSeq, listed = gs.shownSeq, #panel.rows
+check(listed > 30 and listed < #gs.log, "(Levels and 'ann': a narrowed list)")
+UI.MarkAllRead()
+eq(gs.viewedSeq, top, "Mark all as read: viewedSeq to the newest entry")
+eq(gs.shownSeq, shownSeq, "...the digest's boundary untouched")
+eq(#panel.rows, listed, "...the filters and the search kept")
+for _, el in ipairs(panel.elements) do check(not el.header, "...no headings left") end
+local idx
+for i, el in ipairs(panel.elements) do if el.entry == first then idx = i end end
+eq((idx - 1) * UI.ROW_HEIGHT - panel.box._offset, -5, "...the first row on screen stays where it was")
+eq(Log.Plain(panel.summary:GetText()), "No new activity", "...the summary clears")
+check(not panel.markRead:IsEnabled(), "...and the button is disabled")
+draw(row, panel.rows[1])
+check(not row.mark:IsShown(), "...no dots")
+panel.search._text = ""
+panel.search._scripts.OnTextChanged(panel.search)
+panel.pills[1]._scripts.OnClick(panel.pills[1])
+
+-- A catch-up with many kinds new (#22 review): the line fits, and still counts everything.
+local before = gs.viewedSeq
+for _, ev in ipairs({
+    { kind = "JOIN", name = "Kay One" }, { kind = "LEAVE", name = "Kay Two", how = "quit" },
+    { kind = "PROMOTE", name = "Kay Three", to = "Member" }, { kind = "NAME", name = "Kay Four", from = "Kay Old" },
+    { kind = "RETURN", name = "Kay Five", days = 20 }, { kind = "NOTE", name = "Kay Six", to = "x" },
+    { kind = "MOTD", to = "raid tonight" },
+}) do add(ev) end
+win:Hide(); gs.viewedSeq = before; WoW.slash("/gspy log")
+panel.summary._width = 300
+UI.Refresh()
+local line = Log.Plain(panel.summary:GetText())
+check(#line * 7 <= 300, "a long summary is cut to fit: " .. line)
+local more = tonumber(line:match("%+(%d+) more$"))
+check(more, "...ending in +N more")
+local total, shown = 0, 0
+for _, c in ipairs(Log.NewCounts(gs, before, false)) do total = total + c.n end
+for n in line:gsub("%+%d+ more$", ""):gmatch("(%d+) %a") do shown = shown + tonumber(n) end
+eq(shown + more, total, "...and the shown counts plus N are every new entry")
+panel.summaryHit._scripts.OnEnter(panel.summaryHit)
+eq(#GameTooltip._lines, 1 + #Log.NewCounts(gs, before, false), "its tooltip: every tab, then every group")
+check(GameTooltip._lines[1]:find("every tab", 1, true), "...saying it counts every tab")
+panel.summaryHit._scripts.OnLeave(panel.summaryHit)
+panel.summary._width = 0
+UI.MarkAllRead()
+
+-- Ordering: by when it happened inside a section, whatever the seq.
+local recent = add({ kind = "JOIN", name = "Night Owl", at = now - 60 })
+local older = add({ kind = "JOIN", name = "Early Bird", at = now - 7200 })   -- recorded later, happened earlier
+UI.MarkAllRead()
+local posRecent, posOlder
+for i, e in ipairs(panel.rows) do
+    if e == recent then posRecent = i elseif e == older then posOlder = i end
+end
+check(older.seq > recent.seq and posRecent < posOlder, "a later seq with an older time sorts below a newer time")
+
+-- Empty lists say why, in the terms of what's selected.
+local emptyGs = { log = { { seq = 1, kind = "JOIN", name = "Solo", at = now - 90 * 86400 } } }
+local keepCurrent = GuildSpy.Scanner.Current
+GuildSpy.Scanner.Current = function() return emptyGs end
+UI.Refresh()
+panel.pills[4]._scripts.OnClick(panel.pills[4])          -- Notes
+eq(panel.empty:GetText(), "No note changes recorded yet.", "Notes, empty: says so")
+panel.pills[6]._scripts.OnClick(panel.pills[6])          -- MOTD
+eq(panel.empty:GetText(), "No message-of-the-day changes recorded yet.", "MOTD, empty: says so")
+UI.SetScope("week")
+eq(panel.empty:GetText(), "No message-of-the-day changes in this time range.", "...in a time range")
+panel.pills[1]._scripts.OnClick(panel.pills[1])
+eq(panel.empty:GetText(), "No activity in this time range.", "All, in a time range: says so")
+UI.SetScope("all")
+GuildSpy.Scanner.Current = keepCurrent
+UI.Refresh()
+
+-- The time-scope dropdown: its radios, and Today.
+local radios = {}
+panel.scope._menu(panel.scope, { CreateRadio = function(_, label, isSel, setSel)
+    radios[#radios + 1] = { label = label, isSel = isSel, setSel = setSel }
+end })
+eq(#radios, 4, "the dropdown lists four scopes")
+check(radios[1].label == "All history" and radios[1].isSel(), "...All history selected")
+local all = #panel.rows
+add({ kind = "JOIN", name = "Old Timer", guid = "Player-1-00000009", at = now - 40 * 86400 })
+UI.Refresh()
+eq(#panel.rows, all + 1, "(an entry 40 days old shows in All history)")
+radios[4].setSel()                                          -- Last 30 days
+check(radios[4].isSel() and not radios[1].isSel(), "Last 30 days selected")
+eq(#panel.rows, all, "...the old entry is out")
+radios[1].setSel()
 win:Hide()
 
 -- The guild window: Blizzard_Communities loads on demand.
@@ -217,7 +440,7 @@ check(UI.guildHost:IsShown(), "the tab shows the panel in the guild window")
 check(panel:GetParent() == UI.guildHost, "...the same panel, moved there")
 check(not win:IsShown(), "...the standalone window closed")
 check(tab:GetChecked() and not cf.RosterTab:GetChecked(), "...ours checked, Blizzard's not")
-eq(#panel.rows, 5, "...listing the log")
+eq(#panel.rows, #Log.Filter(gs, {}, time()), "...listing the log")
 WoW.slash("/gspy log")
 check(not win:IsShown(), "/gspy log leaves it in the guild window")
 
@@ -283,5 +506,23 @@ WoW.advance(25)
 WoW.slash("/gspy log")
 GuildSpy._test.UI.window():Hide()
 check(type(saved.guilds["Parse Partout-Forever"].viewedSeq) == "number", "a text viewedSeq is replaced, not compared")
+
+-- A client without the dropdown or the top-tab template: plain buttons that still work.
+loadAddon({ db = saved, setup = function()
+    WoW.guild = newGuild()
+    WoW.missingTemplates.WowStyle1DropdownTemplate = true
+    WoW.missingTemplates.PanelTopTabButtonTemplate = true
+end })
+WoW.fire("PLAYER_LOGIN")
+WoW.slash("/gspy log")
+local fp, FT = GuildSpy._test.UI.panel(), GuildSpy._test.UI
+eq(fp.scope._template, "UIPanelButtonTemplate", "no dropdown template: a button")
+eq(fp.pills[1]._template, "UIPanelButtonTemplate", "no top-tab template: buttons")
+fp.scope._scripts.OnClick(fp.scope)
+eq(FT.scope(), "today", "...clicking it moves to the next scope")
+eq(fp.scope:GetText(), "Today", "...and names it")
+for _ = 1, 3 do fp.scope._scripts.OnClick(fp.scope) end
+eq(FT.scope(), "all", "...and wraps around")
+FT.window():Hide()
 
 done("test_ui")
