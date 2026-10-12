@@ -15,6 +15,8 @@ GuildSpy.Log = Log
 Log.MAX_ENTRIES = 1500
 Log.MAX_DAYS = 180
 Log.DIGEST_LINES = 8
+-- A chat link that opens the log window (UI.lua handles "addon:guildspy").
+Log.OPEN_LINK = "|Haddon:guildspy:log|h|cff7fd4ff[open log]|r|h"
 
 -- GRM's palette (GRM_Core.lua:1187).
 Log.COLORS = {
@@ -31,6 +33,15 @@ Log.SUMMARY = {
     { "DEMOTE", "demoted" }, { "RANK", "changed rank" }, { "NAME", "renamed" }, { "RETURN", "came back" },
     { "NOTE", "note edits" }, { "ONOTE", "officer note edits" }, { "LEVEL", "level-ups" },
     { "RANKS", "rank changes" }, { "MOTD", "new MOTD" },
+}
+
+-- The log window's filters: each kind belongs to one.
+Log.CATEGORIES = {
+    { key = "members", label = "Members", kinds = { JOIN = true, REJOIN = true, LEAVE = true, RETURN = true, NAME = true } },
+    { key = "ranks", label = "Ranks", kinds = { PROMOTE = true, DEMOTE = true, RANK = true, RANKS = true } },
+    { key = "notes", label = "Notes", kinds = { NOTE = true, ONOTE = true } },
+    { key = "levels", label = "Levels", kinds = { LEVEL = true } },
+    { key = "motd", label = "MOTD", kinds = { MOTD = true } },
 }
 
 -- An officer-note entry is hidden everywhere from a character that can't
@@ -101,6 +112,35 @@ function Log.Line(e, now)
     return "|cff" .. (Log.COLORS[e.kind] or "ffffff") .. Log.Text(e, now) .. "|r"
 end
 
+-- Text without colour codes (and links reduced to their text).
+function Log.Plain(s)
+    return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"))
+end
+
+-- The log window's rows: the entries this character may see, newest first,
+-- in `opts.category` (a Log.CATEGORIES key; nil = all) and containing
+-- `opts.query` (plain, case-insensitive, matched against the shown text, so
+-- a member's name, an officer's or a rank all find it).
+function Log.Filter(gs, opts, now)
+    opts = opts or {}
+    local kinds
+    for _, c in ipairs(Log.CATEGORIES) do
+        if c.key == opts.category then kinds = c.kinds end
+    end
+    local q = opts.query and opts.query:lower():match("^%s*(.-)%s*$")
+    if q == "" then q = nil end
+    local out = {}
+    local log = gs.log or {}
+    for i = #log, 1, -1 do
+        local e = log[i]
+        if Log.Visible(e, opts.canViewOfficer) and (not kinds or kinds[e.kind])
+                and (not q or Log.Plain(Log.Text(e, now)):lower():find(q, 1, true)) then
+            out[#out + 1] = e
+        end
+    end
+    return out
+end
+
 -- Appends an event as an entry; caps are enforced here, on every append.
 function Log.Add(db, gs, ev, now)
     gs.log = gs.log or {}
@@ -169,7 +209,7 @@ function Log.Digest(gs, canViewOfficer, now)
         if counts[s[1]] then parts[#parts + 1] = counts[s[1]] .. " " .. s[2] end
     end
     local since = gs.shownAt and (" since " .. Log.Ago(now - gs.shownAt) .. " ago") or ""
-    local lines = { "|cff7fd4ffGuildSpy|r" .. since .. ": " .. table.concat(parts, ", ") }
+    local lines = { "|cff7fd4ffGuildSpy|r" .. since .. ": " .. table.concat(parts, ", ") .. " " .. Log.OPEN_LINK }
     table.sort(fresh, function(a, b)
         local pa, pb = Log.PRIORITY[a.kind] or 99, Log.PRIORITY[b.kind] or 99
         if pa ~= pb then return pa < pb end
@@ -177,7 +217,7 @@ function Log.Digest(gs, canViewOfficer, now)
     end)
     for i = 1, math.min(Log.DIGEST_LINES, #fresh) do lines[#lines + 1] = "  " .. Log.Line(fresh[i], now) end
     if #fresh > Log.DIGEST_LINES then
-        lines[#lines + 1] = "  ... and " .. (#fresh - Log.DIGEST_LINES) .. " more: /gspy log"
+        lines[#lines + 1] = "  ... and " .. (#fresh - Log.DIGEST_LINES) .. " more " .. Log.OPEN_LINK
     end
     return lines, top, topOnote
 end

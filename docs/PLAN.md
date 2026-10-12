@@ -149,8 +149,9 @@ matching uses that interval, and it must be **unique**; if it's ambiguous, there
 ### Storage (`GuildSpyDB`, account-wide; versioned, named fields)
 
 ```
-GuildSpyDB = { version=1, settings={...}, minimap={}, nextSeq=1,
+GuildSpyDB = { version=1, settings={...}, minimap={}, nextSeq=1, window={ x, y },
   guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,
+    viewedSeq=n,   -- the log window's "new" marker (#3): the last seq seen there
     ranks = { "Guild Master", ... }, motd = "...",
     members = { [guid] = { name, rank, level, class, note, onote, online, lastSeenAt, missingSince, missingAfter } },
     formers = { [guid] = { name, leftAt, rankName, level } },

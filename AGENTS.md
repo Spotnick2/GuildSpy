@@ -42,15 +42,16 @@ before touching an unfamiliar API.
 - **SavedVariables:** `GuildSpyDB`, account-wide (so alts in the same guild share one baseline).
   Its shape is in `docs/PLAN.md` "Storage". Once released, the shape is a contract: add fields,
   don't repurpose them. Verify persistence with a **full client exit**, never a `/reload`.
-- **Status:** phase 1 (detection, log, chat lines, digest, `/gspy log`). Phase 2 adds the log
-  window, the options page and the minimap button. The guild API shapes are measured:
+- **Status:** phase 1 (detection, log, chat lines, digest) and the log window (#3). Phase 2 still
+  adds the options page and the minimap button. The guild API shapes are measured:
   `docs/FOREVER-PROBE.md`.
 
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Roster.lua` →
-`Patterns.lua` → `EventLog.lua` → `Log.lua` → `Scanner.lua` → `Probe.lua` → `ProbeProfessions.lua` →
-`GuildSpy.lua`. Phase 2 adds `UI.lua`, `Options.lua`, `Minimap.lua` (see `docs/PLAN.md` "Architecture").
+`Patterns.lua` → `EventLog.lua` → `Log.lua` → `Scanner.lua` → `UI.lua` → `Probe.lua` →
+`ProbeProfessions.lua` → `GuildSpy.lua`. Phase 2 adds `Options.lua`, `Minimap.lua` (see
+`docs/PLAN.md` "Architecture").
 
 - **`Compat.lua`**: `GuildSpy.API`, the only route to client APIs that moved or may be absent, and
   `MEASURED_ON_BUILD`. **The only place that will know a guild tuple's positions.** Nothing is
@@ -75,6 +76,10 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Scanner.lua`**: the shell. It handles events and debounces, polls every 60 s, applies the
   completeness gate (`API.ReadRoster`), keeps the pending live messages, reads the event log once
   its burst settles, enriches entries in place, and times the digest.
+- **`UI.lua`**: the log window (#3): one panel in two hosts, a GuildSpy side tab in Blizzard's guild
+  window and a standalone glass window. **It never opens, toggles or writes a field of Blizzard's
+  window** (a Forever taint trap); only `hooksecurefunc`, `HookScript`, `SetChecked` on its tabs, and
+  child frames of our own. `tests/test_ui.lua` fails on any field write.
 - **`ProbeProfessions.lua`**: measuring only. It records whether the server serves guild
   professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
