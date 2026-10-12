@@ -220,7 +220,7 @@ eq(Log.Plain(Log.NewSummary(sg, 9, true)), "No new activity", "...nothing past i
 eq(sg.log[1].after, nil, "(no interval given: no 'after')")
 eq(Log.Add(sdb, sg, { kind = "JOIN", name = "J", lo = now - 99 }, now).after, now - 99, "an entry keeps the previous scan's time")
 
--- Times: relative, "~" when a guess, provenance in words.
+-- Times: relative, "about" when a guess, provenance in words.
 local base = os.time({ year = 2026, month = 10, day = 12, hour = 10, min = 0, sec = 0 })
 local function at(h, extra)
     local e = { at = base - h * 3600 }
@@ -230,9 +230,10 @@ end
 eq(Log.When(at(0), base), "just now", "under a minute: just now")
 eq(Log.When({ at = base - 300 }, base), "5m ago", "minutes")
 eq(Log.When(at(3), base), "3h ago", "hours")
-eq(Log.When(at(3, { approx = true }), base), "~3h ago", "the event log's hour: ~")
+eq(Log.When(at(3, { approx = true }), base), "about 3h ago", "the event log's hour: about")
 eq(Log.When(at(3, { approx = false, after = base - 99999 }), base), "3h ago", "seen live: exact, whatever the gap")
-eq(Log.When(at(3, { after = base - 4 * 3600 }), base), "~3h ago", "a scan long after the last one: ~")
+eq(Log.When(at(3, { after = base - 4 * 3600 }), base), "about 3h ago", "a scan long after the last one: about")
+eq(Log.When(at(30, { approx = true }), base), "Yesterday", "a day-level time needs no 'about'")
 eq(Log.When(at(3, { after = base - 3 * 3600 - 60 }), base), "3h ago", "a scan a minute after the last one: exact enough")
 eq(Log.When(at(25), base), "Yesterday", "yesterday (over 24h, after yesterday's midnight)")
 eq(Log.When({ at = os.time({ year = 2026, month = 10, day = 3, hour = 12 }) }, base), "Oct 3", "older: a date")

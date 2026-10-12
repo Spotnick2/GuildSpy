@@ -176,9 +176,12 @@ local function relative(at, now)
 end
 Log.Relative = relative
 
--- The row's time: "4h ago", "~3h ago", "Yesterday", "Oct 3".
+-- The row's time: "4h ago", "about 3h ago", "Yesterday", "Oct 3". Not "~":
+-- the game font draws it as a raised bar, so "~26m ago" read as a macron in game.
 function Log.When(e, now)
-    return (Log.Approx(e) and "~" or "") .. relative(e.at or now, now)
+    local s = relative(e.at or now, now)
+    if Log.Approx(e) and s:find("ago", 1, true) then return "about " .. s end
+    return s
 end
 
 -- What the entry's time means, for its tooltip.
