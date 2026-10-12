@@ -295,7 +295,28 @@ function WoW.reset()
     UIParent = newWidget("Frame", nil, "UIParent")
     UIParent._width, UIParent._height = 1366, 768
     GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
+    -- Retail's Settings framework: Options > AddOns. Recorded in WoW.settings.
+    WoW.settings = { canvas = {}, addons = {}, subs = {} }
+    -- Blizzard's Settings window (HIGH strata), hidden until opened.
+    SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
+    SettingsPanel._strata = "HIGH"
+    SettingsPanel._shown = false
 end
+
+Settings = {
+    RegisterCanvasLayoutCategory = function(frame, name)
+        local cat = { frame = frame, name = name, GetID = function() return "cat:" .. name end }
+        WoW.settings.canvas[#WoW.settings.canvas + 1] = cat
+        return cat
+    end,
+    RegisterAddOnCategory = function(cat) WoW.settings.addons[#WoW.settings.addons + 1] = cat end,
+    OpenToCategory = function(id) WoW.settings.opened = id; SettingsPanel:Show() end,
+    RegisterCanvasLayoutSubcategory = function(parent, frame, name)
+        local cat = { parent = parent, frame = frame, name = name }
+        WoW.settings.subs[#WoW.settings.subs + 1] = cat
+        return cat
+    end,
+}
 
 function print(...)
     local parts = {}

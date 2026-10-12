@@ -22,6 +22,7 @@ It keeps the informational side of Guild Roster Manager and nothing else.
 | `/gspy` or `/guildspy` | the list of commands |
 | `/gspy log` | open the log window (it's also a tab in the guild window, J) |
 | `/gspy log <n>` | print the last n changes in chat |
+| `/gspy options` | the settings (also in Options > AddOns > GuildSpy) |
 | `/gspy status` | what GuildSpy knows about your guild |
 | `/gspy scan` | look at the roster now |
 | `/gspy rebaseline` | start over from the current roster (the log is kept) |

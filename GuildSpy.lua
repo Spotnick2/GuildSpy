@@ -15,6 +15,7 @@ GuildSpy.HELP = {
     { "/gspy help", "this list" },
     { "/gspy log", "open the log window (also a tab in the guild window)" },
     { "/gspy log <n>", "print the last n changes in chat" },
+    { "/gspy options", "the settings (also in Options > AddOns > GuildSpy)" },
     { "/gspy status", "what GuildSpy knows about your guild" },
     { "/gspy scan", "look at the roster now" },
     { "/gspy rebaseline", "start over from the current roster (the log is kept)" },
@@ -33,7 +34,7 @@ local function initDB()
     local db = GuildSpyDB
     db.version = db.version or 1
     if type(db.settings) ~= "table" then db.settings = {} end
-    if type(db.settings.chat) ~= "table" then db.settings.chat = {} end
+    GuildSpy.Options.Validate(db.settings)
     if type(db.guilds) ~= "table" then db.guilds = {} end
     if type(db.nextSeq) ~= "number" then db.nextSeq = 1 end
 end
@@ -50,6 +51,8 @@ local function slash(msg)
         else GuildSpy.Probe.Run() end
     elseif cmd == "log" then
         if tonumber(rest) then GuildSpy.Scanner.PrintLog(tonumber(rest)) else GuildSpy.UI.Open() end
+    elseif cmd == "options" or cmd == "settings" or cmd == "config" then
+        GuildSpy.Options.Open()
     elseif cmd == "status" then
         GuildSpy.Scanner.Status()
     elseif cmd == "scan" then
