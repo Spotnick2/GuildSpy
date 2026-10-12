@@ -286,11 +286,29 @@ function Log.NewSummary(gs, since, canViewOfficer, limit)
     return "New: " .. table.concat(parts, paint(MUTED, "  \194\183  "))
 end
 
+-- Whether an entry belongs to the rank named `rank` (#23): its member holds
+-- it now, left from it, or a rank change went from or to it. Guild-wide
+-- entries (MOTD, rank structure) belong to no rank.
+function Log.InRank(e, gs, rank)
+    if (e.kind == "PROMOTE" or e.kind == "DEMOTE" or e.kind == "RANK") and (e.from == rank or e.to == rank) then
+        return true
+    end
+    if e.kind == "LEAVE" and e.from == rank then return true end
+    if not e.guid then return false end
+    local m = type(gs.members) == "table" and gs.members[e.guid]
+    if type(m) == "table" then
+        return type(m.rank) == "number" and type(gs.ranks) == "table" and gs.ranks[m.rank + 1] == rank
+    end
+    local f = type(gs.formers) == "table" and gs.formers[e.guid]
+    return type(f) == "table" and f.rankName == rank
+end
+
 -- The log window's rows: the entries this character may see, newest first,
 -- in `opts.category` (a Log.CATEGORIES key; nil = all), at or after
 -- `opts.since` (nil = any time) and containing `opts.query` (plain,
 -- case-insensitive, matched against the shown text, so a member's name, an
--- officer's or a rank all find it).
+-- officer's or a rank all find it), in `opts.rank` (a rank name, see
+-- Log.InRank; nil = all).
 function Log.Filter(gs, opts, now)
     opts = opts or {}
     local kinds
@@ -305,6 +323,7 @@ function Log.Filter(gs, opts, now)
         local e = log[i]
         if Log.Visible(e, opts.canViewOfficer) and (not kinds or kinds[e.kind])
                 and (not opts.since or (e.at or 0) >= opts.since)
+                and (not opts.rank or Log.InRank(e, gs, opts.rank))
                 and (not q or Log.Plain(Log.Text(e, now)):lower():find(q, 1, true)) then
             out[#out + 1] = e
         end

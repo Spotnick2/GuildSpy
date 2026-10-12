@@ -413,6 +413,67 @@ eq(#panel.rows, all, "...the old entry is out")
 radios[1].setSel()
 win:Hide()
 
+-- #23: filter by rank, the member's rank now.
+do
+    local R = { ranks = { "Guild Master", "Raid A", "Raid B", "Member" },
+                members = { ["g-a"] = { name = "Ann", rank = 1 }, ["g-b"] = { name = "Bo", rank = 2 } },
+                formers = { ["g-c"] = { name = "Cy", rankName = "Raid A" } } }
+    local function e(t) return t end
+    local level = e({ kind = "LEVEL", guid = "g-a", from = 29, to = 30 })
+    check(Log.InRank(level, R, "Raid A"), "a member's entry under the rank they hold now")
+    check(not Log.InRank(level, R, "Raid B"), "...not under another")
+    local cyNote = e({ kind = "NOTE", guid = "g-c", to = "x" })
+    check(Log.InRank(cyNote, R, "Raid A"), "a former member's entry under the rank they left with")
+    local leave = e({ kind = "LEAVE", guid = "g-d", from = "Raid B" })
+    check(Log.InRank(leave, R, "Raid B"), "a departure under the rank it left from, even once the former is pruned")
+    local moved = e({ kind = "PROMOTE", guid = "g-b", from = "Raid A", to = "Raid B" })
+    check(Log.InRank(moved, R, "Raid A") and Log.InRank(moved, R, "Raid B"),
+        "a move between teams under both: leaving one, joining the other")
+    check(not Log.InRank(moved, R, "Member"), "...and not under an unrelated rank")
+    check(not Log.InRank(e({ kind = "MOTD", to = "hi" }), R, "Raid A"), "the MOTD under no rank")
+    check(not Log.InRank(e({ kind = "RANKS", to = "Raid A" }), R, "Raid A"), "a rank-structure change under no rank")
+    local renamed = e({ kind = "PROMOTE", guid = "g-x", from = "Raiders", to = "Old Name" })
+    check(not Log.InRank(renamed, R, "Raid A"), "an old rank name doesn't match a renamed rank (by design)")
+    check(not Log.InRank(e({ kind = "LEVEL", guid = "g-z" }), R, "Raid A"), "an unknown member under no rank")
+    check(not Log.InRank(level, { members = R.members }, "Raid A"), "no rank list: no match, no error")
+    local all = Log.Filter({ ranks = R.ranks, members = R.members, formers = R.formers,
+                             log = { { seq = 1, at = now, kind = "JOIN", guid = "g-a", name = "Ann" },
+                                     { seq = 2, at = now, kind = "LEVEL", guid = "g-b", name = "Bo", from = 9, to = 10 },
+                                     { seq = 3, at = now, kind = "MOTD", to = "hi" },
+                                     { seq = 4, at = now, kind = "LEVEL", guid = "g-a", name = "Ann", from = 10, to = 11 } } },
+                           { rank = "Raid A", category = "levels" }, now)
+    eq(#all, 1, "the rank combines with a tab")
+    eq(all[1].seq, 4, "...Ann's level-up only")
+end
+
+-- The rank dropdown: All ranks, then the guild's ranks; it narrows the list.
+win:Show()
+local rradios = {}
+panel.rank._menu(panel.rank, { CreateRadio = function(_, label, isSel, setSel)
+    rradios[#rradios + 1] = { label = label, isSel = isSel, setSel = setSel }
+end })
+eq(#rradios, 1 + #gs.ranks, "the rank dropdown lists All ranks and every rank")
+check(rradios[1].label == "All ranks" and rradios[1].isSel(), "...All ranks selected")
+eq(rradios[2].label, gs.ranks[1], "...then the ranks in order")
+local everything = #panel.rows
+rradios[5].setSel()                                          -- Member: Ann's and Fizzle's rank
+check(rradios[5].isSel() and T.rank() == "Member", "a rank selected")
+check(#panel.rows > 0 and #panel.rows < everything, "...the list narrows to it")
+for _, r in ipairs(panel.rows) do check(r.kind ~= "MOTD", "...without guild-wide entries") end
+rradios[3].setSel()                                          -- Officer: nobody
+check(panel.empty:IsShown() and panel.empty:GetText() == "No activity for Officer recorded yet.", "an empty rank says so")
+panel.pills[5]._scripts.OnClick(panel.pills[5])              -- Levels
+eq(panel.empty:GetText(), "No level changes for Officer recorded yet.", "...with the tab's words")
+panel.pills[1]._scripts.OnClick(panel.pills[1])
+local keepRanks = gs.ranks
+gs.ranks = { "Guild Master", "Lieutenant", "Veteran", "Member", "Recruit" }
+UI.Refresh()
+eq(T.rank(), nil, "a rank the guild no longer has lets go")
+eq(#panel.rows, everything, "...and the list shows every rank again")
+gs.ranks = keepRanks
+UI.Refresh()
+win:Hide()
+
 -- The guild window: Blizzard_Communities loads on demand.
 local cf = communitiesFrame()
 WoW.fire("ADDON_LOADED", "Blizzard_Communities")
@@ -514,6 +575,7 @@ loadAddon({ db = saved, setup = function()
     WoW.missingTemplates.PanelTopTabButtonTemplate = true
 end })
 WoW.fire("PLAYER_LOGIN")
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(25)
 WoW.slash("/gspy log")
 local fp, FT = GuildSpy._test.UI.panel(), GuildSpy._test.UI
 eq(fp.scope._template, "UIPanelButtonTemplate", "no dropdown template: a button")
@@ -523,6 +585,13 @@ eq(FT.scope(), "today", "...clicking it moves to the next scope")
 eq(fp.scope:GetText(), "Today", "...and names it")
 for _ = 1, 3 do fp.scope._scripts.OnClick(fp.scope) end
 eq(FT.scope(), "all", "...and wraps around")
+eq(fp.rank:GetText(), "All ranks", "the rank button starts on All ranks")
+fp.rank._scripts.OnClick(fp.rank)
+eq(FT.rank(), "Guild Master", "...clicking it moves to the first rank")
+eq(fp.rank:GetText(), "Guild Master", "...and names it")
+for _ = 1, 5 do fp.rank._scripts.OnClick(fp.rank) end
+eq(FT.rank(), nil, "...and wraps around to All ranks")
+eq(fp.rank:GetText(), "All ranks", "...named")
 FT.window():Hide()
 
 done("test_ui")
