@@ -21,14 +21,20 @@ UI.WIDTH, UI.HEIGHT = 640, 440
 UI.ROW_HEIGHT = 18
 UI.ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 UI.WINDOW_NAME = "GuildSpyLogWindow"
--- Above everything in the guild window's content area (its chat box sits at 1200).
+-- Above everything in the guild window's content area. A frame level alone
+-- isn't enough (in game the member list and chat showed through), so the host
+-- also takes the strata above the window's.
 UI.GUILD_LEVEL = 1300
+UI.STRATA_ABOVE = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG",
+                    DIALOG = "FULLSCREEN", FULLSCREEN = "FULLSCREEN_DIALOG" }
 -- Blizzard's side tabs, in order (Blizzard_Communities/CommunitiesFrame.xml).
 UI.BLIZZARD_TABS = { "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }
 
 local panel, win, tab, guildHost
 local category, query = nil, ""
 local newSince = 0             -- entries past this seq are marked new while the panel is open
+local visit                    -- the guild state whose rows the open panel shows
+local tipRow                   -- the row whose tooltip is up
 
 local function canView() return API.CanViewOfficerNote() == true end
 local function current() return GuildSpy.Scanner.Current() end
@@ -70,13 +76,14 @@ local function initRow(row, e)
         -- The whole line and the exact time: a long note is cut short in the row.
         row:SetScript("OnEnter", function(self)
             local entry = self.entry
-            if not entry then return end
+            if not entry or not Log.Visible(entry, canView()) then return end
+            tipRow = self
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(date("%Y-%m-%d %H:%M", entry.at) .. (entry.approx and " (approximate)" or ""))
             GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
             GameTooltip:Show()
         end)
-        row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row:SetScript("OnLeave", function() tipRow = nil; GameTooltip:Hide() end)
     end
     row.entry = e
     row.mark:SetShown(e.seq > newSince)
@@ -149,15 +156,24 @@ end
 
 -- A host opening marks what's new since the last look; a host closing makes
 -- it seen (account-wide, per guild, like the digest's boundary).
-local function opened()
-    local gs = current()
+local function markViewed(gs)
+    if gs then gs.viewedSeq = math.max(gs.viewedSeq or 0, topVisible(gs)) end
+end
+
+-- The panel shows `gs` from now on: its own "new" boundary.
+local function visitGuild(gs)
+    visit = gs
     newSince = gs and gs.viewedSeq or 0
+end
+
+local function opened()
+    visitGuild(current())
     UI.Refresh()
 end
 
 local function closed()
-    local gs = current()
-    if gs then gs.viewedSeq = math.max(gs.viewedSeq or 0, topVisible(gs)) end
+    markViewed(visit)
+    visit = nil
 end
 
 -- Fills the list from the current guild's log. Cheap enough to run on every
@@ -165,6 +181,15 @@ end
 function UI.Refresh()
     if not panel or not panel:IsVisible() then return end
     local gs = current()
+    -- Another guild (or none) since the panel opened: the rows shown so far
+    -- were the old guild's, seen; the new one starts from its own boundary.
+    if gs ~= visit then
+        markViewed(visit)
+        visitGuild(gs)
+    end
+    -- A tooltip up on a row is redrawn from the new rows by hovering again; an
+    -- officer note in it must not outlive the right to read it.
+    if tipRow then tipRow = nil; GameTooltip:Hide() end
     local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView() }, time()) or {}
     panel.rows = rows
     local constants = rawget(_G, "ScrollBoxConstants")
@@ -185,6 +210,7 @@ local function setHost(host, level)
     panel:SetParent(host)
     panel:ClearAllPoints()
     panel:SetAllPoints(host)
+    panel:SetFrameStrata(host:GetFrameStrata())
     panel:SetFrameLevel(level)
     panel:Show()
 end
@@ -291,7 +317,14 @@ function UI.PlaceTab()
     tab:ClearAllPoints()
     tab:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -20)
     tab:Show()
-    if guildHost:IsShown() then blizzardTabs(cf, false) end
+    -- Blizzard just re-checked one of its tabs. If this is a Blizzard tab
+    -- being clicked, SetDisplayMode's hook hides us right after and that
+    -- check must stay; if we're still shown a frame later, it's ours.
+    if guildHost:IsShown() then
+        C_Timer.After(0, function()
+            if guildHost:IsShown() then blizzardTabs(cf, false) end
+        end)
+    end
 end
 
 function UI.AttachGuild()
@@ -315,6 +348,7 @@ function UI.AttachGuild()
         guildHost:SetPoint("TOPLEFT", cf, "TOPLEFT", 172, -24)
     end
     guildHost:SetPoint("BOTTOMRIGHT", cf, "BOTTOMRIGHT", -6, 4)
+    guildHost:SetFrameStrata(UI.STRATA_ABOVE[cf:GetFrameStrata()] or "HIGH")
     guildHost:SetFrameLevel(UI.GUILD_LEVEL)
     guildHost:EnableMouse(true)                    -- nothing under it takes the clicks
     local bg = guildHost:CreateTexture(nil, "BACKGROUND")

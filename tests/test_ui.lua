@@ -25,14 +25,25 @@ local function communitiesFrame()
         cf[key]:Hide()
     end
     cf.guildSelected = true
+    cf.displayMode = "ROSTER"
+    local modeTab = { CHAT = "ChatTab", ROSTER = "RosterTab", GUILD_BENEFITS = "GuildBenefitsTab", GUILD_INFO = "GuildInfoTab" }
+    -- As CommunitiesFrameMixin:UpdateCommunitiesTabs: show the guild's tabs,
+    -- then check the one for the current mode only.
     function cf:UpdateCommunitiesTabs()
         for _, key in ipairs({ "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab" }) do
             self[key]:SetShown(self.guildSelected or key == "ChatTab" or key == "RosterTab")
             self[key]:SetChecked(false)
         end
-        self.RosterTab:SetChecked(true)
+        self[modeTab[self.displayMode]]:SetChecked(true)
     end
-    function cf:SetDisplayMode(mode) self:UpdateCommunitiesTabs() end
+    -- As SetDisplayMode: returns early on the same mode, else updates the tabs.
+    function cf:SetDisplayMode(mode)
+        if self.displayMode == mode then return end
+        rawset(self, "displayMode", mode)
+        self:UpdateCommunitiesTabs()
+    end
+    -- What a tab click does: RightSideTabMixin checks it, then SetDisplayMode.
+    function cf:clickTab(key, mode) self[key]:SetChecked(true); self:SetDisplayMode(mode) end
     local mt = getmetatable(cf)
     setmetatable(cf, { __index = mt.__index, __newindex = function(_, k)
         error("the addon wrote CommunitiesFrame." .. tostring(k), 2)
@@ -120,6 +131,38 @@ G.members[2].level = 31
 WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
 eq(#panel.rows, 5, "a level-up while open shows at once")
 
+-- Officer-note permission lost while the window is open (#18 review).
+WoW.guild.canViewOfficerNote = true
+win:Hide(); WoW.slash("/gspy log")
+local hasOnote = function()
+    for _, e in ipairs(panel.rows) do if e.kind == "ONOTE" then return e end end
+end
+local on = hasOnote()
+check(on, "an officer sees the officer note in the window")
+local onRow = CreateFrame("Button", nil, panel)
+view.initializer(onRow, on)
+onRow._scripts.OnEnter(onRow)
+check(GameTooltip:IsShown(), "...and its tooltip")
+WoW.guild.canViewOfficerNote = false
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)  -- a scan with no change
+check(not hasOnote(), "permission lost: the next scan takes it off the list")
+check(not GameTooltip:IsShown(), "...and the tooltip showing it goes")
+GameTooltip:Hide()
+onRow._scripts.OnEnter(onRow)
+check(not GameTooltip:IsShown(), "a stale row's tooltip never shows it")
+
+-- Leaving the guild with the window open: no old rows, no old boundary.
+local keep = WoW.guild
+WoW.guild = nil
+WoW.fire("PLAYER_GUILD_UPDATE")
+eq(#panel.rows, 0, "out of the guild: the old guild's rows go")
+check(panel.empty:GetText() == "No guild seen yet.", "...and it says so")
+WoW.guild = keep
+WoW.fire("PLAYER_GUILD_UPDATE")
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(25)
+check(#panel.rows > 0, "back in: its rows return")
+win:Hide()
+
 -- /gspy log <n> still prints.
 WoW.chat = {}
 WoW.slash("/gspy log 2")
@@ -140,6 +183,10 @@ local cf = communitiesFrame()
 WoW.fire("ADDON_LOADED", "Blizzard_Communities")
 local tab = UI.tab
 check(tab and tab:GetParent() == cf, "the tab is attached when the guild window loads")
+-- Every field of Blizzard's frame as it is now (after the hooks, which are the
+-- client's own writes): the addon must change none (the guard above only sees new ones).
+local before = {}
+for k, v in pairs(cf) do if k:sub(1, 1) ~= "_" and k ~= "displayMode" then before[k] = v end end
 check(not tab:IsShown(), "...hidden until Blizzard lays its tabs out")
 cf:UpdateCommunitiesTabs()
 check(tab:IsShown(), "shown under the guild's tabs")
@@ -162,10 +209,32 @@ eq(#panel.rows, 5, "...listing the log")
 WoW.slash("/gspy log")
 check(not win:IsShown(), "/gspy log leaves it in the guild window")
 
--- A Blizzard tab clicked: our panel goes away.
-cf:SetDisplayMode("ROSTER")
+WoW.advance(0)
+check(UI.guildHost:GetFrameStrata() == "HIGH", "the panel sits a strata above the guild window (MEDIUM)")
+
+-- The current Blizzard tab clicked again (SetDisplayMode returns early): our panel goes away.
+cf:clickTab("RosterTab", "ROSTER")
+WoW.advance(0)
 check(not UI.guildHost:IsShown(), "a Blizzard tab hides the panel")
 check(not tab:GetChecked(), "...and unchecks ours")
+check(cf.RosterTab:GetChecked(), "...and Roster stays checked")
+
+-- Another Blizzard tab (#18 review): it ends up checked, ours not.
+tab._scripts.OnClick(tab)
+WoW.advance(0)
+cf:clickTab("GuildInfoTab", "GUILD_INFO")
+WoW.advance(0)
+check(not UI.guildHost:IsShown(), "Info clicked from our panel: the panel goes")
+check(cf.GuildInfoTab:GetChecked(), "...and Info is checked")
+check(not cf.RosterTab:GetChecked() and not tab:GetChecked(), "...alone")
+
+-- Blizzard re-laying its tabs while ours stays up: ours stays the checked one.
+tab._scripts.OnClick(tab)
+cf:UpdateCommunitiesTabs()
+WoW.advance(0)
+check(UI.guildHost:IsShown() and tab:GetChecked() and not cf.GuildInfoTab:GetChecked(),
+    "a re-layout with our panel up: ours checked, Blizzard's not")
+cf:clickTab("RosterTab", "ROSTER")
 
 -- Another club selected (no guild tabs): no tab, no panel.
 tab._scripts.OnClick(tab)
@@ -179,6 +248,9 @@ cf:UpdateCommunitiesTabs()
 tab._scripts.OnClick(tab)
 cf:Hide()
 check(not UI.guildHost:IsShown(), "closing the guild window hides the panel")
+local changed
+for k, v in pairs(before) do if rawget(cf, k) ~= v then changed = k end end
+eq(changed, nil, "no field of Blizzard's frame was rewritten")
 
 local firstDB = GuildSpyDB
 -- Already loaded at login: attached then.

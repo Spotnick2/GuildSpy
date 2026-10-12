@@ -29,6 +29,12 @@ local function now() return time() end
 local function say(msg) GuildSpy.Print(msg) end
 
 local function db() return GuildSpyDB end
+
+-- The log window (UI.lua, loaded later) redraws when the log, the guild or
+-- the officer-note permission may have changed.
+local function refreshUI()
+    if GuildSpy.UI then GuildSpy.UI.Refresh() end
+end
 local function settings() return db().settings or {} end
 
 -- A fresh session for the current (or no) guild: live evidence never
@@ -41,6 +47,7 @@ function Scanner.Reset()
     S.firstScanDone, S.digestShown, S.baselined, S.deadlinePassed = false, false, nil, false
     S.holding, S.logQueried = false, false
     S.session = (S.session or 0) + 1
+    refreshUI()
 end
 Scanner.Reset()
 
@@ -134,11 +141,6 @@ local function canView() return API.CanViewOfficerNote() == true end
 
 -- Entries recorded this session without an actor get later evidence filled
 -- in place: the window updates, no second chat line is printed.
--- The log window (UI.lua, loaded later) redraws when the log changes.
-local function refreshUI()
-    if GuildSpy.UI then GuildSpy.UI.Refresh() end
-end
-
 -- The current guild's saved state and key (nil out of a guild): for the log window.
 function Scanner.Current() return S.state, S.guildKey end
 
@@ -309,7 +311,7 @@ function Scanner.Scan(force)
         end
     end
     Roster.PruneFormers(S.state, t)
-    if #events > 0 then refreshUI() end
+    refreshUI()                -- also when nothing changed: officer-note permission may have
     S.firstScanDone = true
     -- A departure waits for a second complete scan: ask for it.
     if Roster.HasMissing(S.state) then C_Timer.After(31, Scanner.Request) end
