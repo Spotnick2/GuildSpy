@@ -15,3 +15,6 @@
   (for guilds that use ranks as raid teams: members in it now, who left it, and who moved in or
   out), search by name, and Mark all as read. `/gspy log 20` prints the last 20 in chat; `/gspy status` shows what
   GuildSpy knows.
+- **Settings** in the game's Options > AddOns > GuildSpy (or `/gspy options`): the login summary
+  on or off, from which level a level-up is reported, how long away counts as "back", and a chat
+  line on or off for each type of change. An About page lists the commands.

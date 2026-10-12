@@ -23,6 +23,15 @@ function API.ClientBuild()
     return version .. "." .. tostring(build)
 end
 
+-- A frame from a client template, and whether the template made it: a missing
+-- template returns a bare frame, so `proof` names a field the template sets.
+-- Lifted from Gnomesweeper's API.SafeFrame.
+function API.SafeFrame(ftype, parent, template, proof)
+    local ok, f = pcall(CreateFrame, ftype, nil, parent, template)
+    if ok and f then return f, (proof == nil) or f[proof] ~= nil end
+    return CreateFrame(ftype, nil, parent), false
+end
+
 -- The addon's version from its TOC, or "dev" for an unpackaged copy (the
 -- packager replaces the "@" .. "project-version@" token in every file it ships,
 -- so the check is for an "@", never for the whole token).

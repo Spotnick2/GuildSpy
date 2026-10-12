@@ -49,8 +49,8 @@ before touching an unfamiliar API.
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Roster.lua` →
-`Patterns.lua` → `EventLog.lua` → `Log.lua` → `Scanner.lua` → `UI.lua` → `Probe.lua` →
-`ProbeProfessions.lua` → `GuildSpy.lua`. Phase 2 adds `Options.lua`, `Minimap.lua` (see
+`Patterns.lua` → `EventLog.lua` → `Log.lua` → `Scanner.lua` → `UI.lua` → `Options.lua` →
+`Probe.lua` → `ProbeProfessions.lua` → `GuildSpy.lua`. Phase 2 adds `Minimap.lua` (see
 `docs/PLAN.md` "Architecture").
 
 - **`Compat.lua`**: `GuildSpy.API`, the only route to client APIs that moved or may be absent, and

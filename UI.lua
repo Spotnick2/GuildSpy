@@ -569,6 +569,10 @@ function UI.Open()
     if was then UI.Refresh() else opened() end
 end
 
+function UI.CloseWindow()
+    if win and win:IsShown() then win:Hide() end
+end
+
 function UI.Toggle()
     if win and win:IsShown() then win:Hide() else UI.Open() end
 end

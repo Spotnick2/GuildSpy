@@ -64,7 +64,7 @@ Pure logic separated from the WoW shell (Gnomesweeper's `Guild.lua`/`Social.lua`
 | `Scanner.lua` | shell: events, debounce, polling, completeness gate, pending list, calls Diff, feeds Log. |
 | `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. |
 | `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, rank filter (current rank, #23), name search, Mark all as read. |
-| `Options.lua` | Settings canvas page (Skilled/Gnomesweeper recipe). |
+| `Options.lua` | Options > AddOns > GuildSpy and its About page (#4, Gnomesweeper recipe): login summary, level-up threshold, days away for "back", chat line per change type. `Options.Set` is the one place a setting changes; `Options.Validate` resets saved values no page could set. |
 | `Minimap.lua` | LDB + LibDBIcon (vendored like Gnomesweeper) + `AddonCompartmentFunc`. |
 | `GuildSpy.lua` | init, SV validation/migration, slash `/guildspy` `/gspy` (`help`,`log`,`scan`,`probe`). |
 
@@ -149,7 +149,10 @@ matching uses that interval, and it must be **unique**; if it's ambiguous, there
 ### Storage (`GuildSpyDB`, account-wide; versioned, named fields)
 
 ```
-GuildSpyDB = { version=1, settings={...}, minimap={}, nextSeq=1, window={ x, y },
+GuildSpyDB = { version=1, minimap={},
+  settings={ digest=false|nil, levelMin=n|nil, returnDays=n|nil,   -- nil: the default (on, 10, 14)
+             chat={ [kind]=false } },                               -- a kind's chat line off (#4)
+  nextSeq=1, window={ x, y },
   guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,
     viewedSeq=n,   -- the log window's "new" marker (#3): the last seq seen there
     ranks = { "Guild Master", ... }, motd = "...",
