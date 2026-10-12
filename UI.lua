@@ -25,6 +25,8 @@ UI.WINDOW_NAME = "GuildSpyLogWindow"
 -- isn't enough (in game the member list and chat showed through), so the host
 -- also takes the strata above the window's.
 UI.GUILD_LEVEL = 1300
+-- Fully opaque: at 0.97 bright chat text and member names still showed through.
+UI.GUILD_BG = { 0.04, 0.045, 0.055, 1 }
 UI.STRATA_ABOVE = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG",
                     DIALOG = "FULLSCREEN", FULLSCREEN = "FULLSCREEN_DIALOG" }
 -- Blizzard's side tabs, in order (Blizzard_Communities/CommunitiesFrame.xml).
@@ -351,9 +353,9 @@ function UI.AttachGuild()
     guildHost:SetFrameStrata(UI.STRATA_ABOVE[cf:GetFrameStrata()] or "HIGH")
     guildHost:SetFrameLevel(UI.GUILD_LEVEL)
     guildHost:EnableMouse(true)                    -- nothing under it takes the clicks
-    local bg = guildHost:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints(guildHost)
-    bg:SetColorTexture(0.04, 0.045, 0.055, 0.97)
+    guildHost.bg = guildHost:CreateTexture(nil, "BACKGROUND")
+    guildHost.bg:SetAllPoints(guildHost)
+    guildHost.bg:SetColorTexture(unpack(UI.GUILD_BG))
     guildHost:Hide()
     guildHost:SetScript("OnHide", closed)
     UI.guildHost = guildHost

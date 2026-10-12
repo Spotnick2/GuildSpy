@@ -223,6 +223,7 @@ check(not win:IsShown(), "/gspy log leaves it in the guild window")
 
 WoW.advance(0)
 check(UI.guildHost:GetFrameStrata() == "HIGH", "the panel sits a strata above the guild window (MEDIUM)")
+eq(UI.guildHost.bg._color[4], 1, "the panel's background is fully opaque (nothing under it shows through)")
 
 -- The current Blizzard tab clicked again (SetDisplayMode returns early): our panel goes away.
 cf:clickTab("RosterTab", "ROSTER")
