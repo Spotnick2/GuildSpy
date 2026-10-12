@@ -63,7 +63,7 @@ Pure logic separated from the WoW shell (Gnomesweeper's `Guild.lua`/`Social.lua`
 | `EventLog.lua` | **pure** matcher over rows read by the shell: `{kind, p1, p2, rank, y, m, d, h}` → age interval. |
 | `Scanner.lua` | shell: events, debounce, polling, completeness gate, pending list, calls Diff, feeds Log. |
 | `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. |
-| `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, name search, Mark all as read. |
+| `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, rank filter (current rank, #23), name search, Mark all as read. |
 | `Options.lua` | Settings canvas page (Skilled/Gnomesweeper recipe). |
 | `Minimap.lua` | LDB + LibDBIcon (vendored like Gnomesweeper) + `AddonCompartmentFunc`. |
 | `GuildSpy.lua` | init, SV validation/migration, slash `/guildspy` `/gspy` (`help`,`log`,`scan`,`probe`). |

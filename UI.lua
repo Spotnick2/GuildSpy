@@ -47,7 +47,7 @@ UI.STRATA_ABOVE = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = 
 UI.BLIZZARD_TABS = { "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }
 
 local panel, win, tab, guildHost
-local category, query, scope = nil, "", "all"
+local category, query, scope, rank = nil, "", "all", nil
 local newSince = 0             -- entries past this seq are marked new while the panel is open
 local visit                    -- the guild state whose rows the open panel shows
 local tipOwner                 -- the row or summary whose tooltip is up
@@ -205,6 +205,46 @@ local function makeScope()
     return dd
 end
 
+-- The rank dropdown (#23): All ranks, then the guild's ranks as they are now.
+local function rankChoices()
+    local gs = current()
+    local list = { { label = "All ranks" } }
+    for _, r in ipairs(gs and type(gs.ranks) == "table" and gs.ranks or {}) do
+        if type(r) == "string" then list[#list + 1] = { label = r, key = r } end
+    end
+    return list
+end
+
+local function hasRank(gs, name)
+    for _, c in ipairs(gs and type(gs.ranks) == "table" and gs.ranks or {}) do
+        if c == name then return true end
+    end
+end
+
+local function makeRank()
+    local tpl = template("WowStyle1DropdownTemplate", "UIPanelButtonTemplate")
+    local dd = CreateFrame(tpl == "UIPanelButtonTemplate" and "Button" or "DropdownButton", nil, panel, tpl)
+    dd:SetSize(130, 22)
+    if tpl == "WowStyle1DropdownTemplate" then
+        dd:SetupMenu(function(_, root)
+            for _, c in ipairs(rankChoices()) do
+                root:CreateRadio(c.label, function() return rank == c.key end, function() UI.SetRank(c.key) end)
+            end
+        end)
+    else
+        dd.cycles = true
+        dd:SetText("All ranks")
+        dd:SetScript("OnClick", function()
+            local list = rankChoices()
+            for i, c in ipairs(list) do
+                if c.key == rank then UI.SetRank(list[i % #list + 1].key); return end
+            end
+            UI.SetRank(nil)
+        end)
+    end
+    return dd
+end
+
 local function build()
     panel = CreateFrame("Frame", nil, UIParent)
     panel:Hide()
@@ -230,10 +270,14 @@ local function build()
     dd:SetPoint("RIGHT", read, "LEFT", -8, 0)
     panel.scope = dd
 
+    local rd = makeRank()
+    rd:SetPoint("RIGHT", dd, "LEFT", -8, 0)
+    panel.rank = rd
+
     local search = CreateFrame("EditBox", nil, panel, "SearchBoxTemplate")
     search:SetHeight(20)
     search:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -UI.SEARCH_Y - 1)
-    search:SetPoint("RIGHT", dd, "LEFT", -10, 0)
+    search:SetPoint("RIGHT", rd, "LEFT", -10, 0)
     search:SetAutoFocus(false)
     search:HookScript("OnTextChanged", function(self)
         query = self:GetText() or ""
@@ -364,12 +408,13 @@ local function emptyText(gs)
     if #(gs.log or {}) == 0 then return "Nothing recorded yet." end
     if query:match("%S") then return "No activity matches your search." end
     local ranged = scope ~= "all"
+    local what
     for _, c in ipairs(Log.CATEGORIES) do
-        if c.key == category then
-            return "No " .. c.empty .. (ranged and " in this time range." or " recorded yet.")
-        end
+        if c.key == category then what = c.empty end
     end
-    return ranged and "No activity in this time range." or "Nothing recorded yet."
+    if not what and not rank and not ranged then return "Nothing recorded yet." end
+    return "No " .. (what or "activity") .. (rank and (" for " .. rank) or "")
+        .. (ranged and " in this time range." or " recorded yet.")
 end
 
 -- The summary: as many groups as fit, then "+N more" (#22 review).
@@ -409,10 +454,12 @@ function UI.Refresh()
     -- A tooltip up on a row or the summary is redrawn by hovering again; an
     -- officer note in it, or its count, must not outlive the right to read it.
     if tipOwner then tipOwner = nil; GameTooltip:Hide() end
+    -- A rank the guild no longer has (another guild, renamed, removed) lets go.
+    if rank and not hasRank(gs, rank) then UI.SetRank(nil); return end
     local now = time()
     local keep, below = anchor()
     local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
-                                         since = Log.ScopeSince(scope, now) }, now) or {}
+                                         since = Log.ScopeSince(scope, now), rank = rank }, now) or {}
     rows = byTime(rows)
     panel.rows = rows
     panel.elements = elements(rows)
@@ -448,6 +495,12 @@ function UI.SetScope(key)
     if panel and panel.scope.cycles then
         for _, s in ipairs(Log.SCOPES) do if s.key == key then panel.scope:SetText(s.label) end end
     end
+    UI.Refresh()
+end
+
+function UI.SetRank(name)
+    rank = name
+    if panel and panel.rank.cycles then panel.rank:SetText(name or "All ranks") end
     UI.Refresh()
 end
 
@@ -647,4 +700,4 @@ end)
 
 GuildSpy._test = GuildSpy._test or {}
 GuildSpy._test.UI = { onLink = onLink, panel = function() return panel end, window = function() return win end,
-                      scope = function() return scope end }
+                      scope = function() return scope end, rank = function() return rank end }
