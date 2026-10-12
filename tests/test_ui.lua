@@ -143,11 +143,23 @@ local onRow = CreateFrame("Button", nil, panel)
 view.initializer(onRow, on)
 onRow._scripts.OnEnter(onRow)
 check(GameTooltip:IsShown(), "...and its tooltip")
-WoW.guild.canViewOfficerNote = false
-WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)  -- a scan with no change
-check(not hasOnote(), "permission lost: the next scan takes it off the list")
-check(not GameTooltip:IsShown(), "...and the tooltip showing it goes")
-GameTooltip:Hide()
+-- Each way the permission can go, without a roster update (follow-up review),
+-- and by a scan with no change.
+local revokers = {
+    { "a rank update", function() WoW.fire("GUILD_RANKS_UPDATE") end },
+    { "the player's rank update", function() WoW.fire("GUILD_RANKS_UPDATE_ACTIVE_PLAYER") end },
+    { "a scan with no change", function() WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3) end },
+}
+for _, r in ipairs(revokers) do
+    WoW.guild.canViewOfficerNote = true
+    UI.Refresh()
+    view.initializer(onRow, hasOnote())
+    onRow._scripts.OnEnter(onRow)
+    WoW.guild.canViewOfficerNote = false
+    r[2]()
+    check(not hasOnote(), "permission lost, " .. r[1] .. ": the officer note goes from the list")
+    check(not GameTooltip:IsShown(), "...and the tooltip showing it goes")
+end
 onRow._scripts.OnEnter(onRow)
 check(not GameTooltip:IsShown(), "a stale row's tooltip never shows it")
 

@@ -378,11 +378,19 @@ end
 local registry = rawget(_G, "EventRegistry")
 if registry then registry:RegisterCallback("SetItemRef", onLink, UI) end
 
+-- A rank change can take away the right to read officer notes: redraw at
+-- once, not at the next scan (#18 review). Refresh does nothing while hidden.
+UI.PERMISSION_EVENTS = { GUILD_RANKS_UPDATE = true, GUILD_RANKS_UPDATE_ACTIVE_PLAYER = true,
+                         PLAYER_GUILD_UPDATE = true }
+
 local frame = CreateFrame("Frame")
 API.RegisterEvent(frame, "ADDON_LOADED")
 API.RegisterEvent(frame, "PLAYER_LOGIN")
+for e in pairs(UI.PERMISSION_EVENTS) do API.RegisterEvent(frame, e) end
 frame:SetScript("OnEvent", function(_, event, name)
-    if event == "PLAYER_LOGIN" then
+    if UI.PERMISSION_EVENTS[event] then
+        UI.Refresh()
+    elseif event == "PLAYER_LOGIN" then
         -- Blizzard_Communities is load-on-demand: it may already be loaded.
         local ns = rawget(_G, "C_AddOns")
         if ns and ns.IsAddOnLoaded and ns.IsAddOnLoaded("Blizzard_Communities") then UI.AttachGuild() end
