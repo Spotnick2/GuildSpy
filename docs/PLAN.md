@@ -65,7 +65,7 @@ Pure logic separated from the WoW shell (Gnomesweeper's `Guild.lua`/`Social.lua`
 | `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. |
 | `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, rank filter (current rank, #23), name search, Mark all as read. |
 | `Options.lua` | Options > AddOns > GuildSpy and its About page (#4, Gnomesweeper recipe): login summary, level-up threshold, days away for "back", chat line per change type. `Options.Set` is the one place a setting changes; `Options.Validate` resets saved values no page could set. |
-| `Minimap.lua` | LDB + LibDBIcon (vendored like Gnomesweeper) + `AddonCompartmentFunc`. |
+| `Minimap.lua` | Minimap button, addon compartment and key binding (#5): LDB + LibDBIcon (vendored like Gnomesweeper), `AddonCompartmentFunc*`, `Bindings.xml` (Key Bindings > GuildSpy). Left-click the log, right-click the settings; the tooltip has the guild, who's online and what's new. |
 | `GuildSpy.lua` | init, SV validation/migration, slash `/guildspy` `/gspy` (`help`,`log`,`scan`,`probe`). |
 
 ### Identity
@@ -219,7 +219,7 @@ is reset to "baseline needed". No per-character SV.
 ### Phase 0 as built (deviations from the list above)
 
 - No vendored `Libs/` yet: LibStub comes with LibGlass, and LibDataBroker/LibDBIcon/CallbackHandler
-  arrive with `Minimap.lua` in phase 2 (unloaded files shouldn't ship).
+  arrive with `Minimap.lua` in phase 2 (unloaded files shouldn't ship). They did, in #5.
 - No `Tools/LibGlassPin.ps1` and no `.claude/settings.json`: Gnomesweeper reads the pin inline in
   `deploy.ps1`/`run.ps1`, and no sibling commits a settings file.
 - Tests are `test_toc.lua` and `test_probe.lua`; the Roster/Patterns/EventLog/Scanner tests and their

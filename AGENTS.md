@@ -48,10 +48,12 @@ before touching an unfamiliar API.
 
 ## Layout
 
-TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Roster.lua` →
-`Patterns.lua` → `EventLog.lua` → `Log.lua` → `Scanner.lua` → `UI.lua` → `Options.lua` →
-`Probe.lua` → `ProbeProfessions.lua` → `GuildSpy.lua`. Phase 2 adds `Minimap.lua` (see
-`docs/PLAN.md` "Architecture").
+TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → the vendored `Libs\` (LibStub,
+CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0, copied from Gnomesweeper; the tests load
+recording fakes instead) → `Compat.lua` → `Glass.lua` → `Roster.lua` → `Patterns.lua` →
+`EventLog.lua` → `Log.lua` → `Scanner.lua` → `UI.lua` → `Options.lua` → `Minimap.lua` →
+`Probe.lua` → `ProbeProfessions.lua` → `GuildSpy.lua`. `Bindings.xml` isn't in the TOC: the
+client finds it by name (the package check names it).
 
 - **`Compat.lua`**: `GuildSpy.API`, the only route to client APIs that moved or may be absent, and
   `MEASURED_ON_BUILD`. **The only place that will know a guild tuple's positions.** Nothing is

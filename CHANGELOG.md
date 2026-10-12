@@ -18,3 +18,7 @@
 - **Settings** in the game's Options > AddOns > GuildSpy (or `/gspy options`): the login summary
   on or off, from which level a level-up is reported, how long away counts as "back", and a chat
   line on or off for each type of change. An About page lists the commands.
+- **A minimap button**, also in the minimap's addon list: left-click opens or closes the log,
+  right-click opens the settings, and its tooltip shows your guild, who's online and what's new.
+  Hide it in the settings or with `/gspy minimap`. **A key binding** to open the log, under the
+  game's Key Bindings > GuildSpy (no key by default).
