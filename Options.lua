@@ -197,8 +197,9 @@ local function buildPage()
 
     local title = pageLabel("|cff7fd4ffGuild|rSpy", "GameFontNormalHuge")
     title:SetPoint("TOPLEFT", canvas, "TOPLEFT", 16, -16)
-    local sub = pageLabel(GuildSpy.TAGLINE .. "  /gspy log opens the activity log.", "GameFontHighlightSmall")
+    local sub = pageLabel(GuildSpy.TAGLINE, "GameFontHighlightSmall")
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 2, -6)
+    sub:SetWidth(620)
 
     local y = -72
     local refreshers = {}
@@ -285,31 +286,37 @@ about.name = "About"
 about:Hide()                -- see `page`: or its first show is blank
 
 local function buildAbout()
-    local y = -16
-    local function add(fs, height, indent)
-        fs:SetPoint("TOPLEFT", about, "TOPLEFT", 16 + (indent or 0), y)
-        y = y - height
+    -- Each line hangs under the one before it, `gap` below: a line that wraps
+    -- pushes the rest down (fixed steps overlapped a wrapped tagline).
+    local prev, prevIndent
+    local function add(fs, gap, indent)
+        indent = indent or 0
+        if prev then
+            fs:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", indent - prevIndent, -gap)
+        else
+            fs:SetPoint("TOPLEFT", about, "TOPLEFT", 16 + indent, -16)
+        end
+        prev, prevIndent = fs, indent
         return fs
     end
-    about.title = add(label(about, "|cff7fd4ffGuild|rSpy", "GameFontNormalHuge"), 30)
-    about.tagline = add(label(about, GuildSpy.TAGLINE, "GameFontHighlightLarge", 620), 26, 2)
+    about.title = add(label(about, "|cff7fd4ffGuild|rSpy", "GameFontNormalHuge"), 0)
+    about.tagline = add(label(about, GuildSpy.TAGLINE, "GameFontHighlightLarge", 620), 6, 2)
     about.version = add(label(about, "Version " .. GuildSpy.API.AddOnVersion(ADDON)
-        .. "  \194\183  for World of Warcraft: Forever  \194\183  by Spotnick", "GameFontHighlightSmall"), 30, 2)
+        .. "  \194\183  for World of Warcraft: Forever  \194\183  by Spotnick", "GameFontHighlightSmall"), 6, 2)
 
-    add(label(about, "What it does", "GameFontNormalLarge"), 24)
+    add(label(about, "What it does", "GameFontNormalLarge"), 18)
     for _, line in ipairs({
         "GuildSpy watches the guild roster and reports what changed: who joined, left or was kicked, promotions and demotions, note edits, level-ups, name changes, and members back after a long absence.",
         "It never changes anything in your guild.",
         "Officer notes only show on a character that can read them.",
         "The log is shared by every character on your account.",
-    }) do add(label(about, line, nil, 620), 30, 4) end
+    }) do add(label(about, line, nil, 620), 6, 4) end
 
-    y = y - 6
-    add(label(about, "Commands", "GameFontNormalLarge"), 24)
+    add(label(about, "Commands", "GameFontNormalLarge"), 18)
     about.commands = {}
     for _, h in ipairs(GuildSpy.HELP or {}) do
         if not h[2]:find("(for measuring)", 1, true) then
-            about.commands[#about.commands + 1] = add(label(about, h[1] .. "  -  " .. h[2], "GameFontHighlightSmall", 620), 16, 4)
+            about.commands[#about.commands + 1] = add(label(about, h[1] .. "  -  " .. h[2], "GameFontHighlightSmall", 620), 3, 4)
         end
     end
 end

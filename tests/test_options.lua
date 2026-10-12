@@ -144,6 +144,11 @@ for _, fs in ipairs(about.commands) do
     if fs:GetText():find("/gspy options", 1, true) then hasOptions = true end
 end
 check(hasOptions, "...and /gspy options is there")
+-- Each line under the one before: a wrapped line pushes the rest down (owner's screenshot).
+local p = about.version._points[1]
+check(p[1] == "TOPLEFT" and p[2] == about.tagline and p[3] == "BOTTOMLEFT", "the version hangs under the tagline, which may wrap")
+p = about.commands[2]._points[1]
+check(p[2] == about.commands[1] and p[3] == "BOTTOMLEFT", "...and each command under the one before")
 
 -- Without the check and radio templates: our own buttons, from the art.
 loadAddon({ setup = function()
