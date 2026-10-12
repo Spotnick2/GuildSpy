@@ -323,6 +323,26 @@ eq(gsb.shownOnoteSeq, 5, "seq 10 unseen: the boundary stays")
 GuildSpy.Scanner.SeenOnote(gsb, 10)
 eq(gsb.shownOnoteSeq, 10, "seq 10 seen: the boundary moves to it")
 
+-- A switch to another guild in the same session, before its GUILD_MOTD:
+-- the old guild's text never lands in the new guild's state (#17 review).
+WoW.fire("GUILD_MOTD", R2.motd)                       -- this guild's text is cached
+WoW.chat = {}
+local third = newGuild()
+third.name, third.motd = "Third Guild", "third's own motd"
+WoW.guild = third
+WoW.fire("PLAYER_GUILD_UPDATE")
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(25)
+local tg = GuildSpyDB.guilds["Third Guild-Forever"]
+check(tg and tg.observedAt, "the new guild is baselined")
+eq(tg and tg.motd, nil, "...without the old guild's MOTD")
+WoW.fire("GUILD_MOTD", third.motd)
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+eq(tg.motd, "third's own motd", "its own MOTD arrives")
+check(chatHas("message of the day") == nil, "...seeded silently, not reported as new")
+WoW.guild = R2
+WoW.fire("PLAYER_GUILD_UPDATE")
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(25)
+
 -- Status and rebaseline answer.
 WoW.chat = {}
 WoW.slash("/gspy status")
