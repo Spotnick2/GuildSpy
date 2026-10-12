@@ -196,6 +196,14 @@ function Scanner.Print(entry)
     print("|cff7fd4ffGuildSpy:|r " .. Log.Line(entry, now()))
 end
 
+-- The last GUILD_MOTD text, owned by the guild it was heard in. At login it
+-- can arrive before the guild's name is known: then the first guild scanned
+-- adopts it. Another guild's text is never carried into this one's state.
+local function motdFor(key)
+    if S.motd and S.motdKey == nil then S.motdKey = key end
+    if S.motdKey == key then return S.motd end
+end
+
 -- The session for the current guild: made (and the saved state loaded) the
 -- first time the guild is known, by a scan or by the event log.
 local function ensureGuild()
@@ -233,6 +241,7 @@ function Scanner.Scan(force)
         return
     end
     local scan, why = API.ReadRoster()
+    if scan then scan.motd = motdFor(S.guildKey) end
     if not scan then
         S.incomplete = S.incomplete + 1
         if why == "showOffline" then
@@ -383,7 +392,7 @@ end
 local frame = CreateFrame("Frame")
 Scanner.frame = frame
 for _, e in ipairs({ "PLAYER_LOGIN", "GUILD_ROSTER_UPDATE", "PLAYER_GUILD_UPDATE", "GUILD_EVENT_LOG_UPDATE",
-                     "CHAT_MSG_SYSTEM" }) do
+                     "CHAT_MSG_SYSTEM", "GUILD_MOTD" }) do
     API.RegisterEvent(frame, e)
 end
 
@@ -420,7 +429,15 @@ frame:SetScript("OnEvent", function(_, event, ...)
         -- client doesn't know the guild's name yet is not a change.)
         local key = API.GuildKey()
         if not IsInGuild() or (key and S.guildKey and key ~= S.guildKey) then Scanner.Reset() end
+        if not IsInGuild() then S.motd, S.motdKey = nil, nil end
     elseif event == "CHAT_MSG_SYSTEM" then
         if S.guildKey then Scanner.OnSystemMessage((...)) end
+    elseif event == "GUILD_MOTD" then
+        -- The MOTD's only source (#16): measured 1.3 s after login, and again on
+        -- every change. "" is what it carries before it has loaded: unknown, not
+        -- cleared (a guild clearing its MOTD on purpose is the rarer case).
+        local text = ...
+        S.motd = (type(text) == "string" and text ~= "") and text or nil
+        S.motdKey = API.GuildKey()
     end
 end)

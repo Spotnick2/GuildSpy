@@ -367,7 +367,12 @@ C_GuildInfo = {
     GuildRoster = function() WoW.rosterRequests = WoW.rosterRequests + 1 end,
     CanViewOfficerNote = function() return WoW.guild ~= nil and WoW.guild.canViewOfficerNote == true end,
     IsGuildOfficer = function() return WoW.guild ~= nil and WoW.guild.isOfficer == true end,
-    GetMOTD = function() return WoW.guild and WoW.guild.motd or "" end,
+    -- Protected in some state on Forever (#16): counted so a test can prove the
+    -- scan never calls it.
+    GetMOTD = function()
+        WoW.motdReads = (WoW.motdReads or 0) + 1
+        return WoW.guild and WoW.guild.motd or ""
+    end,
 }
 -- WoW.guild.club = { { ClubMemberInfo fields }, ... } (memberId = its index).
 C_Club = {
