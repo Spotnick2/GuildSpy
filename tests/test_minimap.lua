@@ -124,6 +124,14 @@ do  -- in a guild: the tooltip has the guild, who's online, and what's new
     tip.lines = {}
     WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
     eq(GuildSpy.Log.Plain(tip.lines[4]), "No new activity", "after the window: nothing new")
+    -- An online member gone from the roster, not yet confirmed as left (#27 review).
+    table.remove(WoW.guild.members, 2)                       -- Ann Lee, online
+    WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+    check(gs.members["Player-1-00000002"] and gs.members["Player-1-00000002"].missingSince,
+        "(Ann is kept, pending the departure's confirmation)")
+    tip.lines = {}
+    WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+    eq(tip.lines[3], "1 of 2 members online", "a member pending departure isn't counted")
 end
 
 do  -- hidden in the saved file: it stays hidden

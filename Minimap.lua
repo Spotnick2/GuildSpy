@@ -56,9 +56,13 @@ local function tooltip(tip, drag)
     local _, guild = GuildSpy.API.GuildKey()
     if gs and guild then
         local total, online = 0, 0
+        -- Only members in the last complete scan: one missing from it is kept,
+        -- with its old `online`, until the departure is confirmed (#27 review).
         for _, m in pairs(type(gs.members) == "table" and gs.members or {}) do
-            total = total + 1
-            if type(m) == "table" and m.online then online = online + 1 end
+            if type(m) == "table" and not m.missingSince then
+                total = total + 1
+                if m.online then online = online + 1 end
+            end
         end
         tip:AddLine(guild, 1, 1, 1)
         tip:AddLine(online .. " of " .. total .. " members online", 0.8, 0.8, 0.8)
