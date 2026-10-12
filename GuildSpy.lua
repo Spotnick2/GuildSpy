@@ -13,7 +13,8 @@ GuildSpy.Print = say
 
 GuildSpy.HELP = {
     { "/gspy help", "this list" },
-    { "/gspy log [n]", "the last n changes (default 15)" },
+    { "/gspy log", "open the log window (also a tab in the guild window)" },
+    { "/gspy log <n>", "print the last n changes in chat" },
     { "/gspy status", "what GuildSpy knows about your guild" },
     { "/gspy scan", "look at the roster now" },
     { "/gspy rebaseline", "start over from the current roster (the log is kept)" },
@@ -48,7 +49,7 @@ local function slash(msg)
         elseif rest == "recipes" then GuildSpy.Probe.MemberRecipes()
         else GuildSpy.Probe.Run() end
     elseif cmd == "log" then
-        GuildSpy.Scanner.PrintLog(tonumber(rest))
+        if tonumber(rest) then GuildSpy.Scanner.PrintLog(tonumber(rest)) else GuildSpy.UI.Open() end
     elseif cmd == "status" then
         GuildSpy.Scanner.Status()
     elseif cmd == "scan" then

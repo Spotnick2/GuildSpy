@@ -64,7 +64,8 @@ local function newWidget(wtype, parent, name)
 end
 
 function CreateFrame(ftype, name, parent, template)
-    assert(ftype == "Frame" or ftype == "Button" or ftype == "StatusBar" or ftype == "CheckButton" or ftype == "EditBox" or ftype == "ScrollFrame",
+    assert(ftype == "Frame" or ftype == "Button" or ftype == "StatusBar" or ftype == "CheckButton" or ftype == "EditBox" or ftype == "ScrollFrame"
+        or ftype == "EventFrame",
         "CreateFrame: unexpected frame type " .. tostring(ftype))
     local w = newWidget(ftype, parent or UIParent, name)
     w._template = template
@@ -77,6 +78,8 @@ function CreateFrame(ftype, name, parent, template)
             w.Text = newWidget("FontString", w)
         elseif template == "UIPanelScrollFrameTemplate" then
             w.ScrollBar = newWidget("Slider", w)
+        elseif template == "RightSideTabTemplate" then
+            w.Icon = newWidget("Texture", w)          -- RightSideTab.xml's parentKey="Icon"
         end
     end
     table.insert(WoW.frames, w)
@@ -190,6 +193,8 @@ function Methods.SetOwner(w, owner) w._owner = owner; w._lines = {} end
 function Methods.GetText(w) return w._text end
 function Methods.SetTexture(w, t) w._texture = t end
 function Methods.SetChecked(w, v) w._checked = v and true or false end
+-- A WowScrollBoxList's data: the list it was given (ScrollBoxListMixin:SetDataProvider).
+function Methods.SetDataProvider(w, dp) w._dataProvider = dp end
 -- An edit box's selection: HighlightText() selects all, (0, 0) none.
 function Methods.HighlightText(w, a, b) w._selected = not (a == 0 and b == 0) end
 function Methods.GetChecked(w) return w._checked or false end
@@ -258,6 +263,19 @@ function WoW.reset()
     WoW.rosterRequests, WoW.eventLogQueries = 0, 0
     SlashCmdList = {}
     UISpecialFrames = {}
+    WoW.loadedAddOns = {}
+    -- EventRegistry: the callbacks registered, by event (CallbackRegistryMixin
+    -- passes the owner first).
+    WoW.callbacks = {}
+    EventRegistry = {
+        RegisterCallback = function(self, event, fn, owner)
+            WoW.callbacks[event] = WoW.callbacks[event] or {}
+            table.insert(WoW.callbacks[event], { fn = fn, owner = owner })
+        end,
+        TriggerEvent = function(self, event, ...)
+            for _, c in ipairs(WoW.callbacks[event] or {}) do c.fn(c.owner, ...) end
+        end,
+    }
     UIParent = newWidget("Frame", nil, "UIParent")
     UIParent._width, UIParent._height = 1366, 768
     GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
@@ -279,7 +297,32 @@ function GetRealmName() return WoW.realm end
 function GetBuildInfo() return unpack(WoW.build) end
 -- The client's file table: WoW.fileIDs[path] = id; anything else answers nil.
 function GetFileIDFromPath(path) return WoW.fileIDs[path] end
-C_AddOns = { GetAddOnMetadata = function(name, key) return WoW.metadata[key] end }
+C_AddOns = {
+    GetAddOnMetadata = function(name, key) return WoW.metadata[key] end,
+    IsAddOnLoaded = function(name) return WoW.loadedAddOns[name] == true end,
+}
+
+-- The retail list widgets Forever ships (Blizzard_SharedXML/Shared/Scroll):
+-- the view keeps its row initializer, so a test can draw a row with it.
+function CreateScrollBoxListLinearView()
+    local view = {}
+    function view:SetElementExtent(h) self.extent = h end
+    function view:SetElementInitializer(frameType, fn) self.rowType, self.initializer = frameType, fn end
+    return view
+end
+ScrollUtil = { InitScrollBoxListWithScrollBar = function(box, bar, view) box._view, box._bar = view, bar end }
+function CreateDataProvider(list)
+    local dp = { list = list or {} }
+    function dp:GetSize() return #self.list end
+    return dp
+end
+-- hooksecurefunc([table,] name, fn): runs fn after the original, which it
+-- replaces in the table (rawset: the client's own write, never the addon's).
+function hooksecurefunc(t, name, fn)
+    if type(t) == "string" then t, name, fn = _G, t, name end
+    local orig = rawget(t, name) or t[name]
+    rawset(t, name, function(...) local r = { orig(...) }; fn(...); return unpack(r) end)
+end
 
 -- Timers run when WoW.advance moves the clock past them, in order. The
 -- calendar clock (time()) moves with it.

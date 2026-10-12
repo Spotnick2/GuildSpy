@@ -8,4 +8,7 @@
   weeks or more, and a new message of the day.
 - **Live, and while you were away.** Changes show in chat as they happen. At login, one short
   summary covers what changed since you last looked, on any character of your account.
-- **`/gspy log`** lists the latest changes; `/gspy status` shows what GuildSpy knows.
+- **A log window**, in the guild window (J) as a GuildSpy tab and on its own with `/gspy log` or
+  the summary's [open log] link: newest first, filter by type, search by name, what's new since
+  you last looked marked. `/gspy log 20` prints the last 20 in chat; `/gspy status` shows what
+  GuildSpy knows.

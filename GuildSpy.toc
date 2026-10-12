@@ -14,6 +14,7 @@ Patterns.lua
 EventLog.lua
 Log.lua
 Scanner.lua
+UI.lua
 Probe.lua
 ProbeProfessions.lua
 GuildSpy.lua

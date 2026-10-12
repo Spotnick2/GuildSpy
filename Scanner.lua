@@ -85,6 +85,7 @@ local function validGuild(gs)
     if type(gs.formers) ~= "table" then gs.formers = {} end
     if type(gs.ranks) ~= "table" then gs.ranks = {} end
     if type(gs.shownSeq) ~= "number" then gs.shownSeq = 0 end
+    if gs.viewedSeq ~= nil and type(gs.viewedSeq) ~= "number" then gs.viewedSeq = nil end
     return gs
 end
 
@@ -133,6 +134,14 @@ local function canView() return API.CanViewOfficerNote() == true end
 
 -- Entries recorded this session without an actor get later evidence filled
 -- in place: the window updates, no second chat line is printed.
+-- The log window (UI.lua, loaded later) redraws when the log changes.
+local function refreshUI()
+    if GuildSpy.UI then GuildSpy.UI.Refresh() end
+end
+
+-- The current guild's saved state and key (nil out of a guild): for the log window.
+function Scanner.Current() return S.state, S.guildKey end
+
 function Scanner.Enrich()
     local t, kept = now(), {}
     for _, item in ipairs(S.enrichable) do
@@ -142,6 +151,7 @@ function Scanner.Enrich()
         end
     end
     S.enrichable = kept
+    refreshUI()
 end
 
 local parse
@@ -299,6 +309,7 @@ function Scanner.Scan(force)
         end
     end
     Roster.PruneFormers(S.state, t)
+    if #events > 0 then refreshUI() end
     S.firstScanDone = true
     -- A departure waits for a second complete scan: ask for it.
     if Roster.HasMissing(S.state) then C_Timer.After(31, Scanner.Request) end
