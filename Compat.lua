@@ -157,17 +157,10 @@ function API.ReadRoster()
         }
         count = count + 1
     end
-    return { members = members, count = count, ranks = ranks, canViewOfficer = canView, motd = API.MOTD() }
-end
-
-function API.MOTD()
-    local ns = rawget(_G, "C_GuildInfo")
-    if type(ns) ~= "table" or type(ns.GetMOTD) ~= "function" then return nil end
-    local ok, v = pcall(ns.GetMOTD)
-    -- "" is what it reads before the MOTD has loaded at login: unknown, not
-    -- cleared (a guild clearing its MOTD on purpose is the rarer case).
-    if not ok or type(v) ~= "string" or v == "" then return nil end
-    return v
+    -- No MOTD here: C_GuildInfo.GetMOTD is protected in some state (#16), and
+    -- pcall doesn't stop the block being blamed on us. The shell takes it from
+    -- the GUILD_MOTD event instead.
+    return { members = members, count = count, ranks = ranks, canViewOfficer = canView }
 end
 
 function API.QueryEventLog()

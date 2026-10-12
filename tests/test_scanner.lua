@@ -28,6 +28,7 @@ end
 local function login(db, guild)
     loadAddon({ db = db, setup = function() WoW.guild = guild end })
     WoW.fire("PLAYER_LOGIN")
+    WoW.fire("GUILD_MOTD", guild.motd)                    -- measured: 1.3 s after login
     WoW.fire("GUILD_ROSTER_UPDATE", false)
     WoW.fire("GUILD_ROSTER_UPDATE", false)
     for _ = 1, 5 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
@@ -226,12 +227,20 @@ rawset(_G, "QueryGuildEventLog", realQuery)
 
 -- An empty MOTD at login is "not loaded yet", not a change.
 WoW.chat = {}
-local motd = R2.motd
-R2.motd = ""
+WoW.fire("GUILD_MOTD", "")
 WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
-R2.motd = motd
+WoW.fire("GUILD_MOTD", R2.motd)
 WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
 check(chatHas("message of the day") == nil, "no MOTD noise from an unloaded MOTD")
+
+-- A new MOTD comes from GUILD_MOTD; C_GuildInfo.GetMOTD is never called (#16).
+WoW.chat = {}
+WoW.motdReads = 0
+R2.motd = "raid at 8"
+WoW.fire("GUILD_MOTD", R2.motd)
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+check(chatHas("raid at 8"), "the event's MOTD is reported")
+eq(WoW.motdReads, 0, "...and the protected GetMOTD was never called")
 
 -- A rank index the rank table doesn't have yet: the roster is incomplete.
 WoW.chat = {}
