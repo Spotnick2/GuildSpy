@@ -79,7 +79,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`UI.lua`**: the log window (#3): one panel in two hosts, a GuildSpy side tab in Blizzard's guild
   window and a standalone glass window. **It never opens, toggles or writes a field of Blizzard's
   window** (a Forever taint trap); only `hooksecurefunc`, `HookScript`, `SetChecked` on its tabs, and
-  child frames of our own. `tests/test_ui.lua` fails on any field write.
+  child frames of our own. `tests/test_ui.lua` fails on any field write. Its look (#19) uses the
+  roster's own art and Blizzard templates checked in `wow-ui-source`; a template the client lacks
+  (`DoesTemplateExist`) falls back to `UIPanelButtonTemplate`.
 - **`ProbeProfessions.lua`**: measuring only. It records whether the server serves guild
   professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.

@@ -63,7 +63,7 @@ Pure logic separated from the WoW shell (Gnomesweeper's `Guild.lua`/`Social.lua`
 | `EventLog.lua` | **pure** matcher over rows read by the shell: `{kind, p1, p2, rank, y, m, d, h}` → age interval. |
 | `Scanner.lua` | shell: events, debounce, polling, completeness gate, pending list, calls Diff, feeds Log. |
 | `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. |
-| `UI.lua` | LibGlass log window: type filter pills, name search, "new since last visit" marker. |
+| `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, name search, Mark all as read. |
 | `Options.lua` | Settings canvas page (Skilled/Gnomesweeper recipe). |
 | `Minimap.lua` | LDB + LibDBIcon (vendored like Gnomesweeper) + `AddonCompartmentFunc`. |
 | `GuildSpy.lua` | init, SV validation/migration, slash `/guildspy` `/gspy` (`help`,`log`,`scan`,`probe`). |
@@ -155,7 +155,9 @@ GuildSpyDB = { version=1, settings={...}, minimap={}, nextSeq=1, window={ x, y }
     ranks = { "Guild Master", ... }, motd = "...",
     members = { [guid] = { name, rank, level, class, note, onote, online, lastSeenAt, missingSince, missingAfter } },
     formers = { [guid] = { name, leftAt, rankName, level } },
-    log = { { seq, at, approx=bool, kind, guid, name, actor, from, to }, ... } } } }
+    log = { { seq, at, approx=bool|nil, kind, guid, name, actor, from, to,
+              after=epoch|nil },   -- (#19) the previous scan: a scan-noticed change is in (after, at]
+            ... } } } }
 ```
 Caps are enforced **on append** (plus a sweep at login): log ≤ 1500 entries and ≤ 180 days per
 guild; formers ≤ 500 and ≤ 365 days; at most 5 guilds, dropping the least recently observed; note

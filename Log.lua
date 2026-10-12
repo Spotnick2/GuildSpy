@@ -3,7 +3,10 @@
 -- Entries are stored as data and rendered to text when shown (so a later
 -- wording change rewrites old entries too):
 --   { seq, at, approx, kind, guid, name, class, actor, from, to, how,
---     lastStep, days, level, leftAt }
+--     lastStep, days, level, leftAt, after }
+-- approx: false = exact (a live system message), true = to the hour (the
+-- guild event log), nil = when a scan noticed it; `after` is the previous
+-- scan's time, so a scan-noticed change happened in (after, at].
 -- seq is monotonic account-wide (GuildSpyDB.nextSeq); the digest's boundary
 -- is a seq, never a time (docs/PLAN.md "Login digest").
 
@@ -43,6 +46,30 @@ Log.CATEGORIES = {
     { key = "levels", label = "Levels", kinds = { LEVEL = true } },
     { key = "motd", label = "MOTD", kinds = { MOTD = true } },
 }
+
+-- The window's summary line (#19): entries counted past the "new" boundary,
+-- so levels read "level changes" (one entry can cover several levels).
+Log.NEW_GROUPS = {
+    { one = "joined", many = "joined", color = "JOIN", kinds = { JOIN = true, REJOIN = true } },
+    { one = "left", many = "left", color = "LEAVE", kinds = { LEAVE = true } },
+    { one = "rank change", many = "rank changes", color = "PROMOTE",
+      kinds = { PROMOTE = true, DEMOTE = true, RANK = true, RANKS = true } },
+    { one = "renamed", many = "renamed", color = "NAME", kinds = { NAME = true } },
+    { one = "came back", many = "came back", color = "RETURN", kinds = { RETURN = true } },
+    { one = "note edit", many = "note edits", color = "NOTE", kinds = { NOTE = true, ONOTE = true } },
+    { one = "level change", many = "level changes", color = "LEVEL", kinds = { LEVEL = true } },
+    { one = "new MOTD", many = "new MOTDs", color = "MOTD", kinds = { MOTD = true } },
+}
+-- The window's time scopes.
+Log.SCOPES = {
+    { key = "all", label = "All history" },
+    { key = "today", label = "Today" },
+    { key = "week", label = "Last 7 days", days = 7 },
+    { key = "month", label = "Last 30 days", days = 30 },
+}
+-- A scan-detected change seen more than this after the previous scan has an
+-- uncertain time: it happened somewhere in between.
+Log.SCAN_GAP = 10 * 60
 
 -- An officer-note entry is hidden everywhere from a character that can't
 -- read officer notes, even though the account-wide log holds it.
@@ -117,10 +144,141 @@ function Log.Plain(s)
     return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"))
 end
 
+-- The local midnight that starts `now`'s day.
+function Log.Midnight(now)
+    local t = date("*t", now)
+    return time({ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0, isdst = t.isdst })
+end
+
+-- The first time a Log.SCOPES key lets through (nil: everything).
+function Log.ScopeSince(key, now)
+    if key == "today" then return Log.Midnight(now) end
+    for _, s in ipairs(Log.SCOPES) do
+        if s.key == key and s.days then return now - s.days * 86400 end
+    end
+    return nil
+end
+
+-- Whether the entry's time is a guess: the hour from the guild event log, or
+-- a change a scan found long after the previous one.
+function Log.Approx(e)
+    if e.approx ~= nil then return e.approx == true end
+    return type(e.after) == "number" and (e.at or 0) - e.after > Log.SCAN_GAP
+end
+
+local function relative(at, now)
+    local d = math.max(0, now - at)
+    if d < 60 then return "just now" end
+    if d < 3600 then return math.floor(d / 60) .. "m ago" end
+    if d < 86400 then return math.floor(d / 3600) .. "h ago" end
+    if at >= Log.Midnight(now) - 86400 then return "Yesterday" end
+    return date("%b ", at) .. tonumber(date("%d", at))
+end
+Log.Relative = relative
+
+-- The row's time: "4h ago", "~3h ago", "Yesterday", "Oct 3".
+function Log.When(e, now)
+    return (Log.Approx(e) and "~" or "") .. relative(e.at or now, now)
+end
+
+-- What the entry's time means, for its tooltip.
+function Log.Provenance(e)
+    if e.approx == false then return "Exact time: seen live." end
+    if e.approx == true then return "Time to the hour, from the guild event log." end
+    if Log.Approx(e) then
+        return "Noticed by a scan: it happened between " .. date("%Y-%m-%d %H:%M", e.after) .. " and "
+            .. date("%Y-%m-%d %H:%M", e.at) .. "."
+    end
+    return "When a scan noticed it."
+end
+
+local MUTED, PLAIN = "8f8f8f", "ffffff"
+local function paint(hex, s) return "|cff" .. hex .. s .. "|r" end
+local function person(name, class)
+    local colors = rawget(_G, "RAID_CLASS_COLORS")
+    local c = class and type(colors) == "table" and colors[class]
+    if c and c.colorStr then return "|c" .. c.colorStr .. (name or "?") .. "|r" end
+    return paint(PLAIN, name or "?")
+end
+
+-- The entry as a window row: name, verb, the changed value highlighted, the
+-- actor. Chat and the digest keep Log.Line. `classOf(name)` colours the
+-- actor when they're a known member.
+function Log.Row(e, now, classOf)
+    local k, hi = e.kind, Log.COLORS[e.kind] or PLAIN
+    local n = person(e.name, e.class)
+    local function by()
+        if not e.actor then return "" end
+        local a = person(e.actor, classOf and classOf(e.actor))
+        if e.lastStep then return paint(MUTED, " (last step by ") .. a .. paint(MUTED, ")") end
+        return " by " .. a
+    end
+    if k == "JOIN" then
+        return n .. " " .. paint(hi, "joined the guild")
+    elseif k == "REJOIN" then
+        local was = e.leftAt and paint(MUTED, " (left " .. Log.Ago((now or e.at) - e.leftAt) .. " ago"
+            .. (e.from and (" as " .. e.from) or "") .. ")") or ""
+        return n .. " " .. paint(hi, "rejoined the guild") .. was
+    elseif k == "LEAVE" then
+        local what = (e.how == "kick" and "was kicked") or (e.how == "quit" and "left the guild")
+            or "is no longer in the guild"
+        local detail = {}
+        if e.level then detail[#detail + 1] = "level " .. e.level end
+        if e.from then detail[#detail + 1] = e.from end
+        return n .. " " .. paint(hi, what) .. (e.how == "kick" and by() or "")
+            .. (#detail > 0 and paint(MUTED, " (" .. table.concat(detail, ", ") .. ")") or "")
+    elseif k == "PROMOTE" or k == "DEMOTE" or k == "RANK" then
+        local verb = (k == "PROMOTE" and "promoted") or (k == "DEMOTE" and "demoted") or "moved"
+        return n .. " " .. verb .. " to " .. paint(hi, e.to or "?") .. by()
+    elseif k == "RANKS" then
+        return "Guild ranks changed: " .. paint(hi, e.to or "")
+    elseif k == "NOTE" or k == "ONOTE" then
+        local what = k == "NOTE" and "note" or "officer note"
+        if (e.to or "") == "" then return n .. " " .. what .. " " .. paint(MUTED, "cleared") end
+        return n .. " " .. what .. ": " .. paint(hi, quote(e.to))
+    elseif k == "LEVEL" then
+        local gained = (e.to or 0) - (e.from or 0)
+        return n .. " reached level " .. paint(hi, tostring(e.to))
+            .. (gained > 1 and paint(MUTED, " (+" .. gained .. ")") or "")
+    elseif k == "NAME" then
+        return person(e.from, e.class) .. " is now " .. n
+    elseif k == "RETURN" then
+        return n .. " is back after " .. paint(hi, tostring(e.days) .. "+ days")
+    elseif k == "MOTD" then
+        return "New MOTD: " .. paint(hi, quote(e.to))
+    end
+    return Log.Line(e, now)
+end
+
+-- The summary groups with entries past `since` this character may see:
+-- { { n, word, color }, ... } in Log.NEW_GROUPS order.
+function Log.NewCounts(gs, since, canViewOfficer)
+    local out = {}
+    for _, g in ipairs(Log.NEW_GROUPS) do
+        local n = 0
+        for _, e in ipairs(gs and gs.log or {}) do
+            if e.seq > (since or 0) and g.kinds[e.kind] and Log.Visible(e, canViewOfficer) then n = n + 1 end
+        end
+        if n > 0 then out[#out + 1] = { n = n, word = n == 1 and g.one or g.many, color = Log.COLORS[g.color] } end
+    end
+    return out
+end
+
+-- "New: 2 joined · 1 left · 12 level changes", or "No new activity".
+function Log.NewSummary(gs, since, canViewOfficer)
+    local parts = {}
+    for _, c in ipairs(Log.NewCounts(gs, since, canViewOfficer)) do
+        parts[#parts + 1] = paint(c.color, tostring(c.n)) .. " " .. c.word
+    end
+    if #parts == 0 then return paint(MUTED, "No new activity") end
+    return "New: " .. table.concat(parts, paint(MUTED, "  \194\183  "))
+end
+
 -- The log window's rows: the entries this character may see, newest first,
--- in `opts.category` (a Log.CATEGORIES key; nil = all) and containing
--- `opts.query` (plain, case-insensitive, matched against the shown text, so
--- a member's name, an officer's or a rank all find it).
+-- in `opts.category` (a Log.CATEGORIES key; nil = all), at or after
+-- `opts.since` (nil = any time) and containing `opts.query` (plain,
+-- case-insensitive, matched against the shown text, so a member's name, an
+-- officer's or a rank all find it).
 function Log.Filter(gs, opts, now)
     opts = opts or {}
     local kinds
@@ -134,6 +292,7 @@ function Log.Filter(gs, opts, now)
     for i = #log, 1, -1 do
         local e = log[i]
         if Log.Visible(e, opts.canViewOfficer) and (not kinds or kinds[e.kind])
+                and (not opts.since or (e.at or 0) >= opts.since)
                 and (not q or Log.Plain(Log.Text(e, now)):lower():find(q, 1, true)) then
             out[#out + 1] = e
         end
@@ -147,7 +306,7 @@ function Log.Add(db, gs, ev, now)
     db.nextSeq = (db.nextSeq or 1)
     local e = { seq = db.nextSeq, at = ev.at or now, approx = ev.approx, kind = ev.kind, guid = ev.guid,
                 name = ev.name, class = ev.class, actor = ev.actor, from = ev.from, to = ev.to, how = ev.how,
-                lastStep = ev.lastStep, days = ev.days, level = ev.level, leftAt = ev.leftAt }
+                lastStep = ev.lastStep, days = ev.days, level = ev.level, leftAt = ev.leftAt, after = ev.lo }
     db.nextSeq = db.nextSeq + 1
     gs.log[#gs.log + 1] = e
     Log.Prune(gs, now)
