@@ -22,7 +22,7 @@ local Log, Glass, API = GuildSpy.Log, GuildSpy.Glass, GuildSpy.API
 UI.WIDTH, UI.HEIGHT = 640, 440
 UI.ROW_HEIGHT = 20
 -- The panel's rows of controls, from its top (#19).
-UI.SEARCH_Y, UI.TABS_Y, UI.LIST_Y, UI.FOOTER_H = 32, 60, 92, 22
+UI.SEARCH_Y, UI.TABS_Y, UI.LIST_Y, UI.FOOTER_H = 30, 54, 86, 22
 -- The guild roster's own art (Blizzard_Communities/CommunitiesMemberList.xml),
 -- so the panel looks like the tab next to it.
 UI.ART = {
@@ -97,6 +97,7 @@ local function buildRow(row)
     hl:SetAllPoints(row)
     hl:SetTexture(UI.ART.highlight)
     hl:SetBlendMode("ADD")
+    hl:SetAlpha(0.5)                -- a hover, softer than a selection
     row.mark = row:CreateTexture(nil, "ARTWORK")
     row.mark:SetAtlas(UI.ART.newDot)
     row.mark:SetSize(10, 10)
@@ -257,6 +258,22 @@ local function build()
     ScrollUtil.InitScrollBoxListWithScrollBar(box, bar, view)
     panel.box = box
 
+    -- The summary's tooltip: every group, and that it counts every tab.
+    local hit = CreateFrame("Frame", nil, panel)
+    hit:SetAllPoints(panel.summary)
+    hit:EnableMouse(true)
+    hit:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+        GameTooltip:SetText("New activity")
+        GameTooltip:AddLine("Across every tab, whatever is selected, since you last marked it read.", 0.8, 0.8, 0.8, true)
+        for _, c in ipairs(visit and Log.NewCounts(visit, newSince, canView()) or {}) do
+            GameTooltip:AddLine("|cff" .. c.color .. c.n .. "|r " .. c.word, 1, 1, 1)
+        end
+        GameTooltip:Show()
+    end)
+    hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    panel.summaryHit = hit
+
     panel.footer = font(panel, "GameFontDisableSmall", "RIGHT")
     panel.footer:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -12, 6)
 
@@ -324,6 +341,50 @@ local function elements(rows)
     return els
 end
 
+-- Newest first by when it happened, within New and within Earlier: an entry
+-- enriched with an older time (the event log's hour) sorts by that time.
+local function byTime(rows)
+    local new, old = {}, {}
+    for _, e in ipairs(rows) do
+        if e.seq > newSince then new[#new + 1] = e else old[#old + 1] = e end
+    end
+    local function later(a, b)
+        if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+        return a.seq > b.seq
+    end
+    table.sort(new, later)
+    table.sort(old, later)
+    for _, e in ipairs(old) do new[#new + 1] = e end
+    return new
+end
+
+-- Why the list is empty, in the terms of what's selected.
+local function emptyText(gs)
+    if #(gs.log or {}) == 0 then return "Nothing recorded yet." end
+    if query:match("%S") then return "No activity matches your search." end
+    local ranged = scope ~= "all"
+    for _, c in ipairs(Log.CATEGORIES) do
+        if c.key == category then
+            return "No " .. c.empty .. (ranged and " in this time range." or " recorded yet.")
+        end
+    end
+    return ranged and "No activity in this time range." or "Nothing recorded yet."
+end
+
+-- The summary: as many groups as fit, then "+N more" (#22 review).
+local function fitSummary(gs)
+    local s = panel.summary
+    if not gs then s:SetText(""); return end
+    local width = s:GetWidth() or 0
+    local measure = s.GetUnboundedStringWidth and "GetUnboundedStringWidth" or "GetStringWidth"
+    local limit = #Log.NewCounts(gs, newSince, canView())
+    s:SetText(Log.NewSummary(gs, newSince, canView()))
+    while width > 0 and limit > 1 and (s[measure](s) or 0) > width do
+        limit = limit - 1
+        s:SetText(Log.NewSummary(gs, newSince, canView(), limit))
+    end
+end
+
 -- A name's class, from the roster we last saw (to colour an actor).
 local function classLookup(gs)
     local byName = {}
@@ -351,6 +412,7 @@ function UI.Refresh()
     local keep, below = anchor()
     local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
                                          since = Log.ScopeSince(scope, now) }, now) or {}
+    rows = byTime(rows)
     panel.rows = rows
     panel.elements = elements(rows)
     panel.classOf = classLookup(gs)
@@ -358,12 +420,11 @@ function UI.Refresh()
     panel.box:SetDataProvider(CreateDataProvider(panel.elements), constants and constants.RetainScrollPosition)
     restore(keep, below)
 
-    panel.summary:SetText(gs and Log.NewSummary(gs, newSince, canView()) or "")
+    fitSummary(gs)
     panel.markRead:SetEnabled(gs ~= nil and topVisible(gs) > newSince)
     panel.footer:SetText(gs and gs.observedAt and ("Updated " .. Log.Relative(gs.observedAt, now)) or "")
-    local why
-    if not gs then why = "No guild seen yet."
-    elseif #rows == 0 then why = (#(gs.log or {}) == 0) and "Nothing recorded yet." or "Nothing matches." end
+    local why = gs and #rows == 0 and emptyText(gs) or nil
+    if not gs then why = "No guild seen yet." end
     panel.empty:SetText(why or "")
     panel.empty:SetShown(why ~= nil)
     if win and win.title then

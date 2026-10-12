@@ -204,6 +204,11 @@ function Methods.ScrollToOffset(w, o)
 end
 -- A WowStyle1DropdownTemplate's menu: the generator, run by a test with a fake root.
 function Methods.SetupMenu(w, fn) w._menu = fn end
+-- A FontString's text width: 7 px a visible character (colour codes take none).
+function Methods.GetUnboundedStringWidth(w)
+    local plain = (w._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return #plain * 7
+end
 function Methods.SetEnabled(w, v) w._enabled = v and true or false end
 function Methods.IsEnabled(w) return w._enabled ~= false end
 -- An edit box's selection: HighlightText() selects all, (0, 0) none.

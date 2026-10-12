@@ -40,11 +40,11 @@ Log.SUMMARY = {
 
 -- The log window's filters: each kind belongs to one.
 Log.CATEGORIES = {
-    { key = "members", label = "Members", kinds = { JOIN = true, REJOIN = true, LEAVE = true, RETURN = true, NAME = true } },
-    { key = "ranks", label = "Ranks", kinds = { PROMOTE = true, DEMOTE = true, RANK = true, RANKS = true } },
-    { key = "notes", label = "Notes", kinds = { NOTE = true, ONOTE = true } },
-    { key = "levels", label = "Levels", kinds = { LEVEL = true } },
-    { key = "motd", label = "MOTD", kinds = { MOTD = true } },
+    { key = "members", label = "Members", empty = "membership changes", kinds = { JOIN = true, REJOIN = true, LEAVE = true, RETURN = true, NAME = true } },
+    { key = "ranks", label = "Ranks", empty = "rank changes", kinds = { PROMOTE = true, DEMOTE = true, RANK = true, RANKS = true } },
+    { key = "notes", label = "Notes", empty = "note changes", kinds = { NOTE = true, ONOTE = true } },
+    { key = "levels", label = "Levels", empty = "level changes", kinds = { LEVEL = true } },
+    { key = "motd", label = "MOTD", empty = "message-of-the-day changes", kinds = { MOTD = true } },
 }
 
 -- The window's summary line (#19): entries counted past the "new" boundary,
@@ -55,7 +55,7 @@ Log.NEW_GROUPS = {
     { one = "rank change", many = "rank changes", color = "PROMOTE",
       kinds = { PROMOTE = true, DEMOTE = true, RANK = true, RANKS = true } },
     { one = "renamed", many = "renamed", color = "NAME", kinds = { NAME = true } },
-    { one = "came back", many = "came back", color = "RETURN", kinds = { RETURN = true } },
+    { one = "returned", many = "returned", color = "RETURN", kinds = { RETURN = true } },
     { one = "note edit", many = "note edits", color = "NOTE", kinds = { NOTE = true, ONOTE = true } },
     { one = "level change", many = "level changes", color = "LEVEL", kinds = { LEVEL = true } },
     { one = "new MOTD", many = "new MOTDs", color = "MOTD", kinds = { MOTD = true } },
@@ -144,10 +144,12 @@ function Log.Plain(s)
     return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"))
 end
 
--- The local midnight that starts `now`'s day.
-function Log.Midnight(now)
+-- The local midnight that starts `now`'s day, or the day `back` days before
+-- it. The calendar date decides, not 86400-second steps, and the clock-change
+-- flag is left to `time` (the one of that midnight, not of now: #22 review).
+function Log.Midnight(now, back)
     local t = date("*t", now)
-    return time({ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0, isdst = t.isdst })
+    return time({ year = t.year, month = t.month, day = t.day - (back or 0), hour = 0, min = 0, sec = 0 })
 end
 
 -- The first time a Log.SCOPES key lets through (nil: everything).
@@ -171,7 +173,7 @@ local function relative(at, now)
     if d < 60 then return "just now" end
     if d < 3600 then return math.floor(d / 60) .. "m ago" end
     if d < 86400 then return math.floor(d / 3600) .. "h ago" end
-    if at >= Log.Midnight(now) - 86400 then return "Yesterday" end
+    if at >= Log.Midnight(now, 1) then return "Yesterday" end
     return date("%b ", at) .. tonumber(date("%d", at))
 end
 Log.Relative = relative
@@ -241,8 +243,8 @@ function Log.Row(e, now, classOf)
         return n .. " " .. what .. ": " .. paint(hi, quote(e.to))
     elseif k == "LEVEL" then
         local gained = (e.to or 0) - (e.from or 0)
+        if gained > 1 then return n .. " leveled from " .. e.from .. " to " .. paint(hi, tostring(e.to)) end
         return n .. " reached level " .. paint(hi, tostring(e.to))
-            .. (gained > 1 and paint(MUTED, " (+" .. gained .. ")") or "")
     elseif k == "NAME" then
         return person(e.from, e.class) .. " is now " .. n
     elseif k == "RETURN" then
@@ -267,13 +269,20 @@ function Log.NewCounts(gs, since, canViewOfficer)
     return out
 end
 
--- "New: 2 joined · 1 left · 12 level changes", or "No new activity".
-function Log.NewSummary(gs, since, canViewOfficer)
-    local parts = {}
-    for _, c in ipairs(Log.NewCounts(gs, since, canViewOfficer)) do
-        parts[#parts + 1] = paint(c.color, tostring(c.n)) .. " " .. c.word
+-- "New: 2 joined · 1 left · 12 level changes", or "No new activity". With
+-- `limit`, only the first `limit` groups, then "+N more" (N entries), so a
+-- line too long for the panel still counts everything (#22 review).
+function Log.NewSummary(gs, since, canViewOfficer, limit)
+    local parts, more = {}, 0
+    for i, c in ipairs(Log.NewCounts(gs, since, canViewOfficer)) do
+        if limit and i > limit then
+            more = more + c.n
+        else
+            parts[#parts + 1] = paint(c.color, tostring(c.n)) .. " " .. c.word
+        end
     end
     if #parts == 0 then return paint(MUTED, "No new activity") end
+    if more > 0 then parts[#parts + 1] = "+" .. more .. " more" end
     return "New: " .. table.concat(parts, paint(MUTED, "  \194\183  "))
 end
 

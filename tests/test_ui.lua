@@ -129,7 +129,7 @@ panel.pills[2]._scripts.OnClick(panel.pills[2])          -- Members
 eq(#panel.rows, 2, "the Members pill: the join and the leave")
 panel.search._text = "zzz"
 panel.search._scripts.OnTextChanged(panel.search)
-check(panel.empty:IsShown() and panel.empty:GetText() == "Nothing matches.", "no match says so")
+check(panel.empty:IsShown() and panel.empty:GetText() == "No activity matches your search.", "no match says so")
 panel.search._text = ""
 panel.search._scripts.OnTextChanged(panel.search)
 panel.pills[1]._scripts.OnClick(panel.pills[1])          -- All
@@ -246,6 +246,19 @@ check(Log.Provenance(at(3)):find("scan noticed", 1, true), "provenance: a scan")
 local midnight = os.time({ year = 2026, month = 10, day = 12, hour = 0, min = 0, sec = 0 })
 eq(Log.ScopeSince("today", base), midnight, "Today starts at local midnight")
 eq(Log.ScopeSince("week", base), base - 7 * 86400, "Last 7 days")
+-- Clock changes (#22 review): midnight is the calendar's, on the change day and the day after.
+-- The US and EU 2026 dates; they bite where the machine's zone has daylight saving.
+for _, d in ipairs({ { 3, 8 }, { 3, 9 }, { 11, 1 }, { 11, 2 }, { 3, 29 }, { 3, 30 }, { 10, 25 }, { 10, 26 } }) do
+    local noon = os.time({ year = 2026, month = d[1], day = d[2], hour = 12 })
+    local m = os.date("*t", Log.ScopeSince("today", noon))
+    check(m.hour == 0 and m.min == 0 and m.day == d[2], "Today starts at 00:00 on " .. d[1] .. "-" .. d[2])
+    local y = os.date("*t", Log.Midnight(noon, 1))
+    check(y.hour == 0 and y.day == os.date("*t", noon - 86400).day, "...and yesterday at its own 00:00")
+    local justIn = os.time({ year = 2026, month = d[1], day = d[2] - 1, hour = 0, min = 30 })
+    local justOut = os.time({ year = 2026, month = d[1], day = d[2] - 2, hour = 23, min = 30 })
+    eq(Log.When({ at = justIn }, noon + 12 * 3600 - 60), "Yesterday", "...00:30 the day before is Yesterday")
+    check(Log.When({ at = justOut }, noon + 12 * 3600 - 60) ~= "Yesterday", "...23:30 two days before isn't")
+end
 eq(Log.ScopeSince("all", base), nil, "All history: no bound")
 local tg = { log = { { seq = 1, kind = "JOIN", name = "Late", at = midnight - 1 },
                      { seq = 2, kind = "JOIN", name = "Early", at = midnight, approx = true } } }
@@ -262,7 +275,7 @@ promo.lastStep = true
 eq(Log.Plain(Log.Row(promo, now, classOf)), "Bo Kay promoted to Raider (last step by Enzo Matrix)",
     "...never a plain 'by' when only the last step is known")
 eq(Log.Plain(Log.Row({ kind = "LEVEL", name = "Saint Anger", from = 16, to = 19 }, now)),
-    "Saint Anger reached level 19 (+3)", "row: several levels")
+    "Saint Anger leveled from 16 to 19", "row: several levels")
 check(Log.Row({ kind = "JOIN", name = "No Class" }, now):find("|cffffffffNo Class|r", 1, true),
     "row: no class, a plain white name")
 eq(Log.Plain(Log.Row({ kind = "LEAVE", name = "Bo Kay", how = "kick", actor = "Enzo Matrix", level = 20 }, now)),
@@ -312,6 +325,59 @@ check(not row.mark:IsShown(), "...no dots")
 panel.search._text = ""
 panel.search._scripts.OnTextChanged(panel.search)
 panel.pills[1]._scripts.OnClick(panel.pills[1])
+
+-- A catch-up with many kinds new (#22 review): the line fits, and still counts everything.
+local before = gs.viewedSeq
+for _, ev in ipairs({
+    { kind = "JOIN", name = "Kay One" }, { kind = "LEAVE", name = "Kay Two", how = "quit" },
+    { kind = "PROMOTE", name = "Kay Three", to = "Member" }, { kind = "NAME", name = "Kay Four", from = "Kay Old" },
+    { kind = "RETURN", name = "Kay Five", days = 20 }, { kind = "NOTE", name = "Kay Six", to = "x" },
+    { kind = "MOTD", to = "raid tonight" },
+}) do add(ev) end
+win:Hide(); gs.viewedSeq = before; WoW.slash("/gspy log")
+panel.summary._width = 300
+UI.Refresh()
+local line = Log.Plain(panel.summary:GetText())
+check(#line * 7 <= 300, "a long summary is cut to fit: " .. line)
+local more = tonumber(line:match("%+(%d+) more$"))
+check(more, "...ending in +N more")
+local total, shown = 0, 0
+for _, c in ipairs(Log.NewCounts(gs, before, false)) do total = total + c.n end
+for n in line:gsub("%+%d+ more$", ""):gmatch("(%d+) %a") do shown = shown + tonumber(n) end
+eq(shown + more, total, "...and the shown counts plus N are every new entry")
+panel.summaryHit._scripts.OnEnter(panel.summaryHit)
+eq(#GameTooltip._lines, 1 + #Log.NewCounts(gs, before, false), "its tooltip: every tab, then every group")
+check(GameTooltip._lines[1]:find("every tab", 1, true), "...saying it counts every tab")
+panel.summaryHit._scripts.OnLeave(panel.summaryHit)
+panel.summary._width = 0
+UI.MarkAllRead()
+
+-- Ordering: by when it happened inside a section, whatever the seq.
+local recent = add({ kind = "JOIN", name = "Night Owl", at = now - 60 })
+local older = add({ kind = "JOIN", name = "Early Bird", at = now - 7200 })   -- recorded later, happened earlier
+UI.MarkAllRead()
+local posRecent, posOlder
+for i, e in ipairs(panel.rows) do
+    if e == recent then posRecent = i elseif e == older then posOlder = i end
+end
+check(older.seq > recent.seq and posRecent < posOlder, "a later seq with an older time sorts below a newer time")
+
+-- Empty lists say why, in the terms of what's selected.
+local emptyGs = { log = { { seq = 1, kind = "JOIN", name = "Solo", at = now - 90 * 86400 } } }
+local keepCurrent = GuildSpy.Scanner.Current
+GuildSpy.Scanner.Current = function() return emptyGs end
+UI.Refresh()
+panel.pills[4]._scripts.OnClick(panel.pills[4])          -- Notes
+eq(panel.empty:GetText(), "No note changes recorded yet.", "Notes, empty: says so")
+panel.pills[6]._scripts.OnClick(panel.pills[6])          -- MOTD
+eq(panel.empty:GetText(), "No message-of-the-day changes recorded yet.", "MOTD, empty: says so")
+UI.SetScope("week")
+eq(panel.empty:GetText(), "No message-of-the-day changes in this time range.", "...in a time range")
+panel.pills[1]._scripts.OnClick(panel.pills[1])
+eq(panel.empty:GetText(), "No activity in this time range.", "All, in a time range: says so")
+UI.SetScope("all")
+GuildSpy.Scanner.Current = keepCurrent
+UI.Refresh()
 
 -- The time-scope dropdown: its radios, and Today.
 local radios = {}
