@@ -144,6 +144,14 @@ for _, fs in ipairs(about.commands) do
     if fs:GetText():find("/gspy options", 1, true) then hasOptions = true end
 end
 check(hasOptions, "...and /gspy options is there")
+-- The links: copyable boxes; typing puts the link back.
+eq(#about.links, 3, "three links: CurseForge, GitHub, Report a bug")
+eq(about.links[1]:GetText(), "https://www.curseforge.com/wow/addons/guildspy", "...CurseForge's page")
+eq(about.links[3]:GetText(), "https://github.com/Spotnick2/GuildSpy/issues/new/choose", "...and where to report a bug")
+local lb = about.links[2]
+lb:SetText("typed over")
+lb._scripts.OnTextChanged(lb, true)
+eq(lb:GetText(), "https://github.com/Spotnick2/GuildSpy", "typing in a link puts it back")
 -- Each line under the one before: a wrapped line pushes the rest down (owner's screenshot).
 local p = about.version._points[1]
 check(p[1] == "TOPLEFT" and p[2] == about.tagline and p[3] == "BOTTOMLEFT", "the version hangs under the tagline, which may wrap")

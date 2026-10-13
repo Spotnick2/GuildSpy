@@ -37,8 +37,6 @@ this MIT licence does not cover. Each library's own notice is in its folder.
                        "All Rights Reserved unless otherwise explicitly stated".
                        Embedded unmodified, as the WoW addon ecosystem embeds it
                        (LibDBIcon requires it).
-  ChatThrottleLib      Mikk. Public domain (its header). Paces the guild's
-                       hidden addon messages (#15); copied from AltStable.
   LibGlass-1.0         Spotnick2. MIT licence, full text in
-                       Libs/LibGlass-1.0/LICENSE. The glass material (#71),
-                       embedded by the packager from github.com/Spotnick2/LibGlass.
+                       Libs/LibGlass-1.0/LICENSE. The glass material, embedded
+                       by the packager from github.com/Spotnick2/LibGlass.
