@@ -17,8 +17,9 @@ nowhere at all. GuildSpy watches the roster and tells you.
 ![The log window, in the guild window's GuildSpy tab](https://raw.githubusercontent.com/Spotnick2/GuildSpy/main/docs/screenshots/log-window.png)
 
 It is the informational half of Guild Roster Manager and nothing else. **GuildSpy only reads.** It
-never changes a rank, a note or a member. The only thing it sends is what you saw yourself: to your
-other accounts, and to guildmates who use GuildSpy. Both can be turned off.
+never changes a rank, a note or a member. It shares two ways, and both can be turned off: your
+log goes to your other accounts (with the guildmates' reports it holds), and only what this
+character saw itself goes to guildmates who use GuildSpy.
 
 ## What it tells you
 
