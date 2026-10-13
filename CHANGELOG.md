@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Notes in the log's tooltips.** Hover a row to see the member's note, and their officer note if
+  your character can read officer notes.
+
 ## v0.1.0
 
 The first release: know what's going on in your guild, live and while you were away.

@@ -188,6 +188,46 @@ end
 panel.summaryHit._scripts.OnEnter(panel.summaryHit)
 check(not tipHas("note edit"), "hovered again, it no longer counts the officer note")
 
+-- #25: a row's tooltip has the member's notes as they are now.
+do
+    local R = { members = { ["g-a"] = { name = "Ann", note = "main tank", onote = "raid lead" },
+                            ["g-b"] = { name = "Bo", note = "", onote = "" },
+                            ["g-c"] = { name = "Cy", note = "alt of Ann" } },
+                formers = { ["g-d"] = { name = "Dee" } } }
+    local function labels(e, can)
+        local out = {}
+        for _, n in ipairs(Log.MemberNotes(R, e, can)) do out[#out + 1] = n.label .. "=" .. n.text end
+        return table.concat(out, ";")
+    end
+    eq(labels({ guid = "g-a" }, true), "Note=main tank;Officer note=raid lead", "an officer: both notes")
+    eq(labels({ guid = "g-a" }, false), "Note=main tank", "not an officer: the public note only")
+    eq(labels({ guid = "g-b" }, true), "", "empty notes are left out")
+    eq(labels({ guid = "g-c" }, true), "Note=alt of Ann", "an officer note never read: nothing, not '(none)'")
+    eq(labels({ guid = "g-d" }, true), "", "a former member: no notes (none are kept)")
+    eq(labels({ kind = "MOTD", to = "hi" }, true), "", "a guild-wide entry: none")
+    eq(labels({ guid = "g-a" }, nil), "Note=main tank", "permission unknown counts as no")
+end
+-- In the window: Ann's notes from the roster, through a scan.
+G.members[2].note, G.members[2].onote = "main tank", "raid lead"
+WoW.guild.canViewOfficerNote = true
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+local annRow
+for _, e in ipairs(panel.rows) do
+    if e.guid == "Player-1-00000002" and e.kind == "LEVEL" then annRow = e; break end
+end
+check(annRow, "(Ann's level-up is in the list)")
+local nr = CreateFrame("Button", nil, panel)
+draw(nr, annRow)
+nr._scripts.OnEnter(nr)
+check(tipHas("Note: |cffff99ffmain tank|r"), "an officer's row tooltip: the public note")
+check(tipHas("Officer note: |cffff18edraid lead|r"), "...and the officer note")
+WoW.guild.canViewOfficerNote = false
+WoW.fire("GUILD_RANKS_UPDATE_ACTIVE_PLAYER")
+check(not GameTooltip:IsShown(), "permission lost: the open tooltip goes")
+draw(nr, annRow)
+nr._scripts.OnEnter(nr)
+check(tipHas("main tank") and not tipHas("raid lead"), "hovered again: the public note, no officer note")
+
 -- Leaving the guild with the window open: no old rows, no old boundary.
 local keep = WoW.guild
 WoW.guild = nil

@@ -52,7 +52,7 @@ a key binding. It's styled like the guild roster.
   now, who left from it, and who moved in or out of it.
 - **Search** by name, officer, rank or note text.
 - **Class icons and colours**, and how long ago each change happened. Hover a row for the exact
-  time and where GuildSpy learned it.
+  time, where GuildSpy learned it, and the member's notes (the officer note only if you can read it).
 
 ## Settings
 
