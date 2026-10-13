@@ -413,6 +413,13 @@ end
 function Log.Add(db, gs, ev, now)
     gs.log = gs.log or {}
     db.nextSeq = (db.nextSeq or 1)
+    -- What my more precise observations already cover isn't kept (#41): the
+    -- caller gets it back marked `covered`, with no seq.
+    local probe = { kind = ev.kind, guid = ev.guid, from = ev.from, to = ev.to, at = ev.at or now,
+                    approx = ev.approx, lo = ev.lo, hi = ev.hi, trust = "self" }
+    local group = Log.Group(gs, Log.DupKey(probe))
+    group[#group + 1] = probe
+    if Log.Covered(probe, group) then probe.covered = true; return probe end
     local at = ev.at or now
     local e = { seq = db.nextSeq, at = at, approx = ev.approx, kind = ev.kind, guid = ev.guid,
                 name = ev.name, class = ev.class, actor = ev.actor, from = ev.from, to = ev.to, how = ev.how,
@@ -423,6 +430,8 @@ function Log.Add(db, gs, ev, now)
                 origin = ev.origin or Log.Origin(), trust = "self", here = true, rev = 1, chg = Log.NextChg(gs) }
     db.nextSeq = db.nextSeq + 1
     gs.log[#gs.log + 1] = e
+    group[#group] = e
+    Log.Sweep(gs, group)
     Log.Prune(gs, now, e)
     return e
 end
@@ -494,13 +503,16 @@ end
 -- For a batch of receipts (a page, #40 review): uids indexed once, counts per
 -- quota kept as entries are admitted; the caller prunes once at the end.
 function Log.NewBatch(gs, now)
-    local b = { byUid = {}, count = { self = 0, guild = 0 }, now = now }
+    local b = { byUid = {}, byKey = {}, count = { self = 0, guild = 0 }, now = now }
     for i, e in ipairs(gs.log or {}) do
         if e.uid then
             local list = b.byUid[e.uid] or {}
             list[#list + 1] = e
             b.byUid[e.uid] = list
         end
+        local k = Log.DupKey(e)
+        b.byKey[k] = b.byKey[k] or {}
+        table.insert(b.byKey[k], e)
         local _, days = limits(quotaOf(e))
         if now - observed(e) <= days * 86400 then b.count[quotaOf(e)] = b.count[quotaOf(e)] + 1 end
     end
@@ -522,6 +534,176 @@ function Log.Admits(gs, e, now, batch)
         end
     end
     return n < max or Log.Before(oldest, e)
+end
+
+------------------------------------------------------------
+-- Duplicates (#41): an observation my more precise ones cover isn't kept
+------------------------------------------------------------
+-- Two of my accounts see the same change: one live ("reached 22", then
+-- "reached 23"), the other at its login scan ("from 21 to 23"). Only my own
+-- observations cover (a guildmate's report never removes mine), a record is
+-- never dropped for a vaguer one, and every account picks the same: the
+-- order is total. Owner: dedupe what's stored, not only what's shown.
+
+-- Kinds compared together; ones with no from/to; what undoes a point kind.
+local FAMILY = { PROMOTE = "rank", DEMOTE = "rank", RANK = "rank", JOIN = "join", REJOIN = "join" }
+local POINT = { join = true, LEAVE = true, RETURN = true }
+local UNDO = { join = "LEAVE", LEAVE = "join" }
+local function family(e) return FAMILY[e.kind] or e.kind end
+local function val(v) return v == nil and "" or tostring(v) end
+
+-- Records about the same member (or, for the MOTD and rank list, the same kind).
+function Log.DupKey(e)
+    if e.guid then return "m:" .. tostring(e.guid) end
+    if e.kind == "MOTD" or e.kind == "RANKS" then return "k:" .. e.kind end
+    return "t:" .. tostring(e)                            -- no member: never compared
+end
+
+-- The group of a key: the batch's index, or one pass over the log (a fresh list).
+function Log.Group(gs, key, batch)
+    if batch then
+        batch.byKey[key] = batch.byKey[key] or {}
+        return batch.byKey[key]
+    end
+    local g = {}
+    for _, x in ipairs(gs.log or {}) do if Log.DupKey(x) == key then g[#g + 1] = x end end
+    return g
+end
+
+-- When it happened, as far as its observer knows: the exact time if seen
+-- live, else the interval.
+local function span(e)
+    if e.approx == false and type(e.at) == "number" then return e.at, e.at end
+    local hi = tonumber(e.hi) or tonumber(e.at) or 0
+    local lo = tonumber(e.lo) or tonumber(e.after) or hi
+    if lo > hi then lo = hi end
+    return lo, hi
+end
+local function width(e) local lo, hi = span(e); return hi - lo end
+-- a strictly more precise than b: narrower, then namespace, then uid.
+local function finer(a, b)
+    local wa, wb = width(a), width(b)
+    if wa ~= wb then return wa < wb end
+    local na, nb = Log.Ns(a), Log.Ns(b)
+    if na ~= nb then return na < nb end
+    return tostring(a.uid) < tostring(b.uid)
+end
+local function overlap(a, b)
+    local al, ah = span(a)
+    local bl, bh = span(b)
+    return al <= bh and bl <= ah
+end
+local function within(a, b)
+    local al, ah = span(a)
+    local bl, bh = span(b)
+    return al >= bl and ah <= bh
+end
+
+-- The same change, and nothing recorded that undid it in between (else it
+-- may have happened twice).
+local function same(x, r, group)
+    local fam = family(r)
+    if family(x) ~= fam then return false end
+    if not POINT[fam] and not (val(x.from) == val(r.from) and val(x.to) == val(r.to)) then return false end
+    for _, y in ipairs(group) do
+        if y ~= x and y ~= r and (overlap(y, r) or overlap(y, x)) then
+            if POINT[fam] then
+                if UNDO[fam] and family(y) == UNDO[fam] then return false end
+            elseif family(y) == fam and val(y.from) == val(r.to) and val(y.to) == val(r.from) then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+-- Steps a -> x -> ... -> b, each mine, recorded inside r's span and narrower.
+local function chained(r, group)
+    local fam = family(r)
+    local a, b = val(r.from), val(r.to)
+    if POINT[fam] or a == b then return false end
+    local steps = {}
+    for _, x in ipairs(group) do
+        if x ~= r and x.trust ~= "guild" and family(x) == fam and val(x.from) ~= val(x.to)
+                and within(x, r) and width(x) < width(r) then
+            steps[#steps + 1] = x
+        end
+    end
+    if #steps < 2 then return false end
+    local seen, todo = { [a] = true }, {}
+    for _, s in ipairs(steps) do
+        if val(s.from) == a and val(s.to) ~= b then todo[#todo + 1] = val(s.to) end
+    end
+    while #todo > 0 do
+        local v = table.remove(todo)
+        if not seen[v] then
+            seen[v] = true
+            for _, s in ipairs(steps) do
+                if val(s.from) == v then
+                    if val(s.to) == b then return true end
+                    todo[#todo + 1] = val(s.to)
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Whether my other observations in its group cover r.
+function Log.Covered(r, group)
+    for _, x in ipairs(group) do
+        if x ~= r and x.trust ~= "guild" and finer(x, r) and overlap(x, r) and same(x, r, group) then
+            return true
+        end
+    end
+    return chained(r, group)
+end
+
+-- Drops what the rest of a group covers, from the log and the group (and a
+-- batch's indexes and counts). Each dropped table is marked `covered`, so a
+-- line already queued for it isn't counted.
+function Log.Sweep(gs, group, batch)
+    local drop, n = {}, 0
+    if #group < 2 then return drop end
+    for _, x in ipairs(group) do
+        if Log.Covered(x, group) then drop[x], n = true, n + 1 end
+    end
+    if n == 0 then return drop end
+    local function keep(list)
+        local out = {}
+        for _, x in ipairs(list) do if not drop[x] then out[#out + 1] = x end end
+        return out
+    end
+    gs.log = keep(gs.log or {})
+    local left = keep(group)
+    for i = #group, 1, -1 do group[i] = nil end
+    for i, x in ipairs(left) do group[i] = x end
+    for x in pairs(drop) do
+        x.covered = true
+        if batch then
+            if x.uid and batch.byUid[x.uid] then batch.byUid[x.uid] = keep(batch.byUid[x.uid]) end
+            local _, days = limits(quotaOf(x))
+            if batch.now - observed(x) <= days * 86400 then
+                batch.count[quotaOf(x)] = batch.count[quotaOf(x)] - 1
+            end
+        end
+    end
+    return drop
+end
+
+-- The whole log at once (at load: what an older version kept).
+function Log.Dedupe(gs)
+    local groups = {}
+    for _, e in ipairs(gs.log or {}) do
+        local k = Log.DupKey(e)
+        groups[k] = groups[k] or {}
+        table.insert(groups[k], e)
+    end
+    local n = 0
+    for _, g in pairs(groups) do
+        for _ in pairs(Log.Sweep(gs, g)) do n = n + 1 end
+    end
+    return n
 end
 
 -- Legacy entries (before #36) become this account's observations, observer
@@ -623,6 +805,9 @@ function Log.Receive(db, gs, inc, via, sender, now, batch)
         if inc.rev > (existing.rev or 1) then
             for _, f in ipairs(Log.MUTABLE) do existing[f] = inc[f] end
             existing.rev, existing.chg = inc.rev, Log.NextChg(gs)
+            -- A sharper time may now cover another record, or be covered (#41).
+            Log.Sweep(gs, Log.Group(gs, Log.DupKey(existing), batch), batch)
+            if existing.covered then return nil, "covered" end
             return existing, "updated"
         end
         return nil, "known"
@@ -635,6 +820,12 @@ function Log.Receive(db, gs, inc, via, sender, now, batch)
     else
         e.trust, e.ns, e.reporter = "guild", ns, ns:sub(3)
     end
+    -- My more precise observations already cover it: not kept (#41).
+    local group = Log.Group(gs, Log.DupKey(e), batch)
+    group[#group + 1] = e
+    local covered = Log.Covered(e, group)
+    group[#group] = nil
+    if covered then return nil, "covered" end
     if twin then
         for i, x in ipairs(gs.log) do if x == twin then twinAt = i; break end end
         table.remove(gs.log, twinAt)
@@ -659,7 +850,18 @@ function Log.Receive(db, gs, inc, via, sender, now, batch)
         list[#list + 1] = e
         batch.byUid[e.uid] = list
         batch.count[quotaOf(e)] = batch.count[quotaOf(e)] + 1
+        if twin then
+            for i, x in ipairs(group) do if x == twin then table.remove(group, i); break end end
+        end
+        group[#group + 1] = e
+        batch.byKey[Log.DupKey(e)] = group
+        Log.Sweep(gs, group, batch)
     else
+        if twin then
+            for i, x in ipairs(group) do if x == twin then table.remove(group, i); break end end
+        end
+        group[#group + 1] = e
+        Log.Sweep(gs, group)
         Log.Prune(gs, now)
     end
     return e, twin and "superseded" or "added"
@@ -711,7 +913,10 @@ function Log.Enrich(e, attr, gs)
     for i = 1, 5 do
         if was[i] ~= now[i] then
             e.rev = (e.rev or 1) + 1
-            if gs then e.chg = Log.NextChg(gs) end
+            if gs then
+                e.chg = Log.NextChg(gs)
+                Log.Sweep(gs, Log.Group(gs, Log.DupKey(e)))
+            end
             return
         end
     end

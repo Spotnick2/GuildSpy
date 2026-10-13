@@ -238,7 +238,8 @@ local function flush()
     if not pending then return end
     local mine, reports = 0, 0
     for _, e in ipairs(pending) do
-        if Log.Visible(e, canView()) then
+        -- One a later record covered isn't kept: not counted (#41).
+        if not e.covered and Log.Visible(e, canView()) then
             if e.trust == "guild" then reports = reports + 1 else mine = mine + 1 end
         end
     end

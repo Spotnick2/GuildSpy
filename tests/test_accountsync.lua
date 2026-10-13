@@ -370,6 +370,24 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
         now = now, send = function(_, text) WoW.lasDeliver(text, { guid = "Player-1-0000000B", name = "Alt Two" }); return true end })
     local t0 = time()
     for i = 1, 3 do Log.Add(bdb, bgs, join("From Alt " .. i, 200 + i, { lo = t0 - 60, hi = t0 }), t0) end
+    -- An older copy of B kept a coarse 21 to 23 before the two steps that cover
+    -- it: here it arrives first, is taken, then goes; the line doesn't count it (#41).
+    local lvl = { kind = "LEVEL", guid = "Player-1-00000310", name = "Alissa White" }
+    local function level(from, to, t)
+        local ev = { from = from, to = to }
+        for k, v in pairs(lvl) do ev[k] = v end
+        for k, v in pairs(t) do ev[k] = v end
+        return ev
+    end
+    Log.Add(bdb, bgs, level(21, 23, { lo = t0 - 3000, hi = t0 }), t0)
+    Log.Add(bdb, bgs, level(21, 22, { lo = t0 - 2100, hi = t0 - 2000, at = t0 - 2000, approx = false }), t0)
+    local f1 = bgs.log[#bgs.log]
+    local f2 = {}
+    for k, v in pairs(f1) do f2[k] = v end
+    f2.uid, f2.from, f2.to, f2.at, f2.obs, f2.lo, f2.hi = Log.NewUid(), 22, 23, t0 - 1000, t0 - 1000, t0 - 1100, t0 - 1000
+    f2.seq, f2.chg = bdb.nextSeq, Log.NextChg(bgs)
+    bdb.nextSeq = bdb.nextSeq + 1
+    bgs.log[#bgs.log + 1] = f2
     Log.Add(bdb, bgs, { kind = "ONOTE", guid = "Player-1-00000300", name = "Hidden Note", from = "", to = "x",
                         lo = time() - 60, hi = time() }, time())
     -- Our sends go to B.
@@ -393,8 +411,11 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     check(not line, "no line yet: it waits for a quiet spell")
     WoW.advance(AS.QUIET + 1)
     for _, l in ipairs(WoW.chat) do if l:find("from your other account", 1, true) then line = l end end
-    check(line and Log.Plain(line):find("3 changes from your other account", 1, true),
-        "one catch-up line, counting what this character can see (the officer note isn't counted)")
+    check(line and Log.Plain(line):find("5 changes from your other account", 1, true),
+        "one catch-up line, counting what this character can see (not the officer note, nor what a later step covered)")
+    local coarse = 0
+    for _, e in ipairs(gs.log) do if e.kind == "LEVEL" and e.from == 21 and e.to == 23 then coarse = coarse + 1 end end
+    eq(coarse, 0, "...the coarse level-up isn't kept")
     local lines = 0
     for _, l in ipairs(WoW.chat) do if l:find("from your other account", 1, true) then lines = lines + 1 end end
     eq(lines, 1, "...only one")

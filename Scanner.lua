@@ -109,6 +109,8 @@ local function validGuild(gs)
     gs.log = kept
     -- Observations (#36): legacy entries get their identity once.
     Log.Migrate(gs)
+    -- Duplicates an older version kept (#41).
+    Log.Dedupe(gs)
     if gs.viewedSeq ~= nil and type(gs.viewedSeq) ~= "number" then gs.viewedSeq = nil end
     return gs
 end
@@ -328,15 +330,18 @@ function Scanner.Scan(force)
             ev.actor, ev.how, ev.lastStep, ev.at, ev.approx = attr.actor, attr.how, attr.lastStep, attr.at, attr.approx
         end
         local entry = Log.Add(db(), S.state, ev, t)
-        if Scanner.ATTRIBUTABLE[ev.kind] and not attr and not ev.sharedName then
-            S.enrichable[#S.enrichable + 1] = { entry = entry, ev = ev, recordedAt = t }
-        end
-        Scanner.Print(entry)
-        -- After the digest, changes are seen as they happen: the next login's
-        -- digest starts after them (officer notes only for whoever can read them).
-        if S.digestShown then
-            S.state.shownSeq, S.state.shownAt = entry.seq, t
-            if entry.kind == "ONOTE" and canView() then Scanner.SeenOnote(S.state, entry.seq) end
+        -- Already covered by my more precise observations (#41): not kept, not printed.
+        if not entry.covered then
+            if Scanner.ATTRIBUTABLE[ev.kind] and not attr and not ev.sharedName then
+                S.enrichable[#S.enrichable + 1] = { entry = entry, ev = ev, recordedAt = t }
+            end
+            Scanner.Print(entry)
+            -- After the digest, changes are seen as they happen: the next login's
+            -- digest starts after them (officer notes only for whoever can read them).
+            if S.digestShown then
+                S.state.shownSeq, S.state.shownAt = entry.seq, t
+                if entry.kind == "ONOTE" and canView() then Scanner.SeenOnote(S.state, entry.seq) end
+            end
         end
     end
     Roster.PruneFormers(S.state, t)
