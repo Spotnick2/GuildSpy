@@ -303,6 +303,7 @@ function WoW.reset()
     WoW.settings = { canvas = {}, addons = {}, subs = {} }
     WoW.ldb, WoW.ldbi = nil, nil                -- made on first use (LibStub, above)
     WoW.las, WoW.lasSent, WoW.lasPeers, WoW.lasSnapshots, WoW.noAccountSync = nil, {}, {}, nil, nil
+    WoW.lasNotReady, WoW.lasStoredOff = {}, nil
     -- Blizzard's Settings window (HIGH strata), hidden until opened.
     SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
     SettingsPanel._strata = "HIGH"
@@ -353,10 +354,16 @@ end
 function WoW.newLAS()
     local lib = { instances = {} }
     function lib:New(o)
-        local inst = { opts = o, messages = (o.messages == true and not WoW.lasSnapshots) or nil, enabled = true }
+        -- enabled: the library's own stored switch (WoW.lasStoredOff: an earlier "off").
+        local inst = { opts = o, messages = (o.messages == true and not WoW.lasSnapshots) or nil,
+                       enabled = not WoW.lasStoredOff }
         inst.OnMessage = function(fn) inst.handler = fn end
         inst.Peers = function() return WoW.lasPeers or {} end
+        -- As the real SendTo (LibAccountSync.lua I.SendTo): nil, "disabled" when off;
+        -- 0 ("not-ready") while the peer's handshake isn't done; else 1.
         inst.SendTo = function(guid, payload, cb)
+            if not inst.enabled then return nil, "disabled" end
+            if WoW.lasNotReady[guid] then return 0 end
             WoW.lasSent[#WoW.lasSent + 1] = { guid = guid, payload = payload }
             return 1
         end

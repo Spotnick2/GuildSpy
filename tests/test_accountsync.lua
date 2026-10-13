@@ -18,8 +18,13 @@ local function client(name, guid, key)
         gs = function(k) if k == c.key then return c.gs end end,
         key = function() return c.key end,
         now = function() return clock end,
-        send = function(to, text) net[#net + 1] = { to = to, from = c, text = text } end,
+        send = function(to, text)
+            if c.notReady and c.notReady[to] then return false end   -- the library's "not ready" (0)
+            net[#net + 1] = { to = to, from = c, text = text }
+            return true
+        end,
         onReceived = function(added) for _, e in ipairs(added) do c.added[#c.added + 1] = e end end,
+        onChanged = function() c.changed = (c.changed or 0) + 1 end,
     })
     clients[guid] = c
     return c
@@ -89,6 +94,22 @@ do
     pump()
     eq(find(A, "Seen By B").actor, "Enzo Matrix", "B's later enrichment reaches A")
     eq(#A.added, 1, "...as an update, not a new entry")
+    local changes = A.changed
+    Log.Enrich(mine, { how = "quit" }, B.gs)
+    clock = clock + AS.POLL
+    A.core:Tick()
+    pump()
+    eq(A.changed, changes + 1, "an update-only page still tells the window to redraw (#40 review)")
+
+    -- B's saved file went back (a crash before it was written): its counter
+    -- restarts low, but new changes still number above A's cursor (#40 review).
+    B.gs.nextChg = 1
+    WoW.advance(2)
+    observe(B, join("After A Rewind", 16))
+    clock = clock + AS.POLL
+    A.core:Tick()
+    pump()
+    check(find(A, "After A Rewind"), "after B's counter went back, B's new observation still reaches A")
 end
 
 -- Officer notes go between my accounts; guildmates' reports stay theirs.
@@ -184,11 +205,20 @@ do
     A.core:Tick()                                   -- a new request (new rid) goes out
     local inFlight = net
     net = {}
+    -- A page can outlast the timeout (#40 review): the late one still continues
+    -- from A's cursor, so it counts; the retry's page, now behind, doesn't.
     A.core:OnMessage(stale.text, { guid = B.guid, name = B.name })
-    check(not find(A, "Third"), "a page for an older request is ignored while a newer one is out")
+    check(find(A, "Third"), "a late page that continues from the cursor is taken")
+    local mark = A.gs.peerMark[B.guid]
     net = inFlight
     pump()
-    check(find(A, "Third"), "...and the newer request's page brings it")
+    local thirds = 0
+    for _, e in ipairs(A.gs.log) do if e.name == "Third" then thirds = thirds + 1 end end
+    eq(thirds, 1, "...and the retry's page, now behind the cursor, adds nothing")
+    eq(A.gs.peerMark[B.guid], mark, "...nor moves the cursor back")
+    -- A page for an older cursor never moves the cursor back.
+    A.core:OnMessage(Wire.Message("PAGE", { "99", KEY, 0, 5, 0 }, {}), { guid = B.guid, name = B.name })
+    eq(A.gs.peerMark[B.guid], mark, "a page for an older cursor is ignored")
     -- One request in flight: a CAP meanwhile doesn't start another.
     observe(B, join("Fourth", 13))
     clock = clock + AS.POLL
@@ -200,10 +230,50 @@ do
     for _, m in ipairs(net) do if kindOf(m) == "REQ" then after = after + 1 end end
     eq(after, reqs, "a CAP while a request is in flight asks nothing more")
     pump()
+    -- A peer A heard but couldn't ask yet (the library not ready): its page is ignored.
+    local D = client("Alt Four", "Player-1-0000000D", KEY)
+    A.notReady = { [D.guid] = true }
+    A.core:OnMessage(Wire.Message("CAP", { KEY, "1" }), { guid = D.guid, name = D.name })
+    A.notReady = nil
+    net = {}
+    A.core:OnMessage(Wire.Message("PAGE", { "1", KEY, 0, 99, 0 }, {}), { guid = D.guid, name = D.name })
+    eq(A.gs.peerMark[D.guid], nil, "a page from a peer A never asked is ignored")
     -- A page from someone A never asked.
     local C = client("Alt Three", "Player-1-0000000C", KEY)
     A.core:OnMessage(Wire.Message("PAGE", { "1", KEY, 0, 99, 0 }, {}), { guid = C.guid, name = C.name })
     eq(A.gs.peerMark[C.guid], nil, "a page nobody asked for is ignored")
+end
+
+-- The library says "not ready" at first (#40 review): the CAP isn't counted as
+-- sent, and goes again on the next pass; CAPs repeat until each has heard the other.
+do
+    net, clients = {}, {}
+    local A = client("Alt One", "Player-1-0000000A", KEY)
+    local B = client("Alt Two", "Player-1-0000000B", KEY)
+    observe(B, join("After Handshake", 14))
+    A.notReady = { [B.guid] = true }
+    A.core:Discover({ { guid = B.guid, name = B.name } })
+    eq(#net, 0, "A's first CAP isn't taken by the library")
+    eq(A.core.peers[B.guid].capSentAt, nil, "...and isn't counted as sent")
+    A.notReady = nil
+    clock = clock + 10
+    A.core:Discover({ { guid = B.guid, name = B.name } })
+    B.core:Discover({ { guid = A.guid, name = A.name } })
+    pump()
+    check(find(A, "After Handshake"), "once ready, the CAP goes and the sync happens")
+    check(A.core.peers[B.guid].heardUs and B.core.peers[A.guid].heardUs, "each has heard the other's CAP")
+    -- B's CAP to A is lost: B says it hasn't heard A, so A tells it again.
+    net, clients = {}, {}
+    local C = client("Alt One", "Player-1-0000000A", KEY)
+    local D = client("Alt Two", "Player-1-0000000B", KEY)
+    observe(C, join("Seen By C", 15))
+    C.core:Discover({ { guid = D.guid, name = D.name } })
+    D.core:Discover({ { guid = C.guid, name = C.name } })
+    pump(function(m) return m.from == C and kindOf(m) == "CAP" and not m.seenOnce and true end)  -- C's first CAP lost
+    clock = clock + 10
+    C.core:Discover({ { guid = D.guid, name = D.name } })
+    pump()
+    check(find(D, "Seen By C"), "a lost CAP is sent again until heard, and the sync follows")
 end
 
 -- Same guild only.
@@ -264,6 +334,11 @@ do
         "...its store in GuildSpyDB.accountSync")
     check(GuildSpy.AccountSync._test.core(), "...and the protocol runs")
 
+    -- The library's own stored switch says off, ours on: ours wins at start (#40 review).
+    loadAddon({ setup = function() WoW.lasStoredOff = true end })
+    WoW.fire("PLAYER_LOGIN")
+    eq(WoW.las.instances[1].enabled, true, "our setting (on) is passed to the library at start")
+
     -- A library copy without messages mode: no sync at all.
     loadAddon({ setup = function() WoW.lasSnapshots = true end })
     WoW.fire("PLAYER_LOGIN")
@@ -292,7 +367,7 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     local now = function() return time() end
     local B
     B = AS.NewCore({ db = bdb, gs = function(k) if k == KEY then return bgs end end, key = function() return KEY end,
-        now = now, send = function(_, text) WoW.lasDeliver(text, { guid = "Player-1-0000000B", name = "Alt Two" }) end })
+        now = now, send = function(_, text) WoW.lasDeliver(text, { guid = "Player-1-0000000B", name = "Alt Two" }); return true end })
     local t0 = time()
     for i = 1, 3 do Log.Add(bdb, bgs, join("From Alt " .. i, 200 + i, { lo = t0 - 60, hi = t0 }), t0) end
     Log.Add(bdb, bgs, { kind = "ONOTE", guid = "Player-1-00000300", name = "Hidden Note", from = "", to = "x",

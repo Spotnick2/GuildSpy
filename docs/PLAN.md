@@ -152,7 +152,9 @@ matching uses that interval, and it must be **unique**; if it's ambiguous, there
 
 ```
 GuildSpyDB = { version=1, minimap={},
+  accountSync={...},   -- (#37) LibAccountSync's own store (household key, peers): never edit or copy
   settings={ digest=false|nil, levelMin=n|nil, returnDays=n|nil,   -- nil: the default (on, 10, 14)
+             capSound=false|nil, syncAccounts=false|nil,           -- (#34, #37) nil: on
              chat={ [kind]=false } },                               -- a kind's chat line off (#4)
   nextSeq=1, window={ x, y },
   guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,
@@ -160,7 +162,8 @@ GuildSpyDB = { version=1, minimap={},
     ranks = { "Guild Master", ... }, motd = "...",
     members = { [guid] = { name, rank, level, class, note, onote, online, lastSeenAt, missingSince, missingAfter } },
     formers = { [guid] = { name, leftAt, rankName, level } },
-    nextChg=n,     -- (#36) this client's change counter: account sync pages by it
+    nextChg=n,     -- (#36) this client's change counter (never below the clock in ms): account sync pages by it
+    peerMark = { [peerGuid] = n },   -- (#37) per account of mine: its counter I have up to
     log = { { seq, at, approx=bool|nil, kind, guid, name, actor, from, to,
               after=epoch|nil,   -- (#19) the previous scan: a scan-noticed change is in (after, at]
               -- (#36) the observation, docs/SYNC.md §1:

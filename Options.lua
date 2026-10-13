@@ -400,10 +400,7 @@ local sharing = CreateFrame("Frame")
 sharing.name = "Sharing"
 sharing:Hide()              -- see `page`: or its first show is blank
 
-local function ago(t)
-    if not t then return nil end
-    return GuildSpy.Log.Relative and GuildSpy.Log.Relative(t, time()) or (GuildSpy.Log.Ago(time() - t) .. " ago")
-end
+local function ago(t) return GuildSpy.Log.Relative(t, time()) end
 
 -- One line per account the library sees: synced when, or why not.
 function Options.SharingLines()
@@ -416,7 +413,8 @@ function Options.SharingLines()
     for _, p in ipairs(peers) do
         local state
         if p.syncedAt then state = "synced " .. ago(p.syncedAt)
-        elseif p.guild and myKey and p.guild ~= myKey then state = "online, in another guild (not synced)"
+        elseif not myKey then state = "online (this character isn't in a guild: not synced)"
+        elseif p.guild and p.guild ~= myKey then state = "online, in another guild (not synced)"
         elseif not p.guild then state = "online, not in a guild yet (not synced)"
         else state = "online, syncing" end
         lines[#lines + 1] = p.name .. ": " .. state
@@ -425,13 +423,7 @@ function Options.SharingLines()
     return lines
 end
 
-local function sharingLabel(text, template, width)
-    local fs = sharing:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
-    fs:SetJustifyH("LEFT")
-    if width then fs:SetWidth(width) end
-    fs:SetText(text)
-    return fs
-end
+local function sharingLabel(text, template, width) return label(sharing, text, template, width) end
 
 local function buildSharing()
     local title = sharingLabel("Sharing", "GameFontNormalHuge")

@@ -7,13 +7,16 @@
 -- library, the scanner's guild and the catch-up line.
 --
 -- Messages (Wire.lua), all to one peer (SendTo, never a broadcast):
---   CAP  <guildKey>                         my current guild ("" when none)
+--   CAP  <guildKey> <heard>                 my current guild ("" when none); heard: 1 once I
+--                                           have its CAP, so CAPs repeat until both heard
 --   REQ  <rid> <guildKey> <cursor>          "your entries with chg > cursor"
 --   PAGE <rid> <guildKey> <cursor> <next> <more>, then entries
 -- Same guild only (owner): a peer is pulled only when its CAP names my guild;
 -- a REQ or PAGE for another guild is ignored; a guild change drops what's in
--- flight. One page in flight per peer; a PAGE counts only for the request it
--- answers (rid, guild, cursor); the cursor moves only when a whole page arrived.
+-- flight. One page in flight per peer; a PAGE counts only if it continues from
+-- my stored cursor for that peer and guild (a late page still does; one for an
+-- older cursor doesn't), and only from a peer I've asked; the cursor moves only
+-- when a whole page arrived.
 
 local ADDON = ...
 GuildSpy = GuildSpy or {}
@@ -23,8 +26,9 @@ GuildSpy.AccountSync = AS
 local Wire, Log = GuildSpy.Wire, GuildSpy.Log
 
 AS.TAG = "GuildSpy"
-AS.PAGE_BYTES = 12000       -- entries per page, encoded (the library carries up to 16 KB)
-AS.TIMEOUT = 30             -- seconds a request may stay unanswered
+AS.PAGE_BYTES = 6000        -- entries per page, encoded: about 30 game-data frames, under 10 s
+                            -- at ChatThrottleLib's 800 B/s (the library carries up to 16 KB)
+AS.TIMEOUT = 90             -- seconds a request may stay unanswered (a page is slow over Battle.net)
 AS.POLL = 300               -- a pull per peer this often
 AS.CAP_EVERY = 300          -- our CAP to a peer at most this often (sooner when our guild changed)
 
@@ -44,8 +48,9 @@ local Core = {}
 Core.__index = Core
 
 -- o: db (GuildSpyDB-shaped), gs(key) -> that guild's state, key() -> my
--- current guild key or nil, now(), send(guid, text), onReceived(added, key)
--- (optional), onSynced(peer) (optional).
+-- current guild key or nil, now(), send(guid, text) -> true when handed to
+-- the wire, onReceived(added, key) (optional), onChanged() (optional: any
+-- entry added or updated), onSynced(peer) (optional).
 function AS.NewCore(o)
     return setmetatable({ o = o, peers = {}, rid = 0 }, Core)
 end
@@ -60,9 +65,21 @@ function Core:peer(guid, name)
     return p
 end
 
+-- Our CAP; recorded as sent only when the library took it (it answers "not
+-- ready" until the peer's handshake is done, #40 review).
 function Core:sendCap(p)
-    p.capSentAt, p.capKey = self.o.now(), self.o.key() or ""
-    self.o.send(p.guid, Wire.Message("CAP", { p.capKey }))
+    local key = self.o.key() or ""
+    if self.o.send(p.guid, Wire.Message("CAP", { key, p.guild ~= nil and "1" or "0" })) then
+        p.capSentAt, p.capKey = self.o.now(), key
+    end
+end
+
+-- Whether to send our CAP now: never sent, our guild changed, it hasn't
+-- confirmed hearing ours (again after 10 s), or it's been a while.
+function Core:capDue(p, now)
+    if not p.capSentAt or p.capKey ~= (self.o.key() or "") then return true end
+    if not p.heardUs and now - p.capSentAt >= 10 then return true end
+    return now - p.capSentAt >= AS.CAP_EVERY
 end
 
 -- The library's current peers: a CAP to each we haven't told our guild
@@ -73,7 +90,7 @@ function Core:Discover(list)
         if type(s) == "table" and type(s.guid) == "string" then
             seen[s.guid] = true
             local p = self:peer(s.guid, s.name)
-            if not p.capSentAt or p.capKey ~= key or now - p.capSentAt >= AS.CAP_EVERY then self:sendCap(p) end
+            if self:capDue(p, now) then self:sendCap(p) end
         end
     end
     for guid in pairs(self.peers) do if not seen[guid] then self.peers[guid] = nil end end
@@ -90,9 +107,10 @@ function Core:Pull(guid)
     gs.peerMark = type(gs.peerMark) == "table" and gs.peerMark or {}
     local cursor = tonumber(gs.peerMark[guid]) or 0
     self.rid = self.rid + 1
-    p.out = { rid = tostring(self.rid), key = key, cursor = cursor, at = now }
     p.pulledAt = now
-    self.o.send(guid, Wire.Message("REQ", { p.out.rid, key, cursor }))
+    if not self.o.send(guid, Wire.Message("REQ", { tostring(self.rid), key, cursor })) then return false end
+    p.out = { rid = tostring(self.rid), key = key, cursor = cursor, at = now }
+    p.asked = true
     return true
 end
 
@@ -126,8 +144,9 @@ function Core:OnMessage(text, sender)
     local key, now = self.o.key(), self.o.now()
     if kind == "CAP" then
         p.guild = f[1] ~= "" and f[1] or nil
-        -- Tell it ours too, unless we just did with this guild.
-        if not p.capSentAt or p.capKey ~= (key or "") or now - p.capSentAt >= 60 then self:sendCap(p) end
+        p.heardUs = f[2] == "1"
+        -- Tell it ours if it hasn't heard it (or our guild changed).
+        if not p.heardUs or self:capDue(p, now) then self:sendCap(p) end
         self:Pull(sender.guid)
     elseif kind == "REQ" then
         local rid, reqKey, cursor = f[1], f[2], tonumber(f[3])
@@ -137,25 +156,30 @@ function Core:OnMessage(text, sender)
         local entries, nextCursor, more = AS.BuildPage(gs, cursor)
         self.o.send(sender.guid, Wire.Message("PAGE", { rid, key, cursor, nextCursor, more and 1 or 0 }, entries))
     elseif kind == "PAGE" then
-        local rid, pageKey, cursor, nextCursor, more = f[1], f[2], tonumber(f[3]), tonumber(f[4]), f[5] == "1"
-        local out = p.out
-        -- Only the answer to the request in flight, for my current guild.
-        if not (out and rid == out.rid and pageKey == out.key and cursor == out.cursor and key == out.key
-                and nextCursor) then return end
+        local pageKey, cursor, nextCursor, more = f[2], tonumber(f[3]), tonumber(f[4]), f[5] == "1"
+        -- Only from a peer I've asked, for my current guild, continuing from my
+        -- stored cursor: a late page for the request still counts (a page can
+        -- outlast the timeout, #40 review); one for an older cursor doesn't.
+        if not (p.asked and key and pageKey == key and p.guild == key and cursor and nextCursor) then return end
         local gs = self.o.gs(key)
         if not gs then return end
-        local added = {}
+        gs.peerMark = type(gs.peerMark) == "table" and gs.peerMark or {}
+        if cursor ~= (tonumber(gs.peerMark[sender.guid]) or 0) then return end
+        local added, changed = {}, false
+        local batch = Log.NewBatch(gs, now)
         for _, line in ipairs(lines) do
             local e = Wire.ReadEntry(line, ALLOWED)
             if e then
-                local got, why = Log.Receive(self.o.db, gs, e, "acct", nil, now)
+                local got, why = Log.Receive(self.o.db, gs, e, "acct", nil, now, batch)
+                if got then changed = true end
                 if got and (why == "added" or why == "superseded") then added[#added + 1] = got end
             end
         end
-        gs.peerMark = type(gs.peerMark) == "table" and gs.peerMark or {}
+        if changed then Log.Prune(gs, now) end
         gs.peerMark[sender.guid] = nextCursor
         p.out = nil
         if #added > 0 and self.o.onReceived then self.o.onReceived(added, key) end
+        if changed and self.o.onChanged then self.o.onChanged() end
         if more then
             self:Pull(sender.guid)
         else
@@ -224,7 +248,6 @@ local function received(added)
     local mine = quietTimer
     C_Timer.After(AS.QUIET, function() if mine == quietTimer then flush() end end)
     if time() - firstAt >= AS.MAX_WAIT then flush() end
-    if GuildSpy.UI and GuildSpy.UI.Refresh then GuildSpy.UI.Refresh() end
 end
 
 -- The status the Sharing page shows: { { name, syncedAt, guild } } and whether it runs.
@@ -277,12 +300,17 @@ local function start()
         end,
         key = function() return select(2, GuildSpy.Scanner.Current()) end,
         now = time,
-        send = function(guid, text) pcall(inst.SendTo, guid, text) end,
+        send = function(guid, text)
+            local ok, n = pcall(inst.SendTo, guid, text)
+            return ok and n == 1                               -- 0: not ready yet; nil: not sent
+        end,
         onReceived = received,
+        onChanged = function() if GuildSpy.UI and GuildSpy.UI.Refresh then GuildSpy.UI.Refresh() end end,
         onSynced = function() if GuildSpy.Options and GuildSpy.Options.RefreshSharing then GuildSpy.Options.RefreshSharing() end end,
     })
     inst.OnMessage(function(payload, sender) if AS.Enabled() then core:OnMessage(payload, sender) end end)
-    if not AS.Enabled() and inst.SetEnabled then pcall(inst.SetEnabled, false) end
+    -- One switch: ours, passed on either way (the library keeps its own copy, #40 review).
+    if inst.SetEnabled then pcall(inst.SetEnabled, AS.Enabled()) end
     C_Timer.NewTicker(AS.TICK, tick)
 end
 

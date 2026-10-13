@@ -57,7 +57,7 @@ do
     check(e.trust == "guild" and e.reporter == "Bo Kay" and e.ns == "g:Bo Kay" and e.here == false,
         "...as Bo's report, not this account's")
     eq(Log.Source(e), "Reported by Bo Kay", "...and says so")
-    check(e.seq == 1 and e.chg == 1, "...with a local seq and change")
+    check(e.seq == 1 and type(e.chg) == "number" and e.chg >= math.floor(time() * 1000), "...with a local seq and change")
     e, why = Log.Receive(db, gs, obs(), "guild", "Bo Kay", NOW)
     check(not e and why == "known", "the same report again: ignored")
     e, why = Log.Receive(db, gs, obs({ rev = 2, actor = "Enzo Matrix" }), "guild", "Bo Kay", NOW)
