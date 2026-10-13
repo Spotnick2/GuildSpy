@@ -145,7 +145,11 @@ restart (the script says so); otherwise `/reload`.
 
 CurseForge's packager builds from the tag webhook, reading `.pkgmeta`; no API key lives here.
 `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Every tag needs a player-facing
-`CHANGELOG.md` section (`## vX.Y.Z`). `.github/workflows/package-check.yml` dry-runs the BigWigs
+`CHANGELOG.md` section (`## vX.Y.Z`). The same version is also a **GitHub release** (TimeIsMoney's
+model): run the package check on the tag (`gh workflow run package-check.yml --ref vX.Y.Z`),
+download its `guildspy-package` artifact (`GuildSpy-vX.Y.Z.zip`), then
+`gh release create vX.Y.Z <zip> --title "GuildSpy X.Y.Z" --notes-file <notes>`, the notes being
+that version's changelog section. `.github/workflows/package-check.yml` dry-runs the BigWigs
 packager on PRs and `main` and checks the zip's shape. Check the published zip by hand afterwards.
 
 ## Conventions
