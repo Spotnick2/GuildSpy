@@ -782,9 +782,10 @@ local function buildProfessions()
     end)
     prof.search = search
 
-    -- Column titles, as retail's roster.
+    -- Column titles, as retail's roster. The class icon's column is narrower
+    -- than "Class", which ran into "Name" in game: it has no title.
     local c = UI.PROF_COLS
-    for _, h in ipairs({ { "Lvl", c.level + 4 }, { "Class", c.class - 4 }, { "Name", c.name }, { "Zone", c.zone },
+    for _, h in ipairs({ { "Lvl", c.level + 4 }, { "Name", c.name }, { "Zone", c.zone },
                          { "Rank", c.rank }, { "Note", c.note } }) do
         local fs = font(prof, "GameFontHighlightSmall", "LEFT")
         fs:SetPoint("TOPLEFT", prof, "TOPLEFT", h[2] + 4, -36)
