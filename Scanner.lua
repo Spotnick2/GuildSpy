@@ -212,11 +212,12 @@ end
 
 function Scanner.Print(entry)
     if not S.digestShown then return end                  -- catch-up goes in the digest
+    -- The fanfare is its own setting: a muted level-up line doesn't mute it (#35 review).
+    if Log.IsCap(entry) then Scanner.CapSound() end
     local chat = settings().chat or {}
     if chat[entry.kind] == false then return end
     if not Log.Visible(entry, canView()) then return end
     print("|cff7fd4ffGuildSpy:|r " .. Log.Line(entry, now()))
-    if Log.IsCap(entry) then Scanner.CapSound() end
 end
 
 -- The last GUILD_MOTD text, owned by the guild it was heard in. At login it

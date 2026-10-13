@@ -100,6 +100,15 @@ rosterUpdate()
 check(chatHas("reached level 60, the level cap!"), "a live level-up to the cap says so")
 eq(#WoW.sounds, 1, "...with one fanfare")
 
+-- Level-up chat lines off, the fanfare on: it still plays (#35 review).
+GuildSpyDB.settings.chat.LEVEL = false
+WoW.sounds, WoW.chat = {}, {}
+find("Cy Dee").level = 60
+rosterUpdate()
+check(not chatHas("Cy Dee reached level 60"), "level-up lines off: no chat line")
+eq(#WoW.sounds, 1, "...but the fanfare still plays")
+GuildSpyDB.settings.chat.LEVEL = nil
+
 -- The setting: off plays nothing; ticking it plays it once (to hear it).
 local O = GuildSpy.Options
 eq(O.Get("capSound"), true, "the fanfare is on by default")
