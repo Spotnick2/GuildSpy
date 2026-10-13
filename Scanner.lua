@@ -377,7 +377,7 @@ function Scanner.MaybeDigest(deadline)
         for _, line in ipairs(lines) do print(line) end
         -- One fanfare for a summary holding any level-up to the cap, however many.
         for _, e in ipairs(gs.log or {}) do
-            if e.seq > (gs.shownSeq or 0) and Log.IsCap(e) then Scanner.CapSound(); break end
+            if e.seq > (gs.shownSeq or 0) and e.here ~= false and Log.IsCap(e) then Scanner.CapSound(); break end
         end
         if Roster.HasMissing(gs) then
             say("still confirming who left; it'll show as it's confirmed.")

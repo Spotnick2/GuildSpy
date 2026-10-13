@@ -220,6 +220,12 @@ do  -- Imports never enter the login digest; my own do.
     local text = table.concat(lines, "\n")
     check(text:find("Mine joined", 1, true), "the digest has my own")
     check(not text:find("Ann Lee", 1, true), "...and none of the imports")
+    -- A reported level-cap doesn't play the summary's fanfare: the summary is about my own scans.
+    local db2, gs2 = store()
+    gs2.shownSeq = 0
+    Log.Receive(db2, gs2, obs({ uid = "cap:1", from = 59, to = 60 }), "guild", "Bo Kay", NOW)
+    local lines2 = Log.Digest(gs2, false, NOW)
+    eq(#lines2, 0, "a reported cap level-up isn't in the summary")
     -- Search finds a report by its reporter.
     local found = Log.Filter(gs, { query = "bo kay" }, NOW)
     check(#found == 1 and found[1].reporter == "Bo Kay", "search finds a report by who reported it")
