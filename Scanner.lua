@@ -92,6 +92,23 @@ local function validGuild(gs)
     if type(gs.formers) ~= "table" then gs.formers = {} end
     if type(gs.ranks) ~= "table" then gs.ranks = {} end
     if type(gs.shownSeq) ~= "number" then gs.shownSeq = 0 end
+    if gs.nextChg ~= nil and type(gs.nextChg) ~= "number" then gs.nextChg = nil end
+    -- A guildmate's report whose identity is damaged is dropped: migrating it
+    -- would make it mine (#39 review). My own damaged uid is given a new one.
+    local kept = {}
+    for _, e in ipairs(gs.log) do
+        local guild = e.trust == "guild" or e.ns ~= nil
+        local idOk = type(e.uid) == "string" and (e.ns == nil or (type(e.ns) == "string" and e.ns:find("^g:.+")))
+        if guild and (not idOk or e.trust ~= "guild") then
+            -- dropped
+        else
+            if e.uid ~= nil and type(e.uid) ~= "string" then e.uid = nil end
+            kept[#kept + 1] = e
+        end
+    end
+    gs.log = kept
+    -- Observations (#36): legacy entries get their identity once.
+    Log.Migrate(gs)
     if gs.viewedSeq ~= nil and type(gs.viewedSeq) ~= "number" then gs.viewedSeq = nil end
     return gs
 end
@@ -149,7 +166,7 @@ function Scanner.Enrich()
     for _, item in ipairs(S.enrichable) do
         if t - item.recordedAt <= Scanner.ENRICH_WINDOW then
             local attr = attribute(item.ev)
-            if attr then Log.Enrich(item.entry, attr) else kept[#kept + 1] = item end
+            if attr then Log.Enrich(item.entry, attr, S.state) else kept[#kept + 1] = item end
         end
     end
     S.enrichable = kept
@@ -370,7 +387,7 @@ function Scanner.MaybeDigest(deadline)
         for _, line in ipairs(lines) do print(line) end
         -- One fanfare for a summary holding any level-up to the cap, however many.
         for _, e in ipairs(gs.log or {}) do
-            if e.seq > (gs.shownSeq or 0) and Log.IsCap(e) then Scanner.CapSound(); break end
+            if e.seq > (gs.shownSeq or 0) and e.here ~= false and Log.IsCap(e) then Scanner.CapSound(); break end
         end
         if Roster.HasMissing(gs) then
             say("still confirming who left; it'll show as it's confirmed.")
@@ -390,7 +407,9 @@ function Scanner.PrintLog(n)
     for i = #gs.log, 1, -1 do
         local e = gs.log[i]
         if Log.Visible(e, canView()) then
-            table.insert(out, 1, date("%m-%d %H:%M", e.at) .. (e.approx and "~ " or "  ") .. Log.Line(e, now()))
+            local src = Log.Source(e)
+            table.insert(out, 1, date("%m-%d %H:%M", e.at) .. (e.approx and "~ " or "  ") .. Log.Line(e, now())
+                .. (src and (" |cff8f8f8f(" .. Log.Esc(src:sub(1, 1):lower() .. src:sub(2)) .. ")|r") or ""))
             shown = shown + 1
             if shown >= n then break end
         end

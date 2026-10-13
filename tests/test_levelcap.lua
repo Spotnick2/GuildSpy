@@ -139,4 +139,18 @@ WoW.sounds = {}
 login(db, G)
 eq(#WoW.sounds, 0, "the summary off: no sound either")
 
+-- A guildmate's report of a cap level-up (#36) doesn't play the summary's fanfare:
+-- the summary is about this account's own scans.
+G = newGuild()
+login(nil, G)
+db = GuildSpyDB
+local gsr = db.guilds["Parse Partout-Forever"]
+local t = time()
+check(GuildSpy.Log.Receive(db, gsr, { uid = "rep:1", rev = 1, kind = "LEVEL", guid = "Player-1-0000000F",
+    name = "Far Away", from = 59, to = 60, at = t - 60, obs = t - 60, lo = t - 120, hi = t - 60,
+    origin = "Bo Kay" }, "guild", "Bo Kay", t), "(a guildmate reports a cap level-up)")
+WoW.sounds = {}
+login(db, G)
+eq(#WoW.sounds, 0, "a reported cap level-up: no fanfare with the summary")
+
 done("test_levelcap")

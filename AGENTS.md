@@ -155,8 +155,10 @@ packager on PRs and `main` and checks the zip's shape. Check the published zip b
 ## Conventions
 
 - **Right-size for a single maintainer.** Prefer the simplest thing that works. No speculative
-  config, no edge-case handling nobody asked for. Peer sync and the GRM listener are **deferred** by
-  the owner's decision (`docs/PLAN.md` "Deferred").
+  config, no edge-case handling nobody asked for. The GRM listener is **deferred** by the owner's
+  decision (`docs/PLAN.md` "Deferred"). Sync is designed in `docs/SYNC.md`: its principles
+  (observations never rewritten by another observer, provenance bound to the transport, digest
+  about this account's own scans, deterministic retention) are rules, as the design rules above.
 - **Match the surrounding code**; lift helpers from the siblings (`..\Gnomesweeper`, `..\AltStable`,
   `..\GlassPanel` `Compat.lua`) instead of rewriting them.
 - **Boy-Scout, bounded.** Small cleanups only in files you're already editing; refactors in their

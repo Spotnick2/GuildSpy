@@ -227,6 +227,12 @@ check(not GameTooltip:IsShown(), "permission lost: the open tooltip goes")
 draw(nr, annRow)
 nr._scripts.OnEnter(nr)
 check(tipHas("main tank") and not tipHas("raid lead"), "hovered again: the public note, no officer note")
+-- A note with markup is shown as text in the tooltip (#39 review).
+G.members[2].note = "hi |cffff0000FAKE"
+WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
+draw(nr, annRow)
+nr._scripts.OnEnter(nr)
+check(tipHas("hi ||cffff0000FAKE"), "a note's markup is escaped in the tooltip")
 
 -- Leaving the guild with the window open: no old rows, no old boundary.
 local keep = WoW.guild
