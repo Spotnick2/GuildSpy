@@ -90,6 +90,7 @@ WoW.chat = {}
 WoW.slash("/gspy log")
 local win = T.window()
 check(win and win:IsShown(), "/gspy log opens the window")
+eq(win.glass and win.glass.size, "thin", "...in the clean glass: thin rims (LibGlass r6, #46)")
 local panel = T.panel()
 eq(#panel.rows, 3, "...listing what this character may see")
 eq(panel.box._dataProvider:GetSize(), 4, "...handed to the scroll box under a \"New\" heading")

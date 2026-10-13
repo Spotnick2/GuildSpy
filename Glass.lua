@@ -9,4 +9,6 @@
 
 local ADDON = ...
 GuildSpy = GuildSpy or {}
-GuildSpy.Glass = LibStub("LibGlass-1.0"):New()
+-- The clean material (LibGlass r6, owner): thin rectangular rims, no grain,
+-- softer gloss and shading. The body keeps the default tint's opacity.
+GuildSpy.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })

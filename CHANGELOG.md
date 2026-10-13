@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A cleaner glass** for the log window (LibGlass r6): thin rims, no grain, softer shine.
+
 ## v0.2.0
 
 Sharing: between your own accounts, and with guildmates who use GuildSpy. Sharing gets its real
