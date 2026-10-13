@@ -28,7 +28,7 @@ Log.COLORS = {
     NAME = "e6d19e", RETURN = "00ffde", MOTD = "00ccff",
 }
 -- Reaching the level cap (#34): a LEVEL entry to the cap, decided when shown
--- (so a new cap re-reads old entries). GRM's "Level Cap! Hurray!" is the model.
+-- against this session's cap (API.LevelCap). GRM's "Level Cap! Hurray!" is the model.
 Log.CAP_COLOR = "ffd100"
 function Log.IsCap(e)
     if e.kind ~= "LEVEL" then return false end

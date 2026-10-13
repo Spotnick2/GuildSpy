@@ -34,18 +34,21 @@ local function find(name)
     for _, m in ipairs(WoW.guild.members) do if m.name == name then return m end end
 end
 
--- The cap, from the client.
+-- The cap, from the client: asked once per session (it moves only with a client update).
 loadAddon()
-local API, Log = GuildSpy.API, GuildSpy.Log
+local API = GuildSpy.API
+WoW.capCalls = 0
 eq(API.LevelCap(), 60, "the cap: the expansion's max level")
-WoW.capFns.expansion = false
-eq(API.LevelCap(), 60, "...else the player's")
-WoW.capFns.player = false
-eq(API.LevelCap(), nil, "...neither: no cap")
-WoW.capFns.expansion, WoW.capFns.player = true, true
-WoW.levelCap = 0
-eq(API.LevelCap(), nil, "a cap that isn't a positive number is no cap")
-WoW.levelCap = 60
+for _ = 1, 5 do API.LevelCap() end
+eq(WoW.capCalls, 1, "...asked once, then kept for the session")
+loadAddon({ setup = function() WoW.capFns.expansion = false end })
+eq(GuildSpy.API.LevelCap(), 60, "...else the player's")
+loadAddon({ setup = function() WoW.capFns.expansion, WoW.capFns.player = false, false end })
+eq(GuildSpy.API.LevelCap(), nil, "...neither: no cap")
+loadAddon({ setup = function() WoW.levelCap = 0 end })
+eq(GuildSpy.API.LevelCap(), nil, "a cap that isn't a positive number is no cap")
+loadAddon()
+local Log = GuildSpy.Log
 
 -- The words: in chat and in the window, only at the cap.
 local cap = { kind = "LEVEL", name = "Ann Lee", from = 59, to = 60 }
@@ -59,9 +62,8 @@ eq(Log.Plain(Log.Row(cap, 0)), "Ann Lee reached level 60, the level cap!", "the 
 check(Log.Row(cap, 0):find("|cffffd100level 60, the level cap!|r", 1, true), "...in gold")
 eq(Log.Plain(Log.Row({ kind = "LEVEL", name = "Bo Kay", from = 55, to = 60 }, 0)),
     "Bo Kay leveled from 55 to level 60, the level cap!", "several levels at once to the cap")
-WoW.capFns.expansion, WoW.capFns.player = false, false
-eq(Log.Plain(Log.Line(cap, 0)), "Ann Lee reached level 60", "no cap from the client: the usual words")
-WoW.capFns.expansion, WoW.capFns.player = true, true
+loadAddon({ setup = function() WoW.capFns.expansion, WoW.capFns.player = false, false end })
+eq(GuildSpy.Log.Plain(GuildSpy.Log.Line(cap, 0)), "Ann Lee reached level 60", "no cap from the client: the usual words")
 
 -- The summary: a cap level-up before the other level-ups, and one fanfare however many.
 local G = newGuild()

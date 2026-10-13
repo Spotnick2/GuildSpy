@@ -370,6 +370,7 @@ function GetTime() return WoW.now end
 function time(t) if t then return os.time(t) end return WoW.epoch end
 function GetMaxLevelForPlayerExpansion()
     if not WoW.capFns.expansion then error("not on this client") end
+    WoW.capCalls = (WoW.capCalls or 0) + 1
     return WoW.levelCap
 end
 function GetMaxPlayerLevel()

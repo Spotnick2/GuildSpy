@@ -33,13 +33,17 @@ function API.SafeFrame(ftype, parent, template, proof)
 end
 
 -- The level cap (#34): the expansion's max level, else the player's. Both are
--- in the 1.60.1.70338 dump; nil when neither answers a positive number.
+-- in the 1.60.1.70338 dump; nil when neither answers a positive number. Asked
+-- once per session: it only moves with a client update (a new session), and
+-- every chat line and row asks for it.
+local levelCap
 function API.LevelCap()
+    if levelCap then return levelCap end
     for _, name in ipairs({ "GetMaxLevelForPlayerExpansion", "GetMaxPlayerLevel" }) do
         local fn = rawget(_G, name)
         if type(fn) == "function" then
             local ok, v = pcall(fn)
-            if ok and type(v) == "number" and v > 0 then return v end
+            if ok and type(v) == "number" and v > 0 then levelCap = v; return v end
         end
     end
     return nil
