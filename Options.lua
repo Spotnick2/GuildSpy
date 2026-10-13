@@ -412,7 +412,8 @@ function Options.SharingLines()
     if not running then return { "Not available: Battle.net sync didn't start on this client." } end
     for _, p in ipairs(peers) do
         local state
-        if p.syncedAt then state = "synced " .. ago(p.syncedAt)
+        -- A sync counts only while we still share the guild it was for (#40 Codex review).
+        if p.syncedAt and myKey and p.syncedKey == myKey and p.guild == myKey then state = "synced " .. ago(p.syncedAt)
         elseif not myKey then state = "online (this character isn't in a guild: not synced)"
         elseif p.guild and p.guild ~= myKey then state = "online, in another guild (not synced)"
         elseif not p.guild then state = "online, not in a guild yet (not synced)"

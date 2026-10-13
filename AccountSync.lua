@@ -50,7 +50,8 @@ Core.__index = Core
 -- o: db (GuildSpyDB-shaped), gs(key) -> that guild's state, key() -> my
 -- current guild key or nil, now(), send(guid, text) -> true when handed to
 -- the wire, onReceived(added, key) (optional), onChanged() (optional: any
--- entry added or updated), onSynced(peer) (optional).
+-- entry added or updated), onStatus() (optional: a peer synced, came, went or
+-- named another guild).
 function AS.NewCore(o)
     return setmetatable({ o = o, peers = {}, rid = 0 }, Core)
 end
@@ -89,12 +90,18 @@ function Core:Discover(list)
     for _, s in ipairs(list or {}) do
         if type(s) == "table" and type(s.guid) == "string" then
             seen[s.guid] = true
+            local fresh = not self.peers[s.guid]
             local p = self:peer(s.guid, s.name)
+            if fresh then self:status() end
             if self:capDue(p, now) then self:sendCap(p) end
         end
     end
-    for guid in pairs(self.peers) do if not seen[guid] then self.peers[guid] = nil end end
+    for guid in pairs(self.peers) do
+        if not seen[guid] then self.peers[guid] = nil; self:status() end
+    end
 end
+
+function Core:status() if self.o.onStatus then self.o.onStatus() end end
 
 -- Ask a peer for the next page, if it shares my guild and nothing is in flight.
 function Core:Pull(guid)
@@ -143,7 +150,9 @@ function Core:OnMessage(text, sender)
     local p = self:peer(sender.guid, sender.name)
     local key, now = self.o.key(), self.o.now()
     if kind == "CAP" then
+        local was = p.guild
         p.guild = f[1] ~= "" and f[1] or nil
+        if p.guild ~= was then self:status() end
         p.heardUs = f[2] == "1"
         -- Tell it ours if it hasn't heard it (or our guild changed).
         if not p.heardUs or self:capDue(p, now) then self:sendCap(p) end
@@ -183,8 +192,9 @@ function Core:OnMessage(text, sender)
         if more then
             self:Pull(sender.guid)
         else
-            p.syncedAt = now
-            if self.o.onSynced then self.o.onSynced(p) end
+            -- For this guild: after a guild change it no longer says synced (#40 Codex review).
+            p.syncedAt, p.syncedKey = now, key
+            self:status()
         end
     end
 end
@@ -254,7 +264,7 @@ end
 function AS.Status()
     local out = {}
     for _, p in pairs(core and core.peers or {}) do
-        out[#out + 1] = { name = p.name or "?", syncedAt = p.syncedAt, guild = p.guild }
+        out[#out + 1] = { name = p.name or "?", syncedAt = p.syncedAt, syncedKey = p.syncedKey, guild = p.guild }
     end
     table.sort(out, function(a, b) return a.name < b.name end)
     return out, inst ~= nil and AS.Enabled()
@@ -272,6 +282,7 @@ local function tick()
     if key ~= lastKey then
         lastKey = key
         core:GuildChanged()
+        core:status()
     end
     local ok, list = pcall(inst.Peers)
     core:Discover(ok and list or {})
@@ -306,7 +317,7 @@ local function start()
         end,
         onReceived = received,
         onChanged = function() if GuildSpy.UI and GuildSpy.UI.Refresh then GuildSpy.UI.Refresh() end end,
-        onSynced = function() if GuildSpy.Options and GuildSpy.Options.RefreshSharing then GuildSpy.Options.RefreshSharing() end end,
+        onStatus = function() if GuildSpy.Options and GuildSpy.Options.RefreshSharing then GuildSpy.Options.RefreshSharing() end end,
     })
     inst.OnMessage(function(payload, sender) if AS.Enabled() then core:OnMessage(payload, sender) end end)
     -- One switch: ours, passed on either way (the library keeps its own copy, #40 review).

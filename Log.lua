@@ -649,9 +649,16 @@ function Log.Receive(db, gs, inc, via, sender, now, batch)
     gs.log[#gs.log + 1] = e
     if batch then
         local list = batch.byUid[e.uid] or {}
+        if twin then
+            -- The guild copy leaves its quota and the index; mine takes a place
+            -- in my quota, like any other (#40 Codex review).
+            for i, x in ipairs(list) do if x == twin then table.remove(list, i); break end end
+            local _, gdays = limits("guild")
+            if now - observed(twin) <= gdays * 86400 then batch.count.guild = batch.count.guild - 1 end
+        end
         list[#list + 1] = e
         batch.byUid[e.uid] = list
-        if not twin then batch.count[quotaOf(e)] = batch.count[quotaOf(e)] + 1 end
+        batch.count[quotaOf(e)] = batch.count[quotaOf(e)] + 1
     else
         Log.Prune(gs, now)
     end

@@ -405,6 +405,23 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     check(status:find("Alt Two: synced", 1, true), "the Sharing page shows the other account, synced")
     local sharing = O._test.sharing
     sharing:Show()
+    -- An open page follows the other account into another guild, and back (#40 Codex review).
+    WoW.lasDeliver(Wire.Message("CAP", { "Other Guild-Forever", "1" }), { guid = "Player-1-0000000B", name = "Alt Two" })
+    check(sharing.status:GetText():find("Alt Two: online, in another guild", 1, true),
+        "the other account moved guilds: the open page says so, not synced")
+    WoW.lasDeliver(Wire.Message("CAP", { KEY, "1" }), { guid = "Player-1-0000000B", name = "Alt Two" })
+    check(sharing.status:GetText():find("Alt Two: synced", 1, true), "...back in my guild: the sync for it stands")
+    -- A sync for another guild doesn't count in this one.
+    A._test.core().peers["Player-1-0000000B"].syncedKey = "Other Guild-Forever"
+    check(not table.concat(O.SharingLines(), "\n"):find("synced", 1, true), "a sync for another guild isn't shown as synced")
+    A._test.core().peers["Player-1-0000000B"].syncedKey = KEY
+    -- It logs off: the open page drops it.
+    WoW.lasPeers = {}
+    A._test.tick()
+    check(not sharing.status:GetText():find("Alt Two", 1, true), "the other account left: the open page drops it")
+    WoW.lasPeers = { { guid = "Player-1-0000000B", name = "Alt Two", proven = "bnet" } }
+    A._test.tick()
+    check(sharing.status:GetText():find("Alt Two", 1, true), "...and shows it when it's back")
     check(sharing.controls.syncAccounts.check:GetChecked(), "the switch is on by default")
     O.Set("syncAccounts", false)
     eq(GuildSpyDB.settings.syncAccounts, false, "off: saved")
