@@ -27,6 +27,16 @@ Log.COLORS = {
     RANK = "ffffff", RANKS = "ffffff", LEVEL = "3d9bff", NOTE = "ff99ff", ONOTE = "ff18ed",
     NAME = "e6d19e", RETURN = "00ffde", MOTD = "00ccff",
 }
+-- Reaching the level cap (#34): a LEVEL entry to the cap, decided when shown
+-- against this session's cap (API.LevelCap). GRM's "Level Cap! Hurray!" is the model.
+Log.CAP_COLOR = "ffd100"
+function Log.IsCap(e)
+    if e.kind ~= "LEVEL" then return false end
+    local api = GuildSpy.API
+    local cap = api and api.LevelCap and api.LevelCap()
+    return cap ~= nil and e.to == cap
+end
+
 -- Digest order: membership, then rank, then notes, then levels.
 Log.PRIORITY = { LEAVE = 1, JOIN = 2, REJOIN = 2, PROMOTE = 3, DEMOTE = 3, RANK = 3, RANKS = 3, NAME = 4,
                  RETURN = 5, ONOTE = 6, NOTE = 7, MOTD = 8, LEVEL = 9 }
@@ -124,6 +134,10 @@ function Log.Text(e, now)
         return n .. "'s officer note: " .. quote(e.from) .. " -> " .. quote(e.to)
     elseif k == "LEVEL" then
         local gained = (e.to or 0) - (e.from or 0)
+        if Log.IsCap(e) then
+            return n .. " reached |cff" .. Log.CAP_COLOR .. "level " .. tostring(e.to) .. ", the level cap!|r"
+                .. (gained > 1 and (" (+" .. gained .. ")") or "")
+        end
         return n .. " reached level " .. tostring(e.to) .. (gained > 1 and (" (+" .. gained .. ")") or "")
     elseif k == "NAME" then
         return who(e.from, e.class) .. " is now " .. n
@@ -243,6 +257,11 @@ function Log.Row(e, now, classOf)
         return n .. " " .. what .. ": " .. paint(hi, quote(e.to))
     elseif k == "LEVEL" then
         local gained = (e.to or 0) - (e.from or 0)
+        if Log.IsCap(e) then
+            local capped = paint(Log.CAP_COLOR, "level " .. tostring(e.to) .. ", the level cap!")
+            if gained > 1 then return n .. " leveled from " .. e.from .. " to " .. capped end
+            return n .. " reached " .. capped
+        end
         if gained > 1 then return n .. " leveled from " .. e.from .. " to " .. paint(hi, tostring(e.to)) end
         return n .. " reached level " .. paint(hi, tostring(e.to))
     elseif k == "NAME" then
@@ -417,8 +436,10 @@ function Log.Digest(gs, canViewOfficer, now)
     end
     local since = gs.shownAt and (" since " .. Log.Ago(now - gs.shownAt) .. " ago") or ""
     local lines = { "|cff7fd4ffGuildSpy|r" .. since .. ": " .. table.concat(parts, ", ") .. " " .. Log.OPEN_LINK }
+    -- A level-up to the cap comes before the other level-ups (#34).
+    local function prio(e) return Log.IsCap(e) and (Log.PRIORITY.LEVEL - 0.5) or Log.PRIORITY[e.kind] or 99 end
     table.sort(fresh, function(a, b)
-        local pa, pb = Log.PRIORITY[a.kind] or 99, Log.PRIORITY[b.kind] or 99
+        local pa, pb = prio(a), prio(b)
         if pa ~= pb then return pa < pb end
         return a.seq < b.seq
     end)
