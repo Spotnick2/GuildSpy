@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
+
+Sharing: between your own accounts, and with guildmates who use GuildSpy. Sharing gets its real
+test on the Forever beta, between players: reports of what arrives, or doesn't, are welcome.
 
 - **Sync between your accounts.** While another of your WoW accounts is online in the same guild,
   the two share their logs over Battle.net: what one saw while the other was offline shows up on
