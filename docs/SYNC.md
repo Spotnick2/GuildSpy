@@ -81,10 +81,13 @@ it). Two namespaces never alias each other.
 
 ## 4. Account sync (LibAccountSync, complete)
 
-- `.pkgmeta` external `Libs/LibAccountSync-1.0` pinned `r5` with its ignore list; TOC line before
-  our files; tests load the real library (`..\LibAccountSync`; CI fetches the pin). One instance,
-  tag `GuildSpy`, `messages = true` (else disabled). Store `GuildSpyDB.accountSync` (GuildSpy has
-  no file-transfer feature, so AltStableSync's separate-SV reason doesn't apply).
+- **Embedded in GuildSpy's own `Libs\LibAccountSync-1.0`** (owner, 2026-10-12): no separate
+  addon (no AltStableSyncLink-style plugin). A `.pkgmeta` external pinned `r5` with its ignore
+  list, gitignored like LibGlass, deployed by `..\LibAccountSync\Tools\deploy.ps1 -Addon GuildSpy`
+  from `Tools/deploy.ps1`; its TOC line before our files; tests load the real library
+  (`..\LibAccountSync`; CI fetches the pin). One instance, tag `GuildSpy`, `messages = true` (else
+  disabled). Store `GuildSpyDB.accountSync`, in GuildSpy's own saved variables (GuildSpy has no
+  file-transfer feature, so AltStableSync's separate-SV reason doesn't apply).
 - **Capability:** `CAP|1` to every `Peers()` entry on each discovery pass (login, peer change,
   every 5 min) until answered; forgotten when the peer leaves.
 - **Pull by change counter, one page in flight per peer and guild:**
