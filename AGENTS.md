@@ -166,7 +166,8 @@ packager on PRs and `main` and checks the zip's shape. Check the published zip b
 
 - **Every change goes through an issue and a pull request, always** (owner's decision):
   issue → branch → PR (`Closes #N`) → review posted on the PR (routed by `$wow-addon-review`;
-  Codex, or Fable when Codex is unavailable) → the owner merges.
+  Codex, or Fable when Codex is unavailable) → the owner merges. **The owner runs the PR
+  review**; the agent that opened the PR never starts one itself, and addresses what is posted.
   `docs/WORKFLOW.md` has the loop, stacked PRs, and the review recipe. Repo:
   `github.com/Spotnick2/GuildSpy` (private until release).
 - Branch off `main`, named for the work (`phase2/log-window`). Never commit directly to `main` (the
