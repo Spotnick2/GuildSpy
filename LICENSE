@@ -40,3 +40,11 @@ this MIT licence does not cover. Each library's own notice is in its folder.
   LibGlass-1.0         Spotnick2. MIT licence, full text in
                        Libs/LibGlass-1.0/LICENSE. The glass material, embedded
                        by the packager from github.com/Spotnick2/LibGlass.
+  LibAccountSync-1.0   Spotnick2. MIT licence, full text in
+                       Libs/LibAccountSync-1.0/LICENSE. Sync between your own
+                       accounts over Battle.net, embedded by the packager from
+                       github.com/Spotnick2/LibAccountSync. It bundles:
+    ChatThrottleLib    Mikk. Public domain (its header). Paces addon messages:
+                       LibAccountSync's, and GuildSpy's to the guild.
+                       Libs/LibAccountSync-1.0/ChatThrottleLib/.
+    LibStub            As above, its own copy: Libs/LibAccountSync-1.0/LibStub/.

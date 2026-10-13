@@ -17,7 +17,9 @@ nowhere at all. GuildSpy watches the roster and tells you.
 ![The log window, in the guild window's GuildSpy tab](https://raw.githubusercontent.com/Spotnick2/GuildSpy/main/docs/screenshots/log-window.png)
 
 It is the informational half of Guild Roster Manager and nothing else. **GuildSpy only reads.** It
-never changes a rank, a note or a member, and it sends nothing to anyone.
+never changes a rank, a note or a member. It shares two ways, and both can be turned off: your
+log goes to your other accounts (with the guildmates' reports it holds), and only what this
+character saw itself goes to guildmates who use GuildSpy.
 
 ## What it tells you
 
@@ -31,6 +33,8 @@ never changes a rank, a note or a member, and it sends nothing to anyone.
 - **Name changes.**
 - **Members back after a long absence**: two weeks away by default.
 - **A new message of the day.**
+- **What you missed while offline**, from your other accounts and from guildmates with GuildSpy who
+  were online at the time.
 
 ## Live, and while you were away
 
@@ -47,7 +51,7 @@ a key binding. It's styled like the guild roster.
 
 - **What's new at a glance:** a line counting what changed since you last looked, with New and
   Earlier sections. **Mark all as read** when you're done.
-- **Filter by type:** Members, Ranks, Notes, Levels, MOTD.
+- **Filter by type:** Members, Ranks, Notes, Levels, MOTD, and **Reports** (what guildmates told you).
 - **Filter by time:** today, the last 7 or 30 days, or all history.
 - **Filter by rank:** handy when your guild uses ranks as raid teams. A rank shows who is in it
   now, who left from it, and who moved in or out of it.
@@ -113,6 +117,12 @@ The key binding is under **Key Bindings > GuildSpy**, with no key set by default
   and 1,500 changes per guild, for up to 5 guilds.
 - **Light on the game.** It asks the server for the roster once a minute, the same request the
   guild window makes.
+- **Your accounts sync completely, but only together.** Two of your accounts share their logs only
+  while both are online, in the same guild.
+- **Guildmates' reports are best effort.** They come only from guildmates online with GuildSpy, each
+  marked with who reported it, and only what that guildmate saw themselves. Never officer notes,
+  the message of the day or the rank list. Turn sharing off, or choose whose reports you take, under
+  Sharing.
 
 ## Found a bug? Have an idea?
 
@@ -121,15 +131,20 @@ guilds get found**: [open an issue](https://github.com/Spotnick2/GuildSpy/issues
 error (turn them on with `/console scriptErrors 1`, or use BugSack) and the output of
 `/gspy status` help the most. Ideas are welcome too.
 
+**Sharing is new in 0.2.0** and gets its real test on the Forever beta, between players. What
+arrives from guildmates (or doesn't), and anything odd in "reported by" lines, is especially worth
+a report.
+
 ## Credits
 
 - **The idea** is the informational side of
   [Guild Roster Manager](https://www.curseforge.com/wow/addons/guild-roster-manager): what it
   watches and how. No code is copied.
 - **Libraries**, embedded under their own licences: LibStub, CallbackHandler-1.0,
-  LibDataBroker-1.1 and LibDBIcon-1.0. Their authors and licences are listed in
+  LibDataBroker-1.1, LibDBIcon-1.0 and ChatThrottleLib. Their authors and licences are listed in
   [LICENSE](https://github.com/Spotnick2/GuildSpy/blob/main/LICENSE).
 - **The glass** is LibGlass, the material shared by the Glass addons.
+- **Account sync** is LibAccountSync, shared with AltStable.
 
 ## Development
 
