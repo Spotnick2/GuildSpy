@@ -54,6 +54,8 @@ local tipOwner                 -- the row or summary whose tooltip is up
 
 local function canView() return API.CanViewOfficerNote() == true end
 local function current() return GuildSpy.Scanner.Current() end
+-- Guildmates' reports set to "Never" (#38): out of the counts and every tab but Reports.
+local function hideReports() return GuildSpy.GuildSync ~= nil and GuildSpy.GuildSync.ReportsMode() == "never" end
 
 -- The highest seq this character can see: what "viewed" moves to.
 local function topVisible(gs)
@@ -318,7 +320,7 @@ local function build()
         GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
         GameTooltip:SetText("New activity")
         GameTooltip:AddLine("Across every tab, whatever is selected, since you last marked it read.", 0.8, 0.8, 0.8, true)
-        for _, c in ipairs(visit and Log.NewCounts(visit, newSince, canView()) or {}) do
+        for _, c in ipairs(visit and Log.NewCounts(visit, newSince, canView(), hideReports()) or {}) do
             GameTooltip:AddLine("|cff" .. c.color .. c.n .. "|r " .. c.word, 1, 1, 1)
         end
         GameTooltip:Show()
@@ -430,11 +432,11 @@ local function fitSummary(gs)
     if not gs then s:SetText(""); return end
     local width = s:GetWidth() or 0
     local measure = s.GetUnboundedStringWidth and "GetUnboundedStringWidth" or "GetStringWidth"
-    local limit = #Log.NewCounts(gs, newSince, canView())
-    s:SetText(Log.NewSummary(gs, newSince, canView()))
+    local limit = #Log.NewCounts(gs, newSince, canView(), hideReports())
+    s:SetText(Log.NewSummary(gs, newSince, canView(), nil, hideReports()))
     while width > 0 and limit > 1 and (s[measure](s) or 0) > width do
         limit = limit - 1
-        s:SetText(Log.NewSummary(gs, newSince, canView(), limit))
+        s:SetText(Log.NewSummary(gs, newSince, canView(), limit, hideReports()))
     end
 end
 
@@ -466,7 +468,8 @@ function UI.Refresh()
     local now = time()
     local keep, below = anchor()
     local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
-                                         since = Log.ScopeSince(scope, now), rank = rank }, now) or {}
+                                         since = Log.ScopeSince(scope, now), rank = rank,
+                                         hideReports = hideReports() }, now) or {}
     rows = byTime(rows)
     panel.rows = rows
     panel.elements = elements(rows)

@@ -7,6 +7,12 @@
   both, marked with the character that saw it, and one chat line says how many arrived. Only ever
   within your current guild. Turn it off, and see which of your accounts last synced, in Options >
   AddOns > GuildSpy > Sharing.
+- **Sharing with guildmates.** Guildmates with GuildSpy share what they saw over guild addon
+  messages: what happened while you were offline arrives from whoever was online, marked "reported
+  by" them, with its own Reports tab in the log. Your own observations only, never officer notes,
+  the message of the day or the rank list. Choose in Options > AddOns > GuildSpy > Sharing whether
+  their reports show in chat and the log, only the log, or not at all, and from which rank up.
+  A guildmate's level-up you already saw yourself isn't kept twice.
 - **No duplicate level-ups between your accounts.** When both saw the same level-up, only the most
   precise record is kept: "reached level 22" and "reached level 23", seen live on one, replace
   "leveled from 21 to 23" noticed later by the other. Duplicates already saved are cleaned up at

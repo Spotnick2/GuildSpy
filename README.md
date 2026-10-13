@@ -73,6 +73,13 @@ Under **Options > AddOns > GuildSpy > Sharing**:
   same guild, the two share their logs over Battle.net, so what one saw while the other was offline
   shows up on both. Only ever within your current guild. The page shows which of your accounts last
   synced, and when.
+- **Share with guildmates**, on or off (on by default, as GRM). What you saw yourself goes to
+  guildmates with GuildSpy, and what they saw while you were offline comes to you, marked with who
+  reported it. Best effort: only from guildmates online at the time. Never officer notes, the
+  message of the day or the rank list.
+- **Guildmates' reports**: in chat and in the log (at most five lines at a time), only in the log,
+  or never. In the log they also have their own **Reports** tab.
+- **Accept reports from**: every rank, or a rank and up.
 
 The key binding is under **Key Bindings > GuildSpy**, with no key set by default.
 

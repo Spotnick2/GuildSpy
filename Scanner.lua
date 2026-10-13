@@ -162,6 +162,8 @@ local function canView() return API.CanViewOfficerNote() == true end
 -- in place: the window updates, no second chat line is printed.
 -- The current guild's saved state and key (nil out of a guild): for the log window.
 function Scanner.Current() return S.state, S.guildKey end
+-- Whether this session has a complete scan of the current guild (sync waits for it, #38).
+function Scanner.Ready() return S.firstScanDone == true and S.state ~= nil and S.guildKey ~= nil end
 
 function Scanner.Enrich()
     local t, kept = now(), {}

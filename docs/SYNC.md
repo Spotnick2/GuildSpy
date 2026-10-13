@@ -138,14 +138,18 @@ it). Two namespaces never alias each other.
 
 - **Same guild only:** inherent to the GUILD channel (only my current guild hears it); every
   answer is bound to the guild key it was asked in and dropped on a guild change (below).
-- Prefix `GuildSpy`, GUILD only, ChatThrottleLib v32 vendored (Gnomesweeper's), one priority;
-  never WHISPER; no relaying.
+- Prefix `GuildSpy`, GUILD only, ChatThrottleLib v32, one priority (NORMAL); never WHISPER; no
+  relaying. **As built (#38):** the ChatThrottleLib that LibAccountSync's XML already loads (the
+  same unmodified v32 as AltStable's and Gnomesweeper's; one newest instance however many copies
+  load), so nothing is vendored and nothing forked. Without it nothing is sent: never unpaced.
 - **Sent:** only entries with `here` and `origin` = **the sending character** (transport identity
   proves only that), public kinds: JOIN, REJOIN, LEAVE, PROMOTE, DEMOTE, RANK, NAME, NOTE, LEVEL,
   RETURN. Never ONOTE, MOTD, RANKS, legacy entries (no origin) or imports. Fixed per-kind wire
   projection; an entry encoding to > 250 B is not sent.
 - **Ask (no gap ledger, round-3 cut):** `Q|1|<qid>|<since>` for the last 14 days (`since` =
-  now − 14 d, or my oldest entry if newer), qid unique (writer token + counter). Sent after the
+  now − 14 d; **as built** without "or my oldest entry if newer": it would keep a new user from what
+  happened just before, and an answer is the newest 40 anyway; a continuation keeps its ask's
+  `since`), qid unique (writer token + counter). Sent after the
   first complete scan, and as a **directed** `Q|1|<qid>|<since>|<responder>` when a peer's `H`
   (hello, once per session after its first scan) shows someone who hasn't answered this session.
   At most one Q per 2 min. Repeats are absorbed by `(namespace, uid)`/`rev`. Best effort: what's
@@ -158,10 +162,24 @@ it). Two namespaces never alias each other.
   says `more|<cursor>` when truncated. Continuation `Q|1|<qid2>|<from>|<to>|<responder>|<cursor>`
   is answered only by that responder. A responder answers at most one Q per 60 s (coalesced).
   Pending answers are bound to the guild key and dropped on any guild change; each batch re-checks.
-- **Queued sends (round-3 P1, to solve in phase 3):** ChatThrottleLib sends what it already holds
+- **Queued sends (round-3 P1, solved in #38):** ChatThrottleLib sends what it already holds
   without our check. So GuildSpy keeps its own small queue and hands CTL **one message at a time**,
-  the next only from the previous one's callback, after re-checking the guild key; a guild change
-  drops our queue, leaving at most one message in flight.
+  the next only from the previous one's callback, after that message's own check (still this
+  guild, its answer not stopped); a guild change drops our queue, leaving at most one message in
+  flight. A message CTL never reports frees the queue after 60 s.
+- **As built (#38), the wire and what's heard:**
+  - one header line and at most one entry line per message (`Wire`, short field names), ≤ 255 B;
+    `origin` isn't sent (it's the sender) and `obs` follows from the times;
+  - `H` (hello) once per guild per session after the first complete scan; `A`, `E` (one entry
+    each), then `D|<qid>|<cursor>` (empty when nothing remains) end an answer;
+  - an answer is heard by every guildmate online, so **any** answer's entries are taken (rank,
+    setting and per-reporter cap apply), not only my own ask's: that's what lets one answer a minute
+    serve every ask in it ("coalesced");
+  - a guildmate whose answer I heard after my hello isn't asked directly;
+  - each message is checked just before it leaves, so an answer stops mid-way, not only per batch.
+- **Duplicates (#38, extends §3's level-up rule):** a guildmate's level-up whose every level my own
+  records already show (one or several together, any precision) isn't kept; between guildmates the
+  same level-up keeps the finest report. Reports never chain, and never remove mine.
 - **Cost (stated, not hidden):** usually one answer per Q; two responders can overlap before hearing
   each other (expected about one batch; not a hard bound). Worst case with many simultaneous logins is one answer
   per requester: 40 logins ≈ 40 answers ≈ 1,600 messages (~400 KB), the same order as GRM's.
@@ -172,7 +190,8 @@ it). Two namespaces never alias each other.
 
 ## 6. Validation and display safety
 
-Strict grammar per message type and version; one bad field drops the message. guid
+Strict grammar per message type and version; one bad field drops the message. (As built: an
+entry line drops on a malformed field; `Log.Valid` with the guild rules then checks every field.) guid
 `^Player%-%d+%-%x+$`; names ≤ 48 B; levels 1..cap; rank ≤ 32 B; note ≤ 31 chars; `lo ≤ hi`,
 `hi` (or exact `at`) within `[now − retention age, now + 10 min]` (an old `lo` is fine: a long
 absence). Control characters are refused; `|` is kept as data and every pipe is escaped when

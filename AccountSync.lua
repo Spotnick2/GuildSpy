@@ -239,7 +239,9 @@ local function flush()
     local mine, reports = 0, 0
     for _, e in ipairs(pending) do
         -- One a later record covered isn't kept: not counted (#41).
-        if not e.covered and Log.Visible(e, canView()) then
+        -- Guildmates' reports set to "Never" (#38) aren't announced either.
+        local hidden = e.trust == "guild" and GuildSpy.GuildSync and GuildSpy.GuildSync.ReportsMode() == "never"
+        if not e.covered and not hidden and Log.Visible(e, canView()) then
             if e.trust == "guild" then reports = reports + 1 else mine = mine + 1 end
         end
     end

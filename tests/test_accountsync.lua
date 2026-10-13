@@ -420,6 +420,25 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     for _, l in ipairs(WoW.chat) do if l:find("from your other account", 1, true) then lines = lines + 1 end end
     eq(lines, 1, "...only one")
 
+    -- A guildmate's report forwarded by my other account: counted, unless reports are set to Never (#38).
+    local function forward(uid, mode)
+        GuildSpyDB.settings.reports = mode
+        local r = { uid = uid, rev = 1, kind = "JOIN", guid = "Player-1-00000" .. uid:sub(1, 3), name = "Fwd " .. uid,
+                    at = time() - 60, lo = time() - 120, hi = time() - 60, obs = time() - 60, origin = "Bo Kay",
+                    trust = "guild", ns = "g:Bo Kay", reporter = "Bo Kay", here = false, seq = bdb.nextSeq, chg = Log.NextChg(bgs) }
+        bdb.nextSeq = bdb.nextSeq + 1
+        bgs.log[#bgs.log + 1] = r
+        WoW.chat = {}
+        WoW.advance(AS.POLL + 1)
+        route(); route()
+        WoW.advance(AS.QUIET + 1)
+        for _, l in ipairs(WoW.chat) do if l:find("from guildmates", 1, true) then return true end end
+        return false
+    end
+    check(forward("abc:1", nil), "a forwarded report: counted in the catch-up line")
+    check(not forward("abd:2", "never"), "...not when reports are set to Never")
+    GuildSpyDB.settings.reports = nil
+
     -- The Sharing page: the status of the other account, and the switch.
     local O = GuildSpy.Options
     local status = table.concat(O.SharingLines(), "\n")
