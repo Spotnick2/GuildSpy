@@ -32,7 +32,8 @@ Professions.UNKNOWN_ICON = "Interface\\Icons\\INV_Misc_QuestionMark"
 -- The groups: { { id, name, icon, members = { ... }, online, total } }, by
 -- name; in each, online members first, then by name. A member is the roster
 -- snapshot's record when GuildSpy has one (by GUID), else what C_Club says.
--- `infos`: C_Club member infos; `gs`: the guild's saved state.
+-- `infos`: C_Club member infos (API.ClubMembers, with gsOnline); `gs`: the
+-- guild's saved state.
 function Professions.Build(infos, gs)
     local roster = gs and type(gs.members) == "table" and gs.members or {}
     local ranks = gs and type(gs.ranks) == "table" and gs.ranks or {}
@@ -51,7 +52,8 @@ function Professions.Build(infos, gs)
                     rank = m and m.rank,
                     rankName = m and type(m.rank) == "number" and ranks[m.rank + 1] or nil,
                     note = (m and m.note) or info.memberNote,
-                    online = (m and m.online) == true,
+                    -- Not yet in the roster (first use, a new member): C_Club's presence.
+                    online = (m and m.online == true) or (not m and info.gsOnline == true),
                     lastSeenAt = m and m.lastSeenAt,
                     zone = info.zone,
                 }

@@ -109,17 +109,24 @@ end
 -- The guild's members as C_Club sees them (measured on 70338, docs/FOREVER-PROBE.md
 -- section 9: guid, name, level, zone, memberNote, profession1ID/Name/Rank and
 -- the same for 2), offline ones included. Every call guarded; {} when the
--- client has no guild club.
+-- client has no guild club. Each info gets gsOnline: its presence is Online,
+-- Away or Busy, as Blizzard's member list counts online.
 function API.ClubMembers()
     local club = rawget(_G, "C_Club")
     if type(club) ~= "table" then return {} end
     local cid = API.Pack(club.GetGuildClubId)
     if not (cid.ok and cid[1]) then return {} end
     local ids = API.Pack(club.GetClubMembers, cid[1])
+    local enum = rawget(_G, "Enum")
+    local P = type(enum) == "table" and type(enum.ClubMemberPresence) == "table" and enum.ClubMemberPresence or {}
+    local online = { [P.Online or 1] = true, [P.Away or 4] = true, [P.Busy or 5] = true }
     local out = {}
     for _, id in ipairs(ids.ok and type(ids[1]) == "table" and ids[1] or {}) do
         local info = API.Pack(club.GetMemberInfo, cid[1], id)
-        if info.ok and type(info[1]) == "table" then out[#out + 1] = info[1] end
+        if info.ok and type(info[1]) == "table" then
+            info[1].gsOnline = online[info[1].presence] == true
+            out[#out + 1] = info[1]
+        end
     end
     return out
 end

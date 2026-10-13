@@ -28,9 +28,9 @@ do  -- Grouping: as retail's UpdateProfessionDisplay, with the roster's record o
     } }
     local infos = {
         info("Player-1-00000001", "Ann Lee", ALCH, HERB),
-        info("Player-1-00000002", "Abe Cy", HERB, MINE),
+        info("Player-1-00000002", "Abe Cy", HERB, MINE, { gsOnline = true }),
         info("Player-1-00000003", "Gone Away", TAIL),
-        info("Player-1-00000004", "Di Fox", { 2933, "Test Profession [DNT]" }, nil, { level = 7 }),
+        info("Player-1-00000004", "Di Fox", { 2933, "Test Profession [DNT]" }, nil, { level = 7, gsOnline = true }),
         info("Player-1-00000005", "No Trade"),
         info("Player-1-00000006", "Twice", MINE, MINE),
     }
@@ -48,6 +48,8 @@ do  -- Grouping: as retail's UpdateProfessionDisplay, with the roster's record o
     eq(groups[1].members[1], ann, "...one record, under both of Ann's professions")
     local di = groups[4].members[1]
     check(di.level == 7 and di.class == nil and di.rankName == nil, "someone the roster doesn't know: what C_Club says")
+    check(di.online and groups[4].online == 1, "...online by C_Club's presence")
+    check(not herb.members[2].online, "a roster member: the roster's online, not C_Club's presence")
     eq(groups[4].icon, P.UNKNOWN_ICON, "...an unknown profession: a question mark")
     eq(groups[1].icon, P.ICONS[171], "a known one: its icon")
     eq(groups[3].total, 2, "the same profession in both slots counts once")
@@ -112,7 +114,11 @@ do
                 events = {}, eventNames = true, motd = "", canViewOfficerNote = false, clubId = 7,
                 club = { info("Player-1-00000001", "Fizzle Sprocketwhistle", TAIL),
                          info("Player-1-00000002", "Ann Lee", ALCH, HERB),
-                         info("Player-1-00000003", "Bo Kay", HERB) } }
+                         info("Player-1-00000003", "Bo Kay", HERB),
+                         -- Not in the roster yet (joined since the last complete scan).
+                         info("Player-1-00000009", "Cy New", HERB, nil, { presence = 4 }),
+                         info("Player-1-00000010", "Di Gone", HERB, nil, { presence = 3 }),
+                         info("Player-1-00000011", "Ed Now", TAIL, nil, { presence = 1 }) } }
     loadAddon({ setup = function() WoW.guild = G end })
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("GUILD_ROSTER_UPDATE", false)
@@ -136,11 +142,15 @@ do
     local row = CreateFrame("Button", nil, prof)
     view.initializer(row, els[2])
     eq(row.pName:GetText(), "Herbalism", "a header: the profession")
-    eq(row.pCount:GetText(), "1 of 2 online", "...how many are online")
+    eq(row.pCount:GetText(), "2 of 4 online", "...how many are online (Cy New: Away, from C_Club)")
     check(row.member == nil and row.hLeft:IsShown() and not row.name:IsShown(), "...drawn as a header")
+    local tail = CreateFrame("Button", nil, prof)
+    view.initializer(tail, els[3])
+    eq(tail.pCount:GetText(), "2 of 2 online", "Tailoring: Fizzle, and Ed Now, Online by C_Club")
     row._scripts.OnClick(row)
     els = prof.elements
-    eq(#els, 5, "clicked: Herbalism opens, with Ann and Bo")
+    eq(#els, 7, "clicked: Herbalism opens, with Ann, Cy, Bo and Di")
+    eq(els[4].member.name, "Cy New", "...a member the roster doesn't know yet, online by presence, with the online")
     local r2 = CreateFrame("Button", nil, prof)
     view.initializer(r2, els[3])
     check(r2.name:GetText():find("Ann Lee", 1, true) and r2.name:GetText():find("ffc69b6d", 1, true),
@@ -152,12 +162,12 @@ do
     check(table.concat(GameTooltip._lines or {}, "\n"):find("Alchemy, Herbalism", 1, true),
         "the tooltip lists both of Ann's professions")
     local r3 = CreateFrame("Button", nil, prof)
-    view.initializer(r3, els[4])
+    view.initializer(r3, els[5])
     check(r3.name:GetText():find("|cff808080", 1, true), "an offline member: greyed")
     check(prof.offline:GetChecked(), "show offline members: on by default, as retail")
     prof.offline:SetChecked(false)                         -- a click toggles it, then OnClick
     prof.offline._scripts.OnClick(prof.offline)
-    eq(#prof.elements, 4, "offline members hidden: Bo goes")
+    eq(#prof.elements, 5, "offline members hidden: Bo and Di go, Cy stays")
     prof.offline:SetChecked(true)
     prof.offline._scripts.OnClick(prof.offline)
 
