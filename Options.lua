@@ -33,6 +33,10 @@ Options.ITEMS = {
                   { 60, "Away 60 days or more" } },
       note = "Only when GuildSpy saw the member away that long before they came back.",
       get = function() return st().returnDays or Options.RETURN_DEFAULT end },
+    { key = "minimapButton", kind = "toggle", label = "Minimap button",
+      note = "Left-click opens or closes the log, right-click opens these settings. Drag it around the minimap.",
+      get = function() return GuildSpy.Minimap.Shown() end,
+      set = function(v) GuildSpy.Minimap.SetShown(v) end },
 }
 
 -- Chat lines as changes happen, by type. The login summary and the log window
@@ -100,8 +104,10 @@ end
 -- back to the default, so the scan never compares a level with text.
 function Options.Validate(settings)
     for _, item in ipairs(Options.ITEMS) do
+        -- An item with `set` keeps its value elsewhere (the minimap button: LibDBIcon's table).
         local v = settings[item.key]
-        if v ~= nil and not valid(item, v) and not (item.kind == "choice" and type(v) == "number" and v > 0) then
+        if not item.set and v ~= nil and not valid(item, v)
+                and not (item.kind == "choice" and type(v) == "number" and v > 0) then
             settings[item.key] = nil
         end
     end

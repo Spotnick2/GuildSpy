@@ -16,6 +16,7 @@ GuildSpy.HELP = {
     { "/gspy log", "open the log window (also a tab in the guild window)" },
     { "/gspy log <n>", "print the last n changes in chat" },
     { "/gspy options", "the settings (also in Options > AddOns > GuildSpy)" },
+    { "/gspy minimap", "show or hide the minimap button" },
     { "/gspy status", "what GuildSpy knows about your guild" },
     { "/gspy scan", "look at the roster now" },
     { "/gspy rebaseline", "start over from the current roster (the log is kept)" },
@@ -35,6 +36,8 @@ local function initDB()
     db.version = db.version or 1
     if type(db.settings) ~= "table" then db.settings = {} end
     GuildSpy.Options.Validate(db.settings)
+    -- LibDBIcon's table: made here and never replaced after (it keeps a reference).
+    if type(db.minimap) ~= "table" then db.minimap = {} end
     if type(db.guilds) ~= "table" then db.guilds = {} end
     if type(db.nextSeq) ~= "number" then db.nextSeq = 1 end
 end
@@ -53,6 +56,14 @@ local function slash(msg)
         if tonumber(rest) then GuildSpy.Scanner.PrintLog(tonumber(rest)) else GuildSpy.UI.Open() end
     elseif cmd == "options" or cmd == "settings" or cmd == "config" then
         GuildSpy.Options.Open()
+    elseif cmd == "minimap" then
+        local M = GuildSpy.Minimap
+        if not M.Available() then
+            say("there is no minimap button (its libraries are missing, or another addon took the name).")
+        else
+            GuildSpy.Options.Set("minimapButton", not M.Shown())
+            say(M.Shown() and "minimap button shown." or "minimap button hidden: /gspy minimap brings it back.")
+        end
     elseif cmd == "status" then
         GuildSpy.Scanner.Status()
     elseif cmd == "scan" then

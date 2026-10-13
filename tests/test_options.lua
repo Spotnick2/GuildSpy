@@ -109,10 +109,11 @@ login(bad, newGuild())
 local bs = bad.settings
 check(bs.levelMin == nil and bs.returnDays == nil and bs.digest == nil, "bad values go back to the defaults")
 check(bs.chat.LEAVE == false and bs.chat.JOIN == nil and bs.chat.NOTE == nil, "...a chat setting keeps only false")
-local bad2 = { settings = { chat = "x", levelMin = 15 } }
+local bad2 = { settings = { chat = "x", levelMin = 15, returnDays = false } }
 login(bad2, newGuild())
 check(type(bad2.settings.chat) == "table", "a chat table that isn't one is replaced")
 eq(bad2.settings.levelMin, 15, "a level from a later version (a number) is kept")
+eq(bad2.settings.returnDays, nil, "a choice saved as false goes back to the default")
 
 -- /gspy options opens the page; the log window steps aside from Settings.
 WoW.slash("/gspy log")

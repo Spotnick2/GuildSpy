@@ -70,10 +70,12 @@ jobs:
 
           fail=0
 
-          # What the client needs.
+          # What the client needs. Bindings.xml isn't in the TOC (the client finds
+          # it by name), so it is named here.
           for f in GuildSpy/GuildSpy.toc \
                    GuildSpy/LICENSE \
                    GuildSpy/Compat.lua \
+                   GuildSpy/Bindings.xml \
                    GuildSpy/GuildSpy.lua; do
             grep -qx "$f" files.txt || { echo "MISSING from the package: $f"; fail=1; }
           done

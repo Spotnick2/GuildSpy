@@ -297,10 +297,48 @@ function WoW.reset()
     GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
     -- Retail's Settings framework: Options > AddOns. Recorded in WoW.settings.
     WoW.settings = { canvas = {}, addons = {}, subs = {} }
+    WoW.ldb, WoW.ldbi = nil, nil                -- made on first use (LibStub, above)
     -- Blizzard's Settings window (HIGH strata), hidden until opened.
     SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
     SettingsPanel._strata = "HIGH"
     SettingsPanel._shown = false
+end
+
+-- Fake LibDataBroker-1.1 and LibDBIcon-1.0 (the vendored Libs\ are not loaded
+-- in tests; Gnomesweeper's way). The fakes record what they are given:
+-- WoW.ldb.objects, WoW.ldbi.registered / .buttons, and Show/Hide on the button.
+-- LibStub itself is the REAL one the embedded LibGlass-1.0 brings; WoW.fakeLibs
+-- then answers these two names with the fakes, every other from the real one.
+local function fakeLib(major)
+    if major == "LibDataBroker-1.1" then WoW.ldb = WoW.ldb or WoW.newLDB(); return WoW.ldb end
+    if major == "LibDBIcon-1.0" then WoW.ldbi = WoW.ldbi or WoW.newLDBI(); return WoW.ldbi end
+end
+function WoW.fakeLibs(stub)
+    setmetatable(stub, { __call = function(self, major, silent)
+        return fakeLib(major) or self:GetLibrary(major, silent)
+    end })
+end
+function WoW.newLDB()
+    local lib = { objects = {} }
+    function lib:NewDataObject(name, obj) self.objects[name] = obj; return obj end
+    return lib
+end
+function WoW.newLDBI()
+    local lib = { registered = {}, buttons = {}, registrations = 0 }
+    function lib:Register(name, obj, db)
+        self.registrations = self.registrations + 1
+        local b = newWidget("Button", UIParent, "LibDBIcon10_" .. name)
+        b._scripts.OnClick = function(self, mouse) obj.OnClick(self, mouse) end
+        b.dataObject, b.db = obj, db
+        if db.hide then b._shown = false end
+        self.registered[name], self.buttons[name] = db, b
+    end
+    -- As the real one (LibDBIcon-1.0 MINOR 56): Show/Hide only show or hide the
+    -- button (Show re-anchors it on the ring); neither touches the saved table.
+    function lib:Show(name) self.buttons[name]:Show(); self.buttons[name]._repositioned = true end
+    function lib:Hide(name) self.buttons[name]:Hide() end
+    function lib:GetMinimapButton(name) return self.buttons[name] end
+    return lib
 end
 
 Settings = {

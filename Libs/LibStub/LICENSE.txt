@@ -1,0 +1,3 @@
+LibStub (Kaelten, Cladhaire, ckknight, Mikk, Ammo, Nevcairiel, joshborke), shipped
+unmodified inside Gnomesweeper. Its header: "LibStub is hereby placed in the Public
+Domain".

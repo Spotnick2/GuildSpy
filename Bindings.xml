@@ -1,0 +1,8 @@
+<Bindings>
+	<!-- #5: Key Bindings > GuildSpy (its own section, as Gnomesweeper does: a binding with no
+	     category lands in "Other", and a header there shows as a raw HEADER_ row). The name is the
+	     BINDING_NAME_ global in Minimap.lua. -->
+	<Binding name="GUILDSPY_TOGGLE" category="GuildSpy">
+		GuildSpy.UI.Toggle()
+	</Binding>
+</Bindings>

@@ -103,6 +103,7 @@ function loadAddon(opts)
             local chunk = assert(loadfile(file))
             chunk("GuildSpy", ns)
         end
+        if line == LIBGLASS_XML then WoW.fakeLibs(LibStub) end
     end
     WoW.fire("ADDON_LOADED", "GuildSpy")
 end
