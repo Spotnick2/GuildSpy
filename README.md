@@ -26,7 +26,8 @@ never changes a rank, a note or a member, and it sends nothing to anyone.
 - **Promotions and demotions**, with the officer who did them when the game says so.
 - **Changes to the guild's ranks**: a rank renamed, added or removed.
 - **Note edits.** Public notes, and officer notes if your character can read them.
-- **Level-ups.** From level 10 by default, plus every tenth level.
+- **Level-ups.** From level 10 by default, plus every tenth level. Reaching the level cap gets its
+  own gold line and a fanfare (the sound can be turned off).
 - **Name changes.**
 - **Members back after a long absence**: two weeks away by default.
 - **A new message of the day.**
@@ -61,6 +62,7 @@ In the game's **Options > AddOns > GuildSpy**, or with `/gspy options`:
 - **Login summary**, on or off.
 - **Level-ups:** every level, from level 10, 20 or 40, or only every tenth level.
 - **Back after a long absence:** away 7, 14, 30 or 60 days or more.
+- **Sound at the level cap**, on or off.
 - **Minimap button**, shown or hidden. It's also in the minimap's addon list.
 - **Chat lines:** on or off for each type of change. The login summary and the log window always
   keep everything.

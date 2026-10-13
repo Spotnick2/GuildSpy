@@ -272,6 +272,10 @@ function WoW.reset()
     WoW.now, WoW.epoch, WoW.timers = 0, 1790000000, {}
     WoW.fileIDs = {}
     WoW.missingTemplates = {}
+    -- The level cap (#34): both functions answer it on Forever (Vanilla content: 60);
+    -- a test can take one away (WoW.capFns.expansion = false) or change the value.
+    WoW.levelCap, WoW.capFns = 60, { expansion = true, player = true }
+    WoW.sounds = {}
     WoW.metadata = { Version = "@project-version@" }
     WoW.build = { "1.60.1", "70338", "Oct 10 2026", 16001 }
     WoW.playerName, WoW.playerSurname, WoW.realm = "Fizzle", "Sprocketwhistle", "Forever"
@@ -364,6 +368,17 @@ end
 
 function GetTime() return WoW.now end
 function time(t) if t then return os.time(t) end return WoW.epoch end
+function GetMaxLevelForPlayerExpansion()
+    if not WoW.capFns.expansion then error("not on this client") end
+    WoW.capCalls = (WoW.capCalls or 0) + 1
+    return WoW.levelCap
+end
+function GetMaxPlayerLevel()
+    if not WoW.capFns.player then error("not on this client") end
+    return WoW.levelCap
+end
+-- PlaySound(kit, channel): recorded; answers willPlay as the client does.
+function PlaySound(kit, channel) WoW.sounds[#WoW.sounds + 1] = { kit = kit, channel = channel }; return true end
 -- Whether the client has a template (the test can say it's missing).
 function DoesTemplateExist(name) return not WoW.missingTemplates[name] end
 function date(fmt, t) return os.date(fmt, t) end

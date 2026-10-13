@@ -207,8 +207,20 @@ local function opts()
     }
 end
 
+-- Someone reached the level cap (#34): the game's level-up fanfare, once,
+-- when the setting is on. PlaySound(kit, "SFX") honours the game's sound
+-- settings (Gnomesweeper measured kit IDs play on Forever; this one is picked
+-- by ear in game).
+Scanner.CAP_SOUND = 888
+function Scanner.CapSound()
+    if settings().capSound == false then return end
+    if type(rawget(_G, "PlaySound")) == "function" then pcall(PlaySound, Scanner.CAP_SOUND, "SFX") end
+end
+
 function Scanner.Print(entry)
     if not S.digestShown then return end                  -- catch-up goes in the digest
+    -- The fanfare is its own setting: a muted level-up line doesn't mute it (#35 review).
+    if Log.IsCap(entry) then Scanner.CapSound() end
     local chat = settings().chat or {}
     if chat[entry.kind] == false then return end
     if not Log.Visible(entry, canView()) then return end
@@ -363,6 +375,10 @@ function Scanner.MaybeDigest(deadline)
     local lines, top, topOnote = Log.Digest(gs, canView(), t)
     if settings().digest ~= false then
         for _, line in ipairs(lines) do print(line) end
+        -- One fanfare for a summary holding any level-up to the cap, however many.
+        for _, e in ipairs(gs.log or {}) do
+            if e.seq > (gs.shownSeq or 0) and Log.IsCap(e) then Scanner.CapSound(); break end
+        end
         if Roster.HasMissing(gs) then
             say("still confirming who left; it'll show as it's confirmed.")
         end
