@@ -65,6 +65,7 @@ Pure logic separated from the WoW shell (Gnomesweeper's `Guild.lua`/`Social.lua`
 | `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. Observations, receiving and retention (#36, docs/SYNC.md). |
 | `Wire.lua` | **pure**: sync messages as text (#37). |
 | `AccountSync.lua` | sync between my accounts over LibAccountSync-1.0 (#37, docs/SYNC.md §4): a protocol core (two run side by side in tests) and the shell (library, scanner's guild, catch-up line). |
+| `GuildSync.lua` | sync with guildmates over GUILD addon messages (#38, docs/SYNC.md §5): a protocol core (several run side by side in tests) and the shell (prefix, ChatThrottleLib behind a one-at-a-time queue, settings, report lines). |
 | `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, rank filter (current rank, #23), name search, Mark all as read. A row's tooltip has the member's current notes (#25; the officer note only while readable). |
 | `Options.lua` | Options > AddOns > GuildSpy and its About page (#4, Gnomesweeper recipe): login summary, level-up threshold, days away for "back", chat line per change type. `Options.Set` is the one place a setting changes; `Options.Validate` resets saved values no page could set. |
 | `Minimap.lua` | Minimap button, addon compartment and key binding (#5): LDB + LibDBIcon (vendored like Gnomesweeper), `AddonCompartmentFunc*`, `Bindings.xml` (Key Bindings > GuildSpy). Left-click the log, right-click the settings; the tooltip has the guild, who's online and what's new. |
@@ -155,6 +156,9 @@ GuildSpyDB = { version=1, minimap={},
   accountSync={...},   -- (#37) LibAccountSync's own store (household key, peers): never edit or copy
   settings={ digest=false|nil, levelMin=n|nil, returnDays=n|nil,   -- nil: the default (on, 10, 14)
              capSound=false|nil, syncAccounts=false|nil,           -- (#34, #37) nil: on
+             shareGuild=false|nil, reports="log"|"never"|nil,      -- (#38) nil: on, "chat"
+             reportRanks={ [guildKey]=n }|nil,                     -- (#38) per guild; none: every rank
+             reportsHinted=true|nil,                               -- (#38) the one-time hint was shown
              chat={ [kind]=false } },                               -- a kind's chat line off (#4)
   nextSeq=1, window={ x, y },
   guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,

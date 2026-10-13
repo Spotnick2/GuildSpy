@@ -304,6 +304,8 @@ function WoW.reset()
     WoW.ldb, WoW.ldbi = nil, nil                -- made on first use (LibStub, above)
     WoW.las, WoW.lasSent, WoW.lasPeers, WoW.lasSnapshots, WoW.noAccountSync = nil, {}, {}, nil, nil
     WoW.lasNotReady, WoW.lasStoredOff = {}, nil
+    WoW.prefixes, WoW.addonSent, WoW.addonResult, WoW.ctlHeld = {}, {}, nil, {}
+    ChatThrottleLib = WoW.newCTL and WoW.newCTL() or nil
     -- Blizzard's Settings window (HIGH strata), hidden until opened.
     SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
     SettingsPanel._strata = "HIGH"
@@ -580,6 +582,52 @@ function table.wipe(t) for k in pairs(t) do t[k] = nil end return t end
 wipe = table.wipe
 -- Client string alias (in the dump's _G walk); LibStub's version check uses it.
 strmatch = string.match
+
+-- Addon messages (#38), as Gnomesweeper's stubs model them: a GUILD message is
+-- recorded in WoW.addonSent and, as the server does, echoed to its sender as
+-- CHAT_MSG_ADDON. Measured (Gnomesweeper, 70205): the sender is "First Surname",
+-- no realm. WoW.addonResult: what a send answers (0: success).
+C_ChatInfo = {
+    RegisterAddonMessagePrefix = function(prefix)
+        WoW.prefixes[prefix] = true
+        return 0
+    end,
+    SendAddonMessage = function(prefix, message, chatType, target)
+        assert(#message <= 255, "an addon message over 255 bytes")
+        local result = WoW.addonResult or 0
+        if result ~= 0 then return result end
+        table.insert(WoW.addonSent, { prefix = prefix, message = message, chatType = chatType, target = target })
+        if chatType == "GUILD" and WoW.guild then
+            local me = WoW.playerName .. " " .. WoW.playerSurname
+            WoW.fire("CHAT_MSG_ADDON", prefix, message, "GUILD", me, me, 0, 0, "", 0)
+        end
+        return 0
+    end,
+}
+-- A scripted ChatThrottleLib (the real one comes with LibAccountSync, not
+-- loaded here): it holds what it's given, like the real one under load, until
+-- WoW.ctlDeliver(n) sends the oldest n (all: nil), each then reported to its
+-- callback as the real v32 does: (arg, didSend, result). It raises on a
+-- message over 255 bytes, as v32 does.
+function WoW.newCTL()
+    return {
+        SendAddonMessage = function(self, prio, prefix, text, chattype, target, queueName, callback, arg)
+            assert(#text <= 255, "ChatThrottleLib: message too long")
+            table.insert(WoW.ctlHeld, { prio = prio, prefix = prefix, text = text, chattype = chattype,
+                                        target = target, queueName = queueName, callback = callback, arg = arg })
+        end,
+    }
+end
+function WoW.ctlDeliver(n)
+    local sent = 0
+    while #WoW.ctlHeld > 0 and (not n or sent < n) do
+        local m = table.remove(WoW.ctlHeld, 1)
+        local result = C_ChatInfo.SendAddonMessage(m.prefix, m.text, m.chattype, m.target)
+        sent = sent + 1
+        if m.callback then m.callback(m.arg, result == 0, result) end
+    end
+    return sent
+end
 
 WoW.reset()
 

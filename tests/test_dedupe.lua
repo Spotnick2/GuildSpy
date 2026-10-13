@@ -113,16 +113,54 @@ do  -- Level-ups only (owner, #42 review): kinds that can be undone keep every r
     eq(#gs4.log, 2, "another member's level-up is another change")
 end
 
-do  -- A guildmate's report never removes mine; mine covers theirs.
+do  -- Guildmates' level-ups (#38): one I already know isn't kept; mine are never removed.
+    local function bo(e) e.origin = "Bo Kay"; return e end
+    local function recv(db, gs, e)
+        if e.origin == "Bo Kay" then return Log.Receive(db, gs, e, "guild", "Bo Kay", NOW) end
+        return Log.Receive(db, gs, e, "acct", nil, NOW)
+    end
+    -- Both orders: { uids kept } must agree.
+    local function both(list, expect, what)
+        local got = {}
+        for pass = 1, 2 do
+            local db, gs = store()
+            for i = (pass == 1 and 1 or #list), (pass == 1 and #list or 1), (pass == 1 and 1 or -1) do
+                local c = {}
+                for k, v in pairs(list[i]) do c[k] = v end
+                recv(db, gs, c)
+            end
+            got[pass] = uids(gs)
+        end
+        eq(got[1], expect, what)
+        eq(got[2], expect, "...in the other order too")
+    end
+    both({ obs({ uid = "b:8", from = 14, to = 15 }), bo(live("q:1", 14, 15, NOW - 1620)) }, "b:8",
+        "Bo's exact 14 to 15, which my coarse record already shows: mine stays, Bo's isn't kept")
+    both({ obs(), bo(live("q:3", 21, 22, NOW - 3600)), bo(live("q:4", 22, 23, NOW - 1320)) }, "b:1",
+        "Bo's steps inside my 21 to 23: not kept")
+    both({ live("a:1", 21, 22, NOW - 3600), live("a:2", 22, 23, NOW - 1320), bo(obs({ uid = "q:5" })) }, "a:1,a:2",
+        "Bo's 21 to 23 when my steps show both levels")
+    both({ live("a:1", 21, 22, NOW - 3600), bo(obs({ uid = "q:5" })) }, "a:1,q:5",
+        "...one of the two levels only: Bo's is kept")
+    both({ live("a:11", 14, 15, NOW - 1620), bo(obs({ uid = "q:2", from = 14, to = 15 })) }, "a:11",
+        "my exact record covers Bo's coarse report")
+    -- Between guildmates: the same level-up keeps the finest; no chains of reports.
+    local function cy(e) e.origin = "Cy Dee"; return e end
     local db, gs = store()
-    Log.Receive(db, gs, obs({ uid = "b:8", from = 14, to = 15 }), "acct", nil, NOW)
-    local g = live("q:1", 14, 15, NOW - 1620, { origin = "Bo Kay" })
-    Log.Receive(db, gs, g, "guild", "Bo Kay", NOW)
-    eq(#gs.log, 2, "a guildmate's exact report doesn't remove my coarse record")
+    Log.Receive(db, gs, bo(obs({ uid = "q:6", from = 14, to = 15 })), "guild", "Bo Kay", NOW)
+    Log.Receive(db, gs, cy(live("r:6", 14, 15, NOW - 1000)), "guild", "Cy Dee", NOW)
+    eq(uids(gs), "r:6", "Bo and Cy report the same level-up: the finer report stays")
     local db2, gs2 = store()
-    Log.Receive(db2, gs2, live("a:11", 14, 15, NOW - 1620), "acct", nil, NOW)
-    local e, why = Log.Receive(db2, gs2, obs({ uid = "q:2", from = 14, to = 15, origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
-    check(not e and why == "covered", "my exact record covers a guildmate's coarse report")
+    Log.Receive(db2, gs2, bo(obs({ uid = "q:7" })), "guild", "Bo Kay", NOW)
+    Log.Receive(db2, gs2, cy(live("r:7", 21, 22, NOW - 3600)), "guild", "Cy Dee", NOW)
+    Log.Receive(db2, gs2, cy(live("r:8", 22, 23, NOW - 1320)), "guild", "Cy Dee", NOW)
+    eq(#gs2.log, 3, "Cy's steps don't remove Bo's 21 to 23 (reports never chain)")
+    -- And a report never removes mine.
+    local db3, gs3 = store()
+    Log.Receive(db3, gs3, obs({ uid = "b:9" }), "acct", nil, NOW)
+    Log.Receive(db3, gs3, bo(live("q:8", 21, 22, NOW - 3600)), "guild", "Bo Kay", NOW)
+    Log.Receive(db3, gs3, bo(live("q:9", 22, 23, NOW - 1320)), "guild", "Bo Kay", NOW)
+    check(uids(gs3):find("b:9", 1, true), "Bo's finer steps never remove my 21 to 23")
 end
 
 do  -- My own scan: Log.Add of a covered change keeps nothing.
@@ -224,18 +262,6 @@ do  -- Only level-ups are ever compared, whoever asks.
     local l1, l2 = obs({ uid = "z:3", trust = "self" }), live("z:4", 21, 23, NOW - 1000, { trust = "self" })
     eq(Log.DupKey(l1), Log.DupKey(l2), "...a member's level-ups are")
     check(Log.DupKey(live("z:5", 21, 23, NOW - 1000, { guid = "Player-1-00000B0B" })) ~= Log.DupKey(l1), "...per member")
-end
-
-do  -- Guildmates' records: an equally precise one of mine wins; theirs never chain over mine.
-    local db, gs = store()
-    Log.Receive(db, gs, obs({ uid = "z:9", from = 14, to = 15 }), "acct", nil, NOW)
-    local e, why = Log.Receive(db, gs, obs({ uid = "a:9", from = 14, to = 15, origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
-    check(not e and why == "covered", "a guildmate's report as precise as mine: mine stays, theirs isn't kept")
-    local db2, gs2 = store()
-    Log.Receive(db2, gs2, obs(), "acct", nil, NOW)
-    Log.Receive(db2, gs2, live("q:3", 21, 22, NOW - 3600, { origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
-    Log.Receive(db2, gs2, live("q:4", 22, 23, NOW - 1320, { origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
-    eq(#gs2.log, 3, "a guildmate's steps don't remove my 21 to 23")
 end
 
 do  -- The scanner: a change a poll finds, already covered by my other account's steps, prints nothing.

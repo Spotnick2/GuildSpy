@@ -51,7 +51,8 @@ Core.__index = Core
 -- current guild key or nil, now(), send(guid, text) -> true when handed to
 -- the wire, onReceived(added, key) (optional), onChanged() (optional: any
 -- entry added or updated), onStatus() (optional: a peer synced, came, went or
--- named another guild).
+-- named another guild), acceptReport(reporter) (optional: whether a forwarded
+-- guildmate's report is taken).
 function AS.NewCore(o)
     return setmetatable({ o = o, peers = {}, rid = 0 }, Core)
 end
@@ -178,6 +179,12 @@ function Core:OnMessage(text, sender)
         local batch = Log.NewBatch(gs, now)
         for _, line in ipairs(lines) do
             local e = Wire.ReadEntry(line, ALLOWED)
+            -- A guildmate's report my other account forwards: only from someone I
+            -- accept, as if it came here (#43 review). Not offered again later.
+            if e and type(e.ns) == "string" and e.ns:find("^g:.") and self.o.acceptReport
+                    and not self.o.acceptReport(e.ns:sub(3)) then
+                e = nil
+            end
             if e then
                 local got, why = Log.Receive(self.o.db, gs, e, "acct", nil, now, batch)
                 if got then changed = true end
@@ -317,6 +324,7 @@ local function start()
             return ok and n == 1                               -- 0: not ready yet; nil: not sent
         end,
         onReceived = received,
+        acceptReport = function(name) return GuildSpy.GuildSync == nil or GuildSpy.GuildSync.Accepts(name) end,
         onChanged = function() if GuildSpy.UI and GuildSpy.UI.Refresh then GuildSpy.UI.Refresh() end end,
         onStatus = function() if GuildSpy.Options and GuildSpy.Options.RefreshSharing then GuildSpy.Options.RefreshSharing() end end,
     })

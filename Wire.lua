@@ -47,23 +47,31 @@ local function parse(s)
 end
 
 -- One entry as one line, from `fields` (a list of keys); absent keys are left out.
-function Wire.Entry(e, fields)
+-- `alias` (optional): a short name per key on the wire (a GUILD message is
+-- 255 bytes, #38).
+function Wire.Entry(e, fields, alias)
     local parts = {}
     for _, k in ipairs(fields) do
         local v = value(e[k])
-        if v then parts[#parts + 1] = k .. "=" .. v end
+        if v then parts[#parts + 1] = (alias and alias[k] or k) .. "=" .. v end
     end
     return table.concat(parts, "\t")
 end
 
 -- One line back to a fresh table of the allowed keys; nil on any malformed field.
-function Wire.ReadEntry(line, allowed)
+function Wire.ReadEntry(line, allowed, alias)
+    local long
+    if alias then
+        long = {}
+        for k, a in pairs(alias) do long[a] = k end
+    end
     local e = {}
     for part in (line .. "\t"):gmatch("([^\t]*)\t") do
         if part ~= "" then
             local k, v = part:match("^([%w]+)=(.*)$")
             if not k then return nil end
-            if allowed[k] then
+            if long then k = long[k] end
+            if k and allowed[k] then
                 local ok, val = parse(v)
                 if not ok then return nil end
                 e[k] = val

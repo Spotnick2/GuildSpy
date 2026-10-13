@@ -55,6 +55,8 @@ Log.CATEGORIES = {
     { key = "notes", label = "Notes", empty = "note changes", kinds = { NOTE = true, ONOTE = true } },
     { key = "levels", label = "Levels", empty = "level changes", kinds = { LEVEL = true } },
     { key = "motd", label = "MOTD", empty = "message-of-the-day changes", kinds = { MOTD = true } },
+    -- Guildmates' reports (#38, SYNC.md §3): any kind, by who saw it.
+    { key = "reports", label = "Reports", empty = "reports from guildmates", trust = "guild" },
 }
 
 -- The window's summary line (#19): entries counted past the "new" boundary,
@@ -318,12 +320,13 @@ end
 
 -- The summary groups with entries past `since` this character may see:
 -- { { n, word, color }, ... } in Log.NEW_GROUPS order.
-function Log.NewCounts(gs, since, canViewOfficer)
+function Log.NewCounts(gs, since, canViewOfficer, hideReports)
     local out = {}
     for _, g in ipairs(Log.NEW_GROUPS) do
         local n = 0
         for _, e in ipairs(gs and gs.log or {}) do
-            if e.seq > (since or 0) and g.kinds[e.kind] and Log.Visible(e, canViewOfficer) then n = n + 1 end
+            if e.seq > (since or 0) and g.kinds[e.kind] and Log.Visible(e, canViewOfficer)
+                    and not (hideReports and e.trust == "guild") then n = n + 1 end
         end
         if n > 0 then out[#out + 1] = { n = n, word = n == 1 and g.one or g.many, color = Log.COLORS[g.color] } end
     end
@@ -333,9 +336,9 @@ end
 -- "New: 2 joined · 1 left · 12 level changes", or "No new activity". With
 -- `limit`, only the first `limit` groups, then "+N more" (N entries), so a
 -- line too long for the panel still counts everything (#22 review).
-function Log.NewSummary(gs, since, canViewOfficer, limit)
+function Log.NewSummary(gs, since, canViewOfficer, limit, hideReports)
     local parts, more = {}, 0
-    for i, c in ipairs(Log.NewCounts(gs, since, canViewOfficer)) do
+    for i, c in ipairs(Log.NewCounts(gs, since, canViewOfficer, hideReports)) do
         if limit and i > limit then
             more = more + c.n
         else
@@ -389,10 +392,12 @@ end
 -- Log.InRank; nil = all).
 function Log.Filter(gs, opts, now)
     opts = opts or {}
-    local kinds
+    local kinds, trust
     for _, c in ipairs(Log.CATEGORIES) do
-        if c.key == opts.category then kinds = c.kinds end
+        if c.key == opts.category then kinds, trust = c.kinds, c.trust end
     end
+    -- Guildmates' reports set to "Never" (#38): out of every tab but their own.
+    local hideReports = opts.hideReports and trust ~= "guild"
     local q = opts.query and opts.query:lower():match("^%s*(.-)%s*$")
     if q == "" then q = nil end
     local out = {}
@@ -400,6 +405,7 @@ function Log.Filter(gs, opts, now)
     for i = #log, 1, -1 do
         local e = log[i]
         if Log.Visible(e, opts.canViewOfficer) and (not kinds or kinds[e.kind])
+                and (not trust or e.trust == trust) and not (hideReports and e.trust == "guild")
                 and (not opts.since or (e.at or 0) >= opts.since)
                 and (not opts.rank or Log.InRank(e, gs, opts.rank))
                 and (not q or (Log.Plain(Log.Text(e, now)) .. " " .. (Log.Source(e) or "")):lower():find(q, 1, true)) then
@@ -580,12 +586,10 @@ local function width(e)
     local lo = tonumber(e.lo) or tonumber(e.after) or hi
     return math.max(0, hi - lo)
 end
--- a strictly more precise than b: narrower, then mine over a guildmate's, then uid.
+-- a strictly more precise than b: narrower, then uid (a total order).
 local function finer(a, b)
     local wa, wb = width(a), width(b)
     if wa ~= wb then return wa < wb end
-    local qa, qb = quotaOf(a), quotaOf(b)
-    if qa ~= qb then return qa == "self" end
     return tostring(a.uid) < tostring(b.uid)
 end
 
@@ -617,16 +621,38 @@ local function chained(r, group)
     return false
 end
 
--- Whether my other observations in its group cover r.
+-- A guildmate's level-up whose every level my own records already show (#38):
+-- one of mine or several together, whatever their precision. Mine only grow
+-- (a dropped one of mine is covered by others of mine with the same levels),
+-- so this too doesn't depend on arrival order.
+local function known(r, group)
+    local a, b = tonumber(r.from), tonumber(r.to)
+    if not (a and b) or a >= b then return false end
+    for k = a + 1, b do
+        local seen = false
+        for _, x in ipairs(group) do
+            local f, t = tonumber(x.from), tonumber(x.to)
+            if x ~= r and x.trust ~= "guild" and f and t and f < k and k <= t then seen = true; break end
+        end
+        if not seen then return false end
+    end
+    return true
+end
+
+-- Whether other observations in its group cover r. Mine are covered only by
+-- mine; a guildmate's report also by the same level-up from another guildmate
+-- (the finest stays), never by a chain of reports.
 function Log.Covered(r, group)
     if not Log.DEDUPE[r.kind] then return false end
+    local guild = r.trust == "guild"
+    if guild and known(r, group) then return true end
     for _, x in ipairs(group) do
-        if x ~= r and x.trust ~= "guild" and x.kind == r.kind and val(x.from) == val(r.from)
+        if x ~= r and (guild or x.trust ~= "guild") and x.kind == r.kind and val(x.from) == val(r.from)
                 and val(x.to) == val(r.to) and finer(x, r) then
             return true
         end
     end
-    return chained(r, group)
+    return chained(r, group)                 -- steps of mine only: for a report, known() already says so
 end
 
 -- Drops what the rest of a group covers, from the log and the group (and a

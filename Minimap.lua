@@ -66,7 +66,10 @@ local function tooltip(tip, drag)
         end
         tip:AddLine(guild, 1, 1, 1)
         tip:AddLine(online .. " of " .. total .. " members online", 0.8, 0.8, 0.8)
-        tip:AddLine(GuildSpy.Log.NewSummary(gs, gs.viewedSeq or 0, GuildSpy.API.CanViewOfficerNote() == true), 1, 1, 1)
+        -- Guildmates' reports set to Never stay out of this count too (#43 review).
+        local GSync = GuildSpy.GuildSync
+        local hide = GSync ~= nil and GSync.ReportsMode() == "never"
+        tip:AddLine(GuildSpy.Log.NewSummary(gs, gs.viewedSeq or 0, GuildSpy.API.CanViewOfficerNote() == true, nil, hide), 1, 1, 1)
     else
         tip:AddLine("No guild seen yet.", 0.6, 0.6, 0.6)
     end

@@ -72,13 +72,43 @@ for _, c in ipairs(Options.CHAT) do
 end
 
 -- Options > AddOns > GuildSpy > Sharing (owner, SYNC.md §10). Phase 2 (#37):
--- my other accounts; phase 3 adds guildmates.
+-- my other accounts; phase 3 (#38): guildmates.
 Options.SHARING = {
     { key = "syncAccounts", kind = "toggle", label = "Sync with my other accounts",
       note = "While another of your accounts is online in the same guild, the two share their logs over Battle.net.",
       get = function() return GuildSpy.AccountSync.Enabled() end,
       set = function(v) GuildSpy.AccountSync.SetEnabled(v) end },
+    { key = "shareGuild", kind = "toggle", label = "Share with guildmates",
+      note = "What you saw goes to guildmates with GuildSpy, and what they saw while you were offline comes to you. Best effort: only from guildmates online.",
+      get = function() return GuildSpy.GuildSync.Enabled() end,
+      set = function(v) GuildSpy.GuildSync.SetEnabled(v) end },
+    { key = "reports", kind = "choice", label = "Guildmates' reports",
+      choices = { { "chat", "In chat and in the log" }, { "log", "Only in the log" }, { "never", "Never" } },
+      note = "In the log they also have their own Reports tab.",
+      get = function() return GuildSpy.GuildSync.ReportsMode() end,
+      set = function(v) st().reports = v ~= "chat" and v or nil end },
+    -- The current guild's ranks, highest first (GRM's syncRank: index, 0 the guild master).
+    { key = "reportRank", kind = "choice", label = "Accept reports from",
+      choices = function()
+          local out = { { -1, "Every rank" } }
+          local gs = GuildSpy.Scanner.Current()
+          for i, name in ipairs(gs and type(gs.ranks) == "table" and gs.ranks or {}) do
+              if i > Options.MAX_RANKS then break end
+              out[#out + 1] = { i - 1, tostring(name) .. " and up" }
+          end
+          return out
+      end,
+      get = function() return GuildSpy.GuildSync.MinRank() or -1 end,
+      -- Per guild: a rank index means another rank in another guild (#43 review).
+      set = function(v)
+          local _, k = GuildSpy.Scanner.Current()
+          if not k then return end
+          st().reportRanks = type(st().reportRanks) == "table" and st().reportRanks or {}
+          st().reportRanks[k] = v >= 0 and v or nil
+          if next(st().reportRanks) == nil then st().reportRanks = nil end
+      end },
 }
+Options.MAX_RANKS = 10                -- a guild has at most 10 ranks
 
 local BY_KEY = {}
 for _, item in ipairs(Options.SHARING) do BY_KEY[item.key] = item end
@@ -95,9 +125,13 @@ function Options.Get(key)
     return nil
 end
 
+local function choices(item)
+    if type(item.choices) == "function" then return item.choices() end
+    return item.choices or {}
+end
 local function valid(item, v)
     if item.kind == "toggle" then return type(v) == "boolean" end
-    for _, c in ipairs(item.choices or {}) do if c[1] == v then return true end end
+    for _, c in ipairs(choices(item)) do if c[1] == v then return true end end
     return false
 end
 
@@ -127,6 +161,21 @@ function Options.Validate(settings)
         if not item.set and v ~= nil and not valid(item, v)
                 and not (item.kind == "choice" and type(v) == "number" and v > 0) then
             settings[item.key] = nil
+        end
+    end
+    -- The Sharing page's (#38): what no page could have set goes.
+    if settings.shareGuild ~= nil and type(settings.shareGuild) ~= "boolean" then settings.shareGuild = nil end
+    if settings.reports ~= "log" and settings.reports ~= "never" then settings.reports = nil end
+    settings.reportRank = nil                       -- a pre-release shape: one index for every guild
+    if settings.reportRanks ~= nil then
+        if type(settings.reportRanks) ~= "table" then settings.reportRanks = nil
+        else
+            for k, r in pairs(settings.reportRanks) do
+                if type(k) ~= "string" or not (type(r) == "number" and r == math.floor(r) and r >= 0 and r < Options.MAX_RANKS) then
+                    settings.reportRanks[k] = nil
+                end
+            end
+            if next(settings.reportRanks) == nil then settings.reportRanks = nil end
         end
     end
     if type(settings.chat) ~= "table" then settings.chat = {} end
@@ -424,6 +473,18 @@ function Options.SharingLines()
     return lines
 end
 
+-- Guild sharing's status (#38): how many guildmates with GuildSpy were heard.
+function Options.GuildLines()
+    local GSync = GuildSpy.GuildSync
+    if not GSync.Enabled() then return { "Off." } end
+    local heard, running = GSync.Status()
+    if not running then return { "Not running." } end
+    local _, myKey = GuildSpy.Scanner.Current()
+    if not myKey then return { "This character isn't in a guild." } end
+    if heard == 0 then return { "No guildmate with GuildSpy heard this session." } end
+    return { heard .. (heard == 1 and " guildmate" or " guildmates") .. " with GuildSpy heard this session." }
+end
+
 local function sharingLabel(text, template, width) return label(sharing, text, template, width) end
 
 local function buildSharing()
@@ -434,7 +495,7 @@ local function buildSharing()
     sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 2, -6)
     sharing.controls = {}
     local y = -72
-    for _, item in ipairs(Options.SHARING) do
+    local function check(item)
         local cb, templated = GuildSpy.API.SafeFrame("CheckButton", sharing, "UICheckButtonTemplate", "text")
         if not templated then
             cb:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
@@ -448,20 +509,72 @@ local function buildSharing()
         local note = sharingLabel(item.note, "GameFontHighlightSmall", 560)
         note:SetPoint("TOPLEFT", sharing, "TOPLEFT", 48, y - 22)
         sharing.controls[item.key] = { check = cb, label = fs, note = note }
-        y = y - 56
+        y = y - 52
+    end
+    -- Radios, in two columns when there are many (a guild's ranks); built for
+    -- the most there can be, labelled and shown at each refresh.
+    local function radios(item, slots)
+        local c = { radios = {} }
+        c.label = sharingLabel(item.label)
+        c.label:SetPoint("TOPLEFT", sharing, "TOPLEFT", 20, y)
+        y = y - 22
+        local rows = slots > 4 and math.ceil(slots / 2) or slots
+        for i = 1, slots do
+            local cb, templated = GuildSpy.API.SafeFrame("CheckButton", sharing, "UIRadioButtonTemplate", "text")
+            if not templated then
+                cb:SetSize(16, 16)
+                cb:SetNormalTexture("Interface\\Buttons\\UI-RadioButton")
+                cb:SetCheckedTexture("Interface\\Buttons\\UI-RadioButton")
+            end
+            local col, row = math.floor((i - 1) / rows), (i - 1) % rows
+            cb:SetPoint("TOPLEFT", sharing, "TOPLEFT", 28 + col * 260, y - row * 20)
+            cb:SetScript("OnClick", function(self) Options.Set(item.key, self.value) end)
+            cb.text = sharingLabel("")
+            cb.text:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+            c.radios[i] = cb
+        end
+        y = y - rows * 20
+        if item.note then
+            c.note = sharingLabel(item.note, "GameFontHighlightSmall", 560)
+            c.note:SetPoint("TOPLEFT", sharing, "TOPLEFT", 28, y - 2)
+            y = y - 20
+        end
+        y = y - 8
+        sharing.controls[item.key] = c
+    end
+    for _, item in ipairs(Options.SHARING) do
+        if item.kind == "toggle" then check(item)
+        else radios(item, item.key == "reportRank" and Options.MAX_RANKS + 1 or #choices(item)) end
     end
     local head = sharingLabel("Your other accounts", "GameFontNormalLarge")
     head:SetPoint("TOPLEFT", sharing, "TOPLEFT", 16, y)
     sharing.status = sharingLabel("", "GameFontHighlightSmall", 600)
     sharing.status:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 4, -8)
+    local ghead = sharingLabel("Guildmates", "GameFontNormalLarge")
+    ghead:SetPoint("TOPLEFT", sharing.status, "BOTTOMLEFT", -4, -14)
+    sharing.guildStatus = sharingLabel("", "GameFontHighlightSmall", 600)
+    sharing.guildStatus:SetPoint("TOPLEFT", ghead, "BOTTOMLEFT", 4, -8)
 end
 
 function Options.RefreshSharing()
     if not sharing.built or not sharing:IsShown() then return end
     for _, item in ipairs(Options.SHARING) do
-        sharing.controls[item.key].check:SetChecked(Options.Get(item.key) and true or false)
+        local c = sharing.controls[item.key]
+        if item.kind == "toggle" then
+            c.check:SetChecked(Options.Get(item.key) and true or false)
+        else
+            local list, current = choices(item), Options.Get(item.key)
+            for i, rb in ipairs(c.radios) do
+                local ch = list[i]
+                rb.value = ch and ch[1]
+                rb.text:SetText(ch and ch[2] or "")
+                rb:SetChecked(ch ~= nil and ch[1] == current)
+                if ch then rb:Show() else rb:Hide() end
+            end
+        end
     end
     sharing.status:SetText(table.concat(Options.SharingLines(), "\n"))
+    sharing.guildStatus:SetText(table.concat(Options.GuildLines(), "\n"))
 end
 
 sharing:SetScript("OnShow", function(self)

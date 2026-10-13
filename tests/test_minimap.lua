@@ -124,6 +124,17 @@ do  -- in a guild: the tooltip has the guild, who's online, and what's new
     tip.lines = {}
     WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
     eq(GuildSpy.Log.Plain(tip.lines[4]), "No new activity", "after the window: nothing new")
+    -- A guildmate's report: counted, unless reports are set to Never (#43 review).
+    GuildSpy.Log.Receive(GuildSpyDB, gs, { uid = "bo1:1", rev = 1, kind = "JOIN", guid = "Player-1-0000000A", name = "Di Fox",
+        at = now - 60, lo = now - 120, hi = now - 60, obs = now - 60, origin = "Bo Kay" }, "guild", "Bo Kay", now)
+    tip.lines = {}
+    WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+    eq(GuildSpy.Log.Plain(tip.lines[4]), "New: 1 joined", "a guildmate's report is new")
+    GuildSpyDB.settings.reports = "never"
+    tip.lines = {}
+    WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+    eq(GuildSpy.Log.Plain(tip.lines[4]), "No new activity", "...not with reports set to Never, as in the window")
+    GuildSpyDB.settings.reports = nil
     -- An online member gone from the roster, not yet confirmed as left (#27 review).
     table.remove(WoW.guild.members, 2)                       -- Ann Lee, online
     WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)

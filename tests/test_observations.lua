@@ -175,8 +175,11 @@ do  -- Retention: deterministic, namespaced tie-break, non-backfill, quotas apar
     local saved = { Log.GUILD_MAX_ENTRIES, Log.MAX_ENTRIES }
     Log.GUILD_MAX_ENTRIES = 2
     local db, gs = store()
+    local lv = 10
     local function rep(sender, uid, t)
-        return Log.Receive(db, gs, obs({ uid = uid, origin = sender, obs = t, at = t, hi = t, lo = t - 60 }), "guild", sender, NOW)
+        lv = lv + 1                                       -- each a different level-up: not one change (#38)
+        return Log.Receive(db, gs, obs({ uid = uid, origin = sender, obs = t, at = t, hi = t, lo = t - 60, from = lv, to = lv + 1 }),
+            "guild", sender, NOW)
     end
     check(rep("Ann Lee", "a:1", NOW - 300), "report 1 kept")
     check(rep("Bo Kay", "b:1", NOW - 200), "report 2 kept")
