@@ -93,6 +93,11 @@ it). Two namespaces never alias each other.
   file-transfer feature, so AltStableSync's separate-SV reason doesn't apply).
 - **Capability:** `CAP|1` to every `Peers()` entry on each discovery pass (login, peer change,
   every 5 min) until answered; forgotten when the peer leaves.
+- **Same guild only (owner, 2026-10-12):** two of my accounts exchange only the log of the guild
+  their current characters are **both** in (guild key = name + the guild's own realm, as today).
+  Characters in different guilds, or a guildless one, sync nothing. `CAP|1` carries the sender's
+  current guild key; a REQ or PAGE for any other guild key is refused, and a guild change on
+  either side drops what's in flight.
 - **Pull by change counter, one page in flight per peer and guild:**
   `REQ|<rid>|<guildKey>|<cursor>` → `PAGE|<rid>|<guildKey>|<cursor>|<next>|<more>` + entries with
   `chg > cursor` in chg order, one library payload ≤ 12 KB encoded. The requester accepts a PAGE
@@ -105,6 +110,8 @@ it). Two namespaces never alias each other.
 
 ## 5. Guild sync (GUILD addon messages, best effort)
 
+- **Same guild only:** inherent to the GUILD channel (only my current guild hears it); every
+  answer is bound to the guild key it was asked in and dropped on a guild change (below).
 - Prefix `GuildSpy`, GUILD only, ChatThrottleLib v32 vendored (Gnomesweeper's), one priority;
   never WHISPER; no relaying.
 - **Sent:** only entries with `here` and `origin` = **the sending character** (transport identity
