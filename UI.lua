@@ -116,6 +116,7 @@ local function buildRow(row)
     row.header = font(row, "GameFontNormal", "LEFT")
     row.header:SetPoint("LEFT", row, "LEFT", 8, 0)
     -- The whole sentence, the exact time and what it means: the row is short.
+    -- Then the member's notes as they are now (#25).
     row:SetScript("OnEnter", function(self)
         local entry = self.entry
         if not entry or not Log.Visible(entry, canView()) then return end
@@ -124,6 +125,10 @@ local function buildRow(row)
         GameTooltip:SetText(date("%Y-%m-%d %H:%M", entry.at))
         GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
         GameTooltip:AddLine(Log.Provenance(entry), 0.6, 0.6, 0.6, true)
+        local gs = current()
+        for _, n in ipairs(gs and Log.MemberNotes(gs, entry, canView()) or {}) do
+            GameTooltip:AddLine(n.label .. ": |cff" .. n.color .. n.text .. "|r", 0.8, 0.8, 0.8, true)
+        end
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)

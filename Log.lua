@@ -286,6 +286,23 @@ function Log.NewSummary(gs, since, canViewOfficer, limit)
     return "New: " .. table.concat(parts, paint(MUTED, "  \194\183  "))
 end
 
+-- The member's notes as they are now (the last complete scan), for a row's
+-- tooltip (#25): { { label, text, color }, ... }. The officer note only while
+-- this character can read it (unreadable isn't empty). An empty note, a former
+-- member and a guild-wide entry give nothing.
+function Log.MemberNotes(gs, e, canViewOfficer)
+    local m = e.guid and type(gs.members) == "table" and gs.members[e.guid]
+    if type(m) ~= "table" then return {} end
+    local out = {}
+    if type(m.note) == "string" and m.note ~= "" then
+        out[#out + 1] = { label = "Note", text = m.note, color = Log.COLORS.NOTE }
+    end
+    if canViewOfficer == true and type(m.onote) == "string" and m.onote ~= "" then
+        out[#out + 1] = { label = "Officer note", text = m.onote, color = Log.COLORS.ONOTE }
+    end
+    return out
+end
+
 -- Whether an entry belongs to the rank named `rank` (#23): its member holds
 -- it now, left from it, or a rank change went from or to it. Guild-wide
 -- entries (MOTD, rank structure) belong to no rank.
