@@ -90,8 +90,9 @@ The key binding is under **Key Bindings > GuildSpy**, with no key set by default
 - **Who did it** comes from the game's own messages and the guild's event log. When neither says,
   GuildSpy doesn't guess. A departure it can't explain reads "is no longer in the guild", never
   "left" or "kicked".
-- **Officer notes stay private.** They show only on a character that can read them, and they never
-  go to chat. If you lose the right, they disappear from the window at once.
+- **Officer notes stay private.** They show only on a character that can read them: in the window,
+  and in chat as they change, if you keep that chat line on (it's a setting). If you lose the
+  right, they disappear from the window at once.
 - **One log for your account.** Every character on your account shares it. It keeps up to 180 days
   and 1,500 changes per guild, for up to 5 guilds.
 - **Light on the game.** It asks the server for the roster once a minute, the same request the
