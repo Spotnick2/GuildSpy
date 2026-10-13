@@ -264,13 +264,15 @@ do  -- A guild report forwarded by my account keeps the guild rules.
 end
 
 do  -- Escaping is idempotent; search finds text with a pipe.
-    eq(Log.Esc("a|b"), "a||b", "a lone | is escaped")
-    eq(Log.Esc("a||b"), "a||b", "an already escaped || is left as is")
-    eq(Log.Esc("a|||b"), "a||||b", "an odd run is completed")
+    eq(Log.Esc("a|b"), "a||b", "a | is escaped")
+    eq(Log.Esc("a||b"), "a||||b", "two literal pipes stay two when shown (#39 Codex review)")
+    eq(Log.Plain(Log.Esc("a||b")), "a||b", "...and read back as two")
     eq(Log.Plain("x||y ||cffff0000red"), "x|y |cffff0000red", "plain text keeps escaped pipes as text")
     local db, gs = store()
     Log.Receive(db, gs, obs({ uid = "p:1", kind = "NOTE", from = "", to = "x|y" }), "guild", "Bo Kay", NOW)
     eq(#Log.Filter(gs, { query = "x|y" }, NOW), 1, "searching for a note with a pipe finds it")
+    Log.Receive(db, gs, obs({ uid = "p:2", kind = "NOTE", from = "", to = "a||b" }), "guild", "Bo Kay", NOW)
+    eq(#Log.Filter(gs, { query = "a||b" }, NOW), 1, "...and one with two pipes, searched as typed")
 end
 
 do  -- Tighter validation.
@@ -281,6 +283,8 @@ do  -- Tighter validation.
         { "text", obs({ uid = "v:3", kind = "PROMOTE", from = "Member", to = string.rep("r", 33) }) },
         { "text", obs({ uid = "v:4", kind = "NAME", from = "Ann Lee", to = string.rep("n", 49) }) },
         { "level", obs({ uid = "v:5", from = 60, to = 61 }) },
+        { "level", (function() local e = obs({ uid = "v:7", to = "bad" }); e.from = nil; return e end)() },
+        { "level", (function() local e = obs({ uid = "v:8" }); e.to = nil; return e end)() },
     }
     for _, c in ipairs(cases) do
         local e, why = Log.Receive(db, gs, c[2], "guild", "Bo Kay", NOW)

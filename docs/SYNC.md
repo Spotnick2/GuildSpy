@@ -149,7 +149,9 @@ it). Two namespaces never alias each other.
 Strict grammar per message type and version; one bad field drops the message. guid
 `^Player%-%d+%-%x+$`; names ≤ 48 B; levels 1..cap; rank ≤ 32 B; note ≤ 31 chars; `lo ≤ hi`,
 `hi` (or exact `at`) within `[now − retention age, now + 10 min]` (an old `lo` is fine: a long
-absence). Control characters are refused; `|` is kept as data and escaped only when displayed.
+absence). Control characters are refused; `|` is kept as data and every pipe is escaped when
+displayed (#39 Codex review). Still to measure in game: whether the client returns a note typed
+with a "|" as "|" or already as "||" (if the latter, such a note shows its pipe doubled: cosmetic).
 
 ## 7. Retention
 

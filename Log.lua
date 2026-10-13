@@ -104,13 +104,13 @@ function Log.Ago(seconds)
     return m .. "m"
 end
 
--- Received text is stored canonical (unescaped, #36); every rendering escapes
--- the UI's control character, so a "|" in a name or note can't start markup.
--- Idempotent: a run of pipes that is already escaped (even) is left as is,
--- so text the client may hand back escaped isn't doubled (#39 review).
+-- Text is stored canonical (as received, unescaped, #36); every rendering
+-- escapes every pipe, so a "|" in a name or note can't start markup and two
+-- literal pipes still show as two (#39 Codex review: a stored "||" can't tell
+-- an escape from two pipes, so no run is left alone).
 function Log.Esc(s)
     if type(s) ~= "string" or not s:find("|", 1, true) then return s end
-    return (s:gsub("|+", function(run) if #run % 2 == 1 then return run .. "|" end end))
+    return (s:gsub("|", "||"))
 end
 
 local TEXT_FIELDS = { "name", "actor", "from", "to", "origin", "reporter" }
@@ -542,9 +542,9 @@ function Log.Valid(e, via, now)
     if e.kind == "LEVEL" then
         local api = GuildSpy.API
         local cap = api and api.LevelCap and api.LevelCap() or 200
-        for _, v in ipairs({ e.from, e.to }) do
-            if not (type(v) == "number" and v >= 1 and v <= cap and v == math.floor(v)) then return false, "level" end
-        end
+        -- Each one on its own: a list with a nil first would skip the check (#39 Codex review).
+        local function level(v) return type(v) == "number" and v >= 1 and v <= cap and v == math.floor(v) end
+        if not (level(e.from) and level(e.to)) then return false, "level" end
     elseif not (str(e.from, size) and str(e.to, size)) then
         return false, "text"
     end
