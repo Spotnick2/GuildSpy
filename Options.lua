@@ -285,6 +285,42 @@ local about = CreateFrame("Frame")
 about.name = "About"
 about:Hide()                -- see `page`: or its first show is blank
 
+Options.LINKS = {
+    { "CurseForge", "https://www.curseforge.com/wow/addons/guildspy" },
+    { "GitHub", "https://github.com/Spotnick2/GuildSpy" },
+    -- One person tests it in one guild: players' reports are how the rest is found.
+    { "Report a bug", "https://github.com/Spotnick2/GuildSpy/issues/new/choose" },
+}
+
+-- A link the player can copy: addons can't open a browser or touch the
+-- clipboard, so it is a read-only edit box that selects itself on a click, for
+-- Ctrl+C (Gnomesweeper's). Typing puts the link back.
+local function linkBox(url)
+    local box = CreateFrame("EditBox", nil, about)
+    box:SetSize(400, 22)
+    box:SetAutoFocus(false)
+    box:SetFontObject("ChatFontNormal")
+    box:SetTextInsets(6, 6, 0, 0)
+    box.bg = box:CreateTexture(nil, "BACKGROUND")
+    box.bg:SetAllPoints(box)
+    box.bg:SetColorTexture(0, 0, 0, 0.5)
+    box.url = url
+    box:SetText(url)
+    box:SetCursorPosition(0)
+    box:SetScript("OnEditFocusGained", function(self) self:HighlightText() end)
+    box:SetScript("OnEditFocusLost", function(self) self:HighlightText(0, 0) end)
+    box:SetScript("OnMouseUp", function(self) self:HighlightText() end)
+    box:SetScript("OnTextChanged", function(self, userInput)
+        if userInput then
+            self:SetText(self.url)
+            self:HighlightText()
+        end
+    end)
+    box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    return box
+end
+
 local function buildAbout()
     -- Each line hangs under the one before it, `gap` below: a line that wraps
     -- pushes the rest down (fixed steps overlapped a wrapped tagline).
@@ -311,6 +347,16 @@ local function buildAbout()
         "Officer notes only show on a character that can read them.",
         "The log is shared by every character on your account.",
     }) do add(label(about, line, nil, 620), 6, 4) end
+
+    add(label(about, "Links", "GameFontNormalLarge"), 18)
+    about.links = {}
+    for _, link in ipairs(Options.LINKS) do
+        local name = add(label(about, link[1], nil, 110), 10, 4)
+        local box = linkBox(link[2])
+        box:SetPoint("LEFT", name, "LEFT", 114, 0)
+        about.links[#about.links + 1] = box
+    end
+    add(label(about, "Click a link, then Ctrl+C to copy it.", "GameFontHighlightSmall"), 10, 4)
 
     add(label(about, "Commands", "GameFontNormalLarge"), 18)
     about.commands = {}

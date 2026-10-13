@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.1.0
+
+The first release: know what's going on in your guild, live and while you were away.
+`/gspy` for the commands. Found a bug? Report it on GitHub (the link is on the About page).
 
 - **Know what's going on in your guild.** Joins, rejoins and leaves (kicked, and by whom),
   promotions and demotions with the officer who did them, rank changes, public note edits, officer

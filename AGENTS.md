@@ -169,7 +169,8 @@ packager on PRs and `main` and checks the zip's shape. Check the published zip b
   Codex, or Fable when Codex is unavailable) → the owner merges. **The owner runs the PR
   review**; the agent that opened the PR never starts one itself, and addresses what is posted.
   `docs/WORKFLOW.md` has the loop, stacked PRs, and the review recipe. Repo:
-  `github.com/Spotnick2/GuildSpy` (private until release).
+  `github.com/Spotnick2/GuildSpy` (public). CurseForge project 1741939,
+  `https://www.curseforge.com/wow/addons/guildspy`.
 - Branch off `main`, named for the work (`phase2/log-window`). Never commit directly to `main` (the
   initial scaffold was the one exception). Commit and push only as part of that loop.
 - Short imperative subject; body only if it adds something; end with the `Co-Authored-By:` trailer
