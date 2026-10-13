@@ -25,6 +25,7 @@ Wire.lua
 Scanner.lua
 AccountSync.lua
 GuildSync.lua
+Professions.lua
 UI.lua
 Options.lua
 Minimap.lua

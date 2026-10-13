@@ -47,6 +47,7 @@ UI.STRATA_ABOVE = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = 
 UI.BLIZZARD_TABS = { "ChatTab", "RosterTab", "GuildBenefitsTab", "GuildInfoTab", "GuildPreferredPlaySettingsTab" }
 
 local panel, win, tab, guildHost
+local prof, ptab               -- the Professions tab's panel and tab (#9)
 local category, query, scope, rank = nil, "", "all", nil
 local newSince = 0             -- entries past this seq are marked new while the panel is open
 local visit                    -- the guild state whose rows the open panel shows
@@ -452,6 +453,7 @@ end
 -- Fills the list from the current guild's log. Cheap enough to run on every
 -- new entry while the panel is shown.
 function UI.Refresh()
+    if UI.RefreshProfessions then UI.RefreshProfessions() end
     if not panel or not panel:IsVisible() then return end
     local gs = current()
     -- Another guild (or none) since the panel opened: the rows shown so far
@@ -571,7 +573,10 @@ end
 -- /gspy log, the digest's link, the minimap button. While the panel is in the
 -- guild window's tab, it stays there.
 function UI.Open()
-    if guildHost and guildHost:IsVisible() then return end
+    if guildHost and guildHost:IsVisible() then
+        if prof and prof:IsShown() then UI.ShowInGuild() end      -- the Professions tab: back to the log
+        return
+    end
     if not win then buildWindow() end
     local was = win:IsShown()
     setHost(win.content, Glass.ContentLevel(win))
@@ -588,6 +593,253 @@ function UI.Toggle()
 end
 
 ------------------------------------------------------------
+-- The guild window's Professions tab (#9)
+------------------------------------------------------------
+-- Retail's guild profession view, rebuilt (Professions.lua): a header per
+-- profession (Blizzard's CollapsibleHeader art, as CommunitiesMemberList.xml),
+-- its members under it. In the guild window only, under the GuildSpy tab.
+
+UI.PROF_ICON = "Interface\\Icons\\Trade_BlackSmithing"
+UI.PROF_ART = {
+    header = "Interface\\Buttons\\CollapsibleHeader",
+    left = { 0.17578125, 0.47265625, 0.29687500, 0.54687500 },
+    right = { 0.17578125, 0.47265625, 0.01562500, 0.26562500 },
+    middle = { 0.48046875, 0.98046875, 0.01562500, 0.26562500 },
+    plus = "Interface\\Buttons\\UI-PlusButton-Up",
+    minus = "Interface\\Buttons\\UI-MinusButton-Up",
+}
+-- Columns, as retail's roster (Lvl, Class, Name, Zone, Rank, Note; no Skill).
+UI.PROF_COLS = { level = 8, class = 40, name = 62, zone = 214, rank = 344, note = 454 }
+
+local offline, pquery, collapsed = true, "", {}
+
+function UI.ProfessionsEnabled()
+    local s = GuildSpyDB and GuildSpyDB.settings
+    return not (s and s.professionsTab == false)
+end
+
+local function memberTooltip(self)
+    local m = self.member
+    if not m then return end
+    tipOwner = self
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(m.name)
+    local line = {}
+    if m.level then line[#line + 1] = "Level " .. m.level end
+    if m.rankName then line[#line + 1] = m.rankName end
+    if #line > 0 then GameTooltip:AddLine(table.concat(line, ", "), 1, 1, 1) end
+    GameTooltip:AddLine(table.concat(m.professions or {}, ", "), 1, 0.82, 0)
+    if m.online then
+        if m.zone and m.zone ~= "" then GameTooltip:AddLine(m.zone, 0.8, 0.8, 0.8) end
+    elseif m.lastSeenAt then
+        GameTooltip:AddLine("Last online " .. Log.Relative(m.lastSeenAt, time()), 0.6, 0.6, 0.6)
+    end
+    if m.note and m.note ~= "" then
+        GameTooltip:AddLine("Note: " .. Log.Esc(m.note), 0.8, 0.8, 0.8, true)
+    end
+    GameTooltip:Show()
+end
+
+local function buildProfRow(row)
+    local art = UI.PROF_ART
+    -- The header: Blizzard's collapsible-header bar.
+    row.hLeft = row:CreateTexture(nil, "BORDER")
+    row.hLeft:SetTexture(art.header)
+    row.hLeft:SetTexCoord(unpack(art.left))
+    row.hLeft:SetSize(76, 16)
+    row.hLeft:SetPoint("LEFT", row, "LEFT", 3, 0)
+    row.hRight = row:CreateTexture(nil, "BORDER")
+    row.hRight:SetTexture(art.header)
+    row.hRight:SetTexCoord(unpack(art.right))
+    row.hRight:SetSize(76, 16)
+    row.hRight:SetPoint("RIGHT", row, "RIGHT", -3, 0)
+    row.hMiddle = row:CreateTexture(nil, "BACKGROUND")
+    row.hMiddle:SetTexture(art.header)
+    row.hMiddle:SetTexCoord(unpack(art.middle))
+    row.hMiddle:SetHeight(16)
+    row.hMiddle:SetPoint("LEFT", row.hLeft, "RIGHT", -20, 0)
+    row.hMiddle:SetPoint("RIGHT", row.hRight, "LEFT", 20, 0)
+    row.toggle = row:CreateTexture(nil, "ARTWORK")
+    row.toggle:SetSize(14, 14)
+    row.toggle:SetPoint("LEFT", row.hLeft, "LEFT", 8, 0)
+    row.pIcon = row:CreateTexture(nil, "ARTWORK")
+    row.pIcon:SetSize(14, 14)
+    row.pIcon:SetPoint("LEFT", row.hLeft, "LEFT", 26, 0)
+    row.pIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    row.pName = font(row, "GameFontNormalSmall", "LEFT")
+    row.pName:SetPoint("LEFT", row.hLeft, "LEFT", 46, 1)
+    row.pCount = font(row, "GameFontNormalSmall", "RIGHT")
+    row.pCount:SetPoint("RIGHT", row.hRight, "RIGHT", -10, 1)
+    -- A member.
+    row.stripe = row:CreateTexture(nil, "BACKGROUND")
+    row.stripe:SetAllPoints(row)
+    row.stripe:SetTexture(UI.ART.stripe)
+    row.stripe:SetTexCoord(unpack(UI.ART.stripeCoords))
+    local hl = row:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints(row)
+    hl:SetTexture(UI.ART.highlight)
+    hl:SetBlendMode("ADD")
+    hl:SetAlpha(0.5)
+    local c = UI.PROF_COLS
+    row.level = font(row, "GameFontHighlightSmall", "CENTER")
+    row.level:SetPoint("LEFT", row, "LEFT", c.level, 0)
+    row.level:SetWidth(28)
+    row.cIcon = row:CreateTexture(nil, "ARTWORK")
+    row.cIcon:SetTexture(UI.ART.classes)
+    row.cIcon:SetSize(16, 16)
+    row.cIcon:SetPoint("LEFT", row, "LEFT", c.class, 0)
+    local function col(key, nextKey, object)
+        local fs = font(row, object or "GameFontHighlightSmall", "LEFT")
+        fs:SetPoint("LEFT", row, "LEFT", c[key], 0)
+        if nextKey then fs:SetWidth(c[nextKey] - c[key] - 6) else fs:SetPoint("RIGHT", row, "RIGHT", -8, 0) end
+        fs:SetWordWrap(false)
+        return fs
+    end
+    row.name = col("name", "zone", "GameFontHighlight")
+    row.zone = col("zone", "rank")
+    row.rank = col("rank", "note")
+    row.note = col("note")
+    row:SetScript("OnClick", function(self)
+        if self.group and not self.member then
+            collapsed[self.group.id] = not self.collapsed
+            UI.RefreshProfessions()
+        end
+    end)
+    row:SetScript("OnEnter", memberTooltip)
+    row:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)
+end
+
+local function initProfRow(row, el)
+    if not row.pName then buildProfRow(row) end
+    local isHeader = el.member == nil
+    row.group, row.member, row.collapsed = el.group, el.member, el.collapsed
+    for _, part in ipairs({ row.hLeft, row.hRight, row.hMiddle, row.toggle, row.pIcon, row.pName, row.pCount }) do
+        part:SetShown(isHeader)
+    end
+    for _, part in ipairs({ row.stripe, row.level, row.cIcon, row.name, row.zone, row.rank, row.note }) do
+        part:SetShown(not isHeader)
+    end
+    if isHeader then
+        local g = el.group
+        row.toggle:SetTexture(el.collapsed and UI.PROF_ART.plus or UI.PROF_ART.minus)
+        row.pIcon:SetTexture(g.icon)
+        row.pName:SetText(g.name)
+        row.pCount:SetText(g.online .. " of " .. g.total .. " online")
+        return
+    end
+    local m = el.member
+    row.stripe:SetShown(el.odd == true)
+    row.level:SetText(m.level and tostring(m.level) or "")
+    classIcon(row.cIcon, m.class)
+    local colors = rawget(_G, "RAID_CLASS_COLORS")
+    local cc = m.class and type(colors) == "table" and colors[m.class]
+    local name = Log.Esc(m.name)
+    if not m.online then
+        row.name:SetText("|cff808080" .. name .. "|r")
+    elseif cc and cc.colorStr then
+        row.name:SetText("|c" .. cc.colorStr .. name .. "|r")
+    else
+        row.name:SetText(name)
+    end
+    if m.online then
+        row.zone:SetText(m.zone and Log.Esc(m.zone) or "")
+    else
+        row.zone:SetText(m.lastSeenAt and ("|cff808080" .. Log.Relative(m.lastSeenAt, time()) .. "|r") or "")
+    end
+    row.rank:SetText(m.rankName and Log.Esc(m.rankName) or "")
+    row.note:SetText(m.note and Log.Esc(m.note) or "")
+end
+
+local function buildProfessions()
+    prof = CreateFrame("Frame", nil, UIParent)
+    prof:Hide()
+    prof.bg = prof:CreateTexture(nil, "BACKGROUND")
+    prof.bg:SetAllPoints(prof)
+    prof.bg:SetTexture(UI.ART.background, "REPEAT", "REPEAT")
+    prof.bg:SetHorizTile(true)
+    prof.bg:SetVertTile(true)
+
+    local cb = GuildSpy.API.SafeFrame("CheckButton", prof, "UICheckButtonTemplate", "text")
+    cb:SetSize(24, 24)
+    cb:SetPoint("TOPLEFT", prof, "TOPLEFT", 10, -6)
+    cb:SetChecked(offline)
+    cb:SetScript("OnClick", function(self)
+        offline = self:GetChecked() and true or false
+        UI.RefreshProfessions()
+    end)
+    prof.offline = cb
+    local cbl = font(prof, "GameFontNormalSmall", "LEFT")
+    cbl:SetPoint("LEFT", cb, "RIGHT", 2, 0)
+    cbl:SetText("Show offline members")
+
+    local search = CreateFrame("EditBox", nil, prof, "SearchBoxTemplate")
+    search:SetSize(180, 20)
+    search:SetPoint("TOPRIGHT", prof, "TOPRIGHT", -12, -8)
+    search:SetAutoFocus(false)
+    search:HookScript("OnTextChanged", function(self)
+        pquery = self:GetText() or ""
+        UI.RefreshProfessions()
+    end)
+    prof.search = search
+
+    -- Column titles, as retail's roster.
+    local c = UI.PROF_COLS
+    for _, h in ipairs({ { "Lvl", c.level + 4 }, { "Class", c.class - 4 }, { "Name", c.name }, { "Zone", c.zone },
+                         { "Rank", c.rank }, { "Note", c.note } }) do
+        local fs = font(prof, "GameFontHighlightSmall", "LEFT")
+        fs:SetPoint("TOPLEFT", prof, "TOPLEFT", h[2] + 4, -36)
+        fs:SetText(h[1])
+    end
+
+    local box = CreateFrame("Frame", nil, prof, "WowScrollBoxList")
+    box:SetPoint("TOPLEFT", prof, "TOPLEFT", 4, -52)
+    box:SetPoint("BOTTOMRIGHT", prof, "BOTTOMRIGHT", -20, UI.FOOTER_H)
+    local bar = CreateFrame("EventFrame", nil, prof, "MinimalScrollBar")
+    bar:SetPoint("TOPLEFT", box, "TOPRIGHT", 4, 0)
+    bar:SetPoint("BOTTOMLEFT", box, "BOTTOMRIGHT", 4, 0)
+    local view = CreateScrollBoxListLinearView()
+    view:SetElementExtent(UI.ROW_HEIGHT)
+    view:SetElementInitializer("Button", initProfRow)
+    ScrollUtil.InitScrollBoxListWithScrollBar(box, bar, view)
+    prof.box = box
+
+    prof.footer = font(prof, "GameFontDisableSmall", "RIGHT")
+    prof.footer:SetPoint("BOTTOMRIGHT", prof, "BOTTOMRIGHT", -12, 6)
+    prof.empty = font(prof, "GameFontDisable", "CENTER")
+    prof.empty:SetPoint("CENTER", box, "CENTER", 0, 0)
+end
+
+-- Re-reads C_Club and the roster: cheap enough on every roster scan while shown.
+function UI.RefreshProfessions()
+    if not prof or not prof:IsVisible() then return end
+    if tipOwner then tipOwner = nil; GameTooltip:Hide() end
+    local gs = current()
+    local groups = GuildSpy.Professions.Build(API.ClubMembers(), gs)
+    -- Each member's professions, for the tooltip.
+    for _, g in ipairs(groups) do
+        for _, m in ipairs(g.members) do m.professions = {} end
+    end
+    for _, g in ipairs(groups) do
+        for _, m in ipairs(g.members) do table.insert(m.professions, g.name) end
+    end
+    prof.groups = groups
+    prof.elements = GuildSpy.Professions.Elements(groups, { offline = offline, query = pquery, collapsed = collapsed })
+    local constants = rawget(_G, "ScrollBoxConstants")
+    prof.box:SetDataProvider(CreateDataProvider(prof.elements), constants and constants.RetainScrollPosition)
+    local people = {}
+    for _, g in ipairs(groups) do for _, m in ipairs(g.members) do people[m.guid or m.name] = true end end
+    local n = 0
+    for _ in pairs(people) do n = n + 1 end
+    prof.footer:SetText(n > 0 and (n .. (n == 1 and " member" or " members") .. " with a profession") or "")
+    local why
+    if not gs then why = "No guild seen yet."
+    elseif #groups == 0 then why = "No professions known yet."
+    elseif #prof.elements == 0 then why = pquery:match("%S") and "Nobody matches your search." or "Nobody online with a profession." end
+    prof.empty:SetText(why or "")
+    prof.empty:SetShown(why ~= nil)
+end
+
+------------------------------------------------------------
 -- The guild window's tab
 ------------------------------------------------------------
 
@@ -601,18 +853,45 @@ end
 function UI.HideInGuild()
     if guildHost then guildHost:Hide() end
     if tab then tab:SetChecked(false) end
+    if ptab then ptab:SetChecked(false) end
 end
 
 function UI.ShowInGuild()
     local cf = rawget(_G, "CommunitiesFrame")
     if not cf or not guildHost then return end
     if win and win:IsShown() then win:Hide() end
+    if prof then prof:Hide() end
+    if ptab then ptab:SetChecked(false) end
     local was = guildHost:IsShown()
     guildHost:Show()
     setHost(guildHost, UI.GUILD_LEVEL + 1)
     tab:SetChecked(true)
     blizzardTabs(cf, false)
     if was then UI.Refresh() else opened() end
+end
+
+-- The Professions tab (#9): the same host, the professions panel instead of the log.
+function UI.ShowProfessions()
+    local cf = rawget(_G, "CommunitiesFrame")
+    if not cf or not guildHost or not UI.ProfessionsEnabled() then return end
+    if win and win:IsShown() then win:Hide() end
+    -- Leaving the log here counts as closing it: what it showed is seen.
+    if panel and panel:IsShown() and panel:GetParent() == guildHost then
+        closed()
+        panel:Hide()
+    end
+    if not prof then buildProfessions() end
+    guildHost:Show()
+    prof:SetParent(guildHost)
+    prof:ClearAllPoints()
+    prof:SetAllPoints(guildHost)
+    prof:SetFrameStrata(guildHost:GetFrameStrata())
+    prof:SetFrameLevel(UI.GUILD_LEVEL + 1)
+    prof:Show()
+    tab:SetChecked(false)
+    ptab:SetChecked(true)
+    blizzardTabs(cf, false)
+    UI.RefreshProfessions()
 end
 
 -- After Blizzard lays its tabs out: ours goes under the last guild tab shown,
@@ -623,6 +902,7 @@ function UI.PlaceTab()
     local info, play = cf.GuildInfoTab, cf.GuildPreferredPlaySettingsTab
     if not (info and info:IsShown()) then
         tab:Hide()
+        if ptab then ptab:Hide() end
         UI.HideInGuild()
         return
     end
@@ -630,6 +910,17 @@ function UI.PlaceTab()
     tab:ClearAllPoints()
     tab:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -20)
     tab:Show()
+    -- The Professions tab, under ours, while the setting is on (#9).
+    if ptab then
+        if UI.ProfessionsEnabled() then
+            ptab:ClearAllPoints()
+            ptab:SetPoint("TOPLEFT", tab, "BOTTOMLEFT", 0, -20)
+            ptab:Show()
+        else
+            ptab:Hide()
+            if prof and prof:IsShown() then UI.HideInGuild() end
+        end
+    end
     -- Blizzard just re-checked one of its tabs. If this is a Blizzard tab
     -- being clicked, SetDisplayMode's hook hides us right after and that
     -- check must stay; if we're still shown a frame later, it's ours.
@@ -652,6 +943,16 @@ function UI.AttachGuild()
     tab:HookScript("OnClick", function() UI.ShowInGuild() end)
     tab:Hide()
     UI.tab = tab
+
+    ptab = CreateFrame("CheckButton", nil, cf, "RightSideTabTemplate")
+    ptab:SetSize(32, 32)
+    ptab:SetFrameLevel(510)
+    if ptab.Icon then ptab.Icon:SetTexture(UI.PROF_ICON) end
+    ptab.tooltip = "Guild professions"
+    ptab.tooltip2 = nil
+    ptab:HookScript("OnClick", function() UI.ShowProfessions() end)
+    ptab:Hide()
+    UI.ptab = ptab
 
     guildHost = CreateFrame("Frame", nil, cf)
     local list = cf.CommunitiesList
@@ -714,4 +1015,5 @@ end)
 
 GuildSpy._test = GuildSpy._test or {}
 GuildSpy._test.UI = { onLink = onLink, panel = function() return panel end, window = function() return win end,
+                      professions = function() return prof end,
                       scope = function() return scope end, rank = function() return rank end }

@@ -106,6 +106,24 @@ function API.CanViewOfficerNote()
     return v == true
 end
 
+-- The guild's members as C_Club sees them (measured on 70338, docs/FOREVER-PROBE.md
+-- section 9: guid, name, level, zone, memberNote, profession1ID/Name/Rank and
+-- the same for 2), offline ones included. Every call guarded; {} when the
+-- client has no guild club.
+function API.ClubMembers()
+    local club = rawget(_G, "C_Club")
+    if type(club) ~= "table" then return {} end
+    local cid = API.Pack(club.GetGuildClubId)
+    if not (cid.ok and cid[1]) then return {} end
+    local ids = API.Pack(club.GetClubMembers, cid[1])
+    local out = {}
+    for _, id in ipairs(ids.ok and type(ids[1]) == "table" and ids[1] or {}) do
+        local info = API.Pack(club.GetMemberInfo, cid[1], id)
+        if info.ok and type(info[1]) == "table" then out[#out + 1] = info[1] end
+    end
+    return out
+end
+
 -- Registers an event, reporting a refusal instead of throwing: an unknown name
 -- throws on this client, and a false return is a refusal too (porting guide).
 function API.RegisterEvent(frame, event)

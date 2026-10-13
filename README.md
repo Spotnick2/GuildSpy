@@ -59,6 +59,14 @@ a key binding. It's styled like the guild roster.
 - **Class icons and colours**, and how long ago each change happened. Hover a row for the exact
   time, where GuildSpy learned it, and the member's notes (the officer note only if you can read it).
 
+## Guild professions
+
+A **Professions** tab in the guild window (J), under the GuildSpy tab, lists who in the guild has
+which profession, like retail's guild profession view: a heading per profession with how many have
+it and how many are online, opening onto its members (level, class, name, zone or last online,
+rank, note), with "Show offline members" and a name search. There are no skill levels and no
+recipe browser: Forever's server doesn't share them.
+
 ## Settings
 
 In the game's **Options > AddOns > GuildSpy**, or with `/gspy options`:
@@ -67,6 +75,7 @@ In the game's **Options > AddOns > GuildSpy**, or with `/gspy options`:
 - **Level-ups:** every level, from level 10, 20 or 40, or only every tenth level.
 - **Back after a long absence:** away 7, 14, 30 or 60 days or more.
 - **Sound at the level cap**, on or off.
+- **Guild professions tab**, shown or hidden (shown by default).
 - **Minimap button**, shown or hidden. It's also in the minimap's addon list.
 - **Chat lines:** on or off for each type of change. The login summary and the log window always
   keep everything.

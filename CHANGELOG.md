@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Guild professions.** A Professions tab in the guild window lists who has which profession, as
+  in retail: a heading per profession with its count and who's online, its members under it, show
+  offline members, and a search. No skill levels or recipes: the server doesn't share them. Turn
+  the tab off in the settings.
 - **A cleaner glass** for the log window (LibGlass r6): thin rims, no grain, softer shine.
 
 ## v0.2.0
