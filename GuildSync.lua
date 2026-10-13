@@ -75,8 +75,16 @@ function GSync.EntryMessage(qid, e)
     return text
 end
 
--- My answer: up to PER_ANSWER messages since `since`, after `cursor`; the
--- next cursor when more remain.
+-- Whether I have anything for an ask (no encoding, no sort: #43 review).
+function GSync.Has(gs, me, since, cursor)
+    for _, e in ipairs(gs and gs.log or {}) do
+        if GSync.Exportable(e, me) and observed(e) >= since and afterCursor(e, cursor) then return true end
+    end
+    return false
+end
+
+-- My answer: up to PER_ANSWER messages ({ text, sig }) since `since`, after
+-- `cursor`; the next cursor when more remain.
 function GSync.Pick(gs, me, qid, since, cursor)
     local list = {}
     for _, e in ipairs(gs and gs.log or {}) do
@@ -87,7 +95,7 @@ function GSync.Pick(gs, me, qid, since, cursor)
     for i, e in ipairs(list) do
         if #out >= GSync.PER_ANSWER then return out, last and cursorOf(last) end
         local text = GSync.EntryMessage(qid, e)
-        if text then out[#out + 1] = text end           -- one that doesn't fit isn't sent (§5)
+        if text then out[#out + 1] = { text = text, sig = GSync.Sig(e) } end   -- one that doesn't fit isn't sent (§5)
         last = e
     end
     return out, nil
@@ -102,12 +110,16 @@ Core.__index = Core
 
 -- o: db, gs(key), key(), me(), now(), send(text, ok) (queued; ok() is asked
 -- again just before it leaves), after(seconds, fn), random(lo, hi),
--- rankOf(name) (rank index, 0 the highest; nil: not in my roster),
--- minRank() (nil: every rank), accept() ("chat", "log" or "never"),
+-- accepts(name) (a guildmate whose reports I take: roster, rank, setting),
 -- onReceived(added, key), onChanged(), onStatus() (a guildmate heard) (all optional).
 function GSync.NewCore(o)
-    return setmetatable({ o = o, myQ = {}, answers = {}, answered = {}, heard = {},
-                          ask = {}, admitted = {}, said = nil, lastQ = nil, lastAnswer = nil }, Core)
+    return setmetatable({ o = o, myQ = {}, qs = {}, sigs = {}, answers = {}, answered = {}, heard = {},
+                          ask = {}, admitted = {}, said = nil, lastQ = nil, lastAnswer = nil, deferred = nil }, Core)
+end
+
+-- One change, whoever saw it: what a responder skips when another already sent it.
+function GSync.Sig(e)
+    return table.concat({ tostring(e.guid), tostring(e.kind), tostring(e.from), tostring(e.to) }, "\31")
 end
 
 -- What a Q asks for: the last 14 days. (SYNC.md had "or since my oldest entry
@@ -117,8 +129,8 @@ function Core:since()
     return math.floor(self.o.now() - GSync.DAYS * 86400)
 end
 
--- A Q, if the gap allows: to everyone, or to one responder (from a cursor,
--- with the ask's own start).
+-- A Q, if the gap allows: to everyone (responder nil), or to one responder
+-- (from a cursor, with the ask's own start).
 function Core:Ask(responder, cursor, since)
     local key = self.o.key()
     if not key then return false end
@@ -127,20 +139,22 @@ function Core:Ask(responder, cursor, since)
     if not self.o.gs(key) then return false end
     local qid = Log.NewUid()
     since = since or self:since()
-    self.myQ[qid] = { responder = responder, key = key, since = since }
+    self.myQ[qid] = { responder = responder, key = key, since = since, cursor = cursor }
     self.lastQ = now
     self.o.send(Wire.Message("Q", { qid, since, responder or "", cursor or "" }),
         function() return self.o.key() == key end)
     return true
 end
 
--- After my first complete scan in a guild: hello, and ask.
+-- After my first complete scan in a guild: hello, and the ask to everyone,
+-- queued first: an ask the gap refuses now goes at the next tick (#43 review).
 function Core:Hello()
     local key = self.o.key()
     if not key or self.said == key then return end
     self.said = key
     self.o.send(Wire.Message("H"), function() return self.o.key() == key end)
-    self:Ask()
+    table.insert(self.ask, 1, { everyone = true })
+    self:Tick()
 end
 
 -- Someone to ask directly (heard but not answered, or a continuation).
@@ -153,7 +167,13 @@ function Core:want(name, cursor, since)
     end
     self.ask[#self.ask + 1] = { name = name, cursor = cursor, since = since }
 end
--- Every few seconds: the next direct ask, when the gap allows.
+local function drop(list, name)
+    for i = #list, 1, -1 do
+        if list[i].name == name and not list[i].cursor then table.remove(list, i) end
+    end
+end
+
+-- Every few seconds: the next ask, when the gap allows.
 function Core:Tick()
     local w = self.ask[1]
     if w and self.said and self:Ask(w.name, w.cursor, w.since) then table.remove(self.ask, 1) end
@@ -162,8 +182,8 @@ end
 -- My guild changed (or I left it): everything bound to the old one goes.
 function Core:GuildChanged()
     for _, ans in pairs(self.answers) do ans.stopped = true end
-    self.myQ, self.answers, self.answered, self.heard, self.ask = {}, {}, {}, {}, {}
-    self.said, self.lastAnswer = nil, nil
+    self.myQ, self.qs, self.sigs, self.answers, self.answered, self.heard, self.ask = {}, {}, {}, {}, {}, {}, {}
+    self.said, self.lastAnswer, self.deferred = nil, nil, nil
 end
 
 function Core:OnMessage(text, sender)
@@ -180,28 +200,25 @@ function Core:OnMessage(text, sender)
     if kind == "H" then
         if not self.answered[sender] then self:want(sender) end
     elseif kind == "Q" then
+        local qid, since = f[1], tonumber(f[2])
+        if qid and since then self.qs[qid] = { since = since, cursor = f[4] or "" } end
         self:onQ(key, sender, f)
-    elseif kind == "A" then
-        local qid = f[1]
-        if not qid then return end
-        -- Once I've asked, any answer of theirs is heard here too: no need to ask them.
-        if self.said then
-            self.answered[sender] = true
-            for i = #self.ask, 1, -1 do
-                if self.ask[i].name == sender and not self.ask[i].cursor then table.remove(self.ask, i) end
-            end
-        end
-        -- Another answer to a Q I'm answering: before mine went, I stop; at the
-        -- same time, the first name alphabetically carries on (§5).
-        local ans = self.answers[qid]
-        if ans and not ans.directed and (not ans.started or sender < me) then ans.stopped = true end
     elseif kind == "E" then
         self:onE(key, sender, f, lines)
     elseif kind == "D" then
+        -- The end of an answer, to my ask or one I heard. Complete, from the
+        -- start of at least my 14 days: I have all of theirs. Cut short: ask
+        -- them for the rest (#43 review: an A alone proved nothing).
         local qid, cursor = f[1], f[2]
-        if qid and self.myQ[qid] and cursor and cursor ~= ""
-                and (self.admitted[sender] or 0) < GSync.PER_REPORTER then
-            self:want(sender, cursor, self.myQ[qid].since)
+        local q = qid and (self.myQ[qid] or self.qs[qid])
+        if not (q and self.said) then return end
+        if cursor == nil or cursor == "" then
+            if q.since <= self:since() + GSync.Q_GAP then
+                self.answered[sender] = true
+                drop(self.ask, sender)
+            end
+        elseif (self.admitted[sender] or 0) < GSync.PER_REPORTER then
+            self:want(sender, cursor, q.since)
         end
     end
 end
@@ -212,46 +229,69 @@ function Core:onQ(key, sender, f)
     if not (qid and since) then return end
     local directed = responder ~= ""
     if directed and plain(responder) ~= plain(me) then return end
-    local now = self.o.now()
-    -- Everyone hears an answer: a second ask within the minute is answered by it.
-    if not directed and self.lastAnswer and now - self.lastAnswer < GSync.ANSWER_GAP then return end
     local gs = self.o.gs(key)
-    if not gs or #(GSync.Pick(gs, me, qid, since, cursor)) == 0 then return end
+    if not gs or not GSync.Has(gs, me, since, cursor) then return end
+    local now = self.o.now()
+    if not directed and self.lastAnswer and now - self.lastAnswer < GSync.ANSWER_GAP then
+        -- One answer to everyone a minute: an ask during it is answered when
+        -- the minute ends, not dropped (#43 review: the asker may not have
+        -- heard the last one).
+        local d = self.deferred
+        if d then
+            if since < d.since then d.qid, d.since = qid, since end
+            return
+        end
+        d = { qid = qid, since = since, key = key }
+        self.deferred = d
+        self.o.after(self.lastAnswer + GSync.ANSWER_GAP - now, function()
+            if self.deferred ~= d then return end
+            self.deferred = nil
+            self:schedule(d.key, d.qid, d.since, "", false)
+        end)
+        return
+    end
+    self:schedule(key, qid, since, cursor, directed)
+end
+
+-- An answer after a jitter (a direct ask: one second). Every guildmate with
+-- entries answers: each has only what it saw itself (#43 review).
+function Core:schedule(key, qid, since, cursor, directed)
     local ans = { qid = qid, key = key, directed = directed }
     self.answers[qid] = ans
-    if not directed then self.lastAnswer = now end
+    if not directed then self.lastAnswer = self.o.now() end
     local wait = directed and 1 or self.o.random(GSync.JITTER_MIN, GSync.JITTER_MAX)
     self.o.after(wait, function() self:answer(ans, since, cursor) end)
 end
 
 function Core:answer(ans, since, cursor)
     local key = ans.key
-    if ans.stopped or self.o.key() ~= key then return end          -- someone answered first, or my guild changed
+    if ans.stopped or self.o.key() ~= key then return end          -- my guild changed
     local gs = self.o.gs(key)
     if not gs then return end
     local list, nextCursor = GSync.Pick(gs, self.o.me(), ans.qid, since, cursor)
     if #list == 0 then return end
-    ans.started = true
-    -- Each message asks again just before it leaves: still this guild, still not stopped.
+    -- Each message asks again just before it leaves: still this guild; an
+    -- entry, also not already sent in this answer by another guildmate.
     local function ok() return not ans.stopped and self.o.key() == key end
+    local heard = self.sigs
     self.o.send(Wire.Message("A", { ans.qid }), ok)
-    for _, text in ipairs(list) do self.o.send(text, ok) end
+    for _, item in ipairs(list) do
+        self.o.send(item.text, function() return ok() and not (heard[ans.qid] and heard[ans.qid][item.sig]) end)
+    end
     self.o.send(Wire.Message("D", { ans.qid, nextCursor or "" }), ok)
 end
 
--- An entry from a guildmate: any answer counts (everyone hears it), from a
--- rank I accept, within its share of the session.
+-- An entry from a guildmate: any answer counts (everyone hears it), from
+-- someone I accept, within their share of the session.
 function Core:onE(key, sender, f, lines)
     local qid = f[1]
-    if not qid then return end
-    if self.o.accept() == "never" then return end
-    local rank = self.o.rankOf(sender)
-    if rank == nil then return end                                       -- not in my roster
-    local min = self.o.minRank()
-    if min and rank > min then return end
-    if (self.admitted[sender] or 0) >= GSync.PER_REPORTER then return end
-    local e = lines and lines[1] and Wire.ReadEntry(lines[1], ALLOWED, GSync.ALIAS)
+    local e = qid and lines and lines[1] and Wire.ReadEntry(lines[1], ALLOWED, GSync.ALIAS)
     if not e then return end
+    -- Sent in this answer: another responder doesn't send it again.
+    self.sigs[qid] = self.sigs[qid] or {}
+    self.sigs[qid][GSync.Sig(e)] = true
+    if not self.o.accepts(sender) then return end
+    if (self.admitted[sender] or 0) >= GSync.PER_REPORTER then return end
     e.origin = sender
     e.obs = (e.approx == false and e.at) or e.hi or e.at
     local gs = self.o.gs(key)
@@ -279,9 +319,9 @@ GSync.QUIET, GSync.MAX_LINES = 10, 5
 GSync.REPORT_MODES = { chat = true, log = true, never = true }
 
 local core, registered
-local queue, inflight, pumping = {}, false, false
+local queue, inflight, pumping, token = {}, false, false, 0
 GSync.STUCK = 60                     -- a message ChatThrottleLib never reported: let the queue move on
-local pending, quietTimer = nil, 0
+local pending = nil
 
 local function settings() return GuildSpyDB and GuildSpyDB.settings or {} end
 function GSync.Enabled() return settings().shareGuild ~= false end
@@ -289,12 +329,13 @@ function GSync.ReportsMode()
     local m = settings().reports
     return GSync.REPORT_MODES[m] and m or "chat"
 end
+local function key() return select(2, GuildSpy.Scanner.Current()) end
+-- "Accept reports from" is a rank of a guild: kept per guild (#43 review).
 function GSync.MinRank()
-    local r = settings().reportRank
+    local t, k = settings().reportRanks, key()
+    local r = type(t) == "table" and k and t[k]
     return type(r) == "number" and r or nil
 end
-
-local function key() return select(2, GuildSpy.Scanner.Current()) end
 local function me() return GuildSpy.API.PlayerFullName() end
 
 -- A sender's rank in my roster (index, 0 the guild master), by name.
@@ -305,6 +346,16 @@ local function rankOf(name)
         if type(m) == "table" and plain(m.name) == want and type(m.rank) == "number" then return m.rank end
     end
     return nil
+end
+
+-- Whose reports I take, however they come (here, or forwarded by my other
+-- account, #43 review): the setting, my roster, the rank.
+function GSync.Accepts(name)
+    if GSync.ReportsMode() == "never" then return false end
+    local rank = rankOf(name)
+    if rank == nil then return false end
+    local min = GSync.MinRank()
+    return not (min and rank > min)
 end
 
 -- ChatThrottleLib holds what it's given and sends it later without asking us.
@@ -319,12 +370,17 @@ local function pump()
         if m.ok() then
             local ctl = rawget(_G, "ChatThrottleLib")
             inflight = time()
+            -- Only this message's callback frees the queue: one that comes after
+            -- the timeout let another go must not let a third (#43 review).
+            token = token + 1
+            local mine = token
             local ok = pcall(ctl.SendAddonMessage, ctl, "NORMAL", GSync.PREFIX, m.text, "GUILD", nil, "GuildSpyGuild",
                 function()
+                    if mine ~= token then return end
                     inflight = false
                     pump()
                 end)
-            if not ok then inflight = false end
+            if not ok and mine == token then inflight = false end
         end
     end
     pumping = false
@@ -365,12 +421,33 @@ local function flush()
     end
 end
 
+-- One timer for a batch: it waits again while entries keep coming (#43 review).
+local quietUntil
+local function wait()
+    C_Timer.After(math.max(0, quietUntil - time()) + 0.1, function()
+        if not quietUntil then return end
+        if time() < quietUntil then return wait() end
+        quietUntil = nil
+        flush()
+    end)
+end
 local function received(added)
     pending = pending or {}
     for _, e in ipairs(added) do pending[#pending + 1] = e end
-    quietTimer = quietTimer + 1
-    local mine = quietTimer
-    C_Timer.After(GSync.QUIET, function() if mine == quietTimer then flush() end end)
+    local waiting = quietUntil ~= nil
+    quietUntil = time() + GSync.QUIET
+    if not waiting then wait() end
+end
+
+-- The window redraws once for a run of entries, not once each.
+local refreshing = false
+local function changed()
+    if refreshing then return end
+    refreshing = true
+    C_Timer.After(0.5, function()
+        refreshing = false
+        if GuildSpy.UI and GuildSpy.UI.Refresh then GuildSpy.UI.Refresh() end
+    end)
 end
 
 -- For the Sharing page: guildmates with GuildSpy heard this session, and whether it runs.
@@ -390,6 +467,7 @@ local lastKey
 local function tick()
     if not core then return end
     if inflight and time() - inflight >= GSync.STUCK then
+        token = token + 1
         inflight = false
         pump()
     end
@@ -421,11 +499,9 @@ local function start()
         send = send,
         after = function(s, fn) C_Timer.After(s, fn) end,
         random = function(lo, hi) return math.random(lo, hi) end,
-        rankOf = rankOf,
-        minRank = GSync.MinRank,
-        accept = GSync.ReportsMode,
+        accepts = GSync.Accepts,
         onReceived = received,
-        onChanged = function() if GuildSpy.UI and GuildSpy.UI.Refresh then GuildSpy.UI.Refresh() end end,
+        onChanged = changed,
         onStatus = function() if GuildSpy.Options and GuildSpy.Options.RefreshSharing then GuildSpy.Options.RefreshSharing() end end,
     })
     C_Timer.NewTicker(GSync.TICK, tick)

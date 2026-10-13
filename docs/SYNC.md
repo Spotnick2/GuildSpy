@@ -173,10 +173,21 @@ it). Two namespaces never alias each other.
   - `H` (hello) once per guild per session after the first complete scan; `A`, `E` (one entry
     each), then `D|<qid>|<cursor>` (empty when nothing remains) end an answer;
   - an answer is heard by every guildmate online, so **any** answer's entries are taken (rank,
-    setting and per-reporter cap apply), not only my own ask's: that's what lets one answer a minute
-    serve every ask in it ("coalesced");
-  - a guildmate whose answer I heard after my hello isn't asked directly;
-  - each message is checked just before it leaves, so an answer stops mid-way, not only per batch.
+    setting and per-reporter cap apply), not only my own ask's;
+  - **every guildmate with entries answers** (#43 review): each answer holds only what its
+    responder saw itself, so "the first answer stops the others" (above) lost data. Instead a
+    responder skips each change (member, kind, from, to) another guildmate already sent in that
+    answer; each message is checked just before it leaves;
+  - **one answer to everyone a minute, none dropped** (#43 review): an ask during the minute after
+    my last answer is answered when the minute ends, from the widest start among the asks
+    waiting; an ask I have nothing for takes no minute;
+  - a guildmate's **complete** answer (its `D` with no cursor) to an ask reaching back at least as
+    far as mine, heard after my hello, means I don't ask them directly; an `A` alone proves
+    nothing; a `D` with a cursor, to my ask or one I heard, has me ask them for the rest;
+  - my first ask to everyone is queued, so one the 2-minute gap refuses (a guild change, sharing
+    turned off and on) goes at the next tick;
+  - "Accept reports from" is kept per guild (a rank index means another rank elsewhere), and a
+    guildmate's report my other account forwards goes through the same setting, roster and rank.
 - **Duplicates (#38, extends §3's level-up rule):** a guildmate's level-up whose every level my own
   records already show (one or several together, any precision) isn't kept; between guildmates the
   same level-up keeps the finest report. Reports never chain, and never remove mine.

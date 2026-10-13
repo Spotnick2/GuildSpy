@@ -99,7 +99,14 @@ Options.SHARING = {
           return out
       end,
       get = function() return GuildSpy.GuildSync.MinRank() or -1 end,
-      set = function(v) st().reportRank = v >= 0 and v or nil end },
+      -- Per guild: a rank index means another rank in another guild (#43 review).
+      set = function(v)
+          local _, k = GuildSpy.Scanner.Current()
+          if not k then return end
+          st().reportRanks = type(st().reportRanks) == "table" and st().reportRanks or {}
+          st().reportRanks[k] = v >= 0 and v or nil
+          if next(st().reportRanks) == nil then st().reportRanks = nil end
+      end },
 }
 Options.MAX_RANKS = 10                -- a guild has at most 10 ranks
 
@@ -159,9 +166,17 @@ function Options.Validate(settings)
     -- The Sharing page's (#38): what no page could have set goes.
     if settings.shareGuild ~= nil and type(settings.shareGuild) ~= "boolean" then settings.shareGuild = nil end
     if settings.reports ~= "log" and settings.reports ~= "never" then settings.reports = nil end
-    local r = settings.reportRank
-    if r ~= nil and not (type(r) == "number" and r == math.floor(r) and r >= 0 and r < Options.MAX_RANKS) then
-        settings.reportRank = nil
+    settings.reportRank = nil                       -- a pre-release shape: one index for every guild
+    if settings.reportRanks ~= nil then
+        if type(settings.reportRanks) ~= "table" then settings.reportRanks = nil
+        else
+            for k, r in pairs(settings.reportRanks) do
+                if type(k) ~= "string" or not (type(r) == "number" and r == math.floor(r) and r >= 0 and r < Options.MAX_RANKS) then
+                    settings.reportRanks[k] = nil
+                end
+            end
+            if next(settings.reportRanks) == nil then settings.reportRanks = nil end
+        end
     end
     if type(settings.chat) ~= "table" then settings.chat = {} end
     for k, v in pairs(settings.chat) do

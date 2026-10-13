@@ -157,7 +157,8 @@ GuildSpyDB = { version=1, minimap={},
   settings={ digest=false|nil, levelMin=n|nil, returnDays=n|nil,   -- nil: the default (on, 10, 14)
              capSound=false|nil, syncAccounts=false|nil,           -- (#34, #37) nil: on
              shareGuild=false|nil, reports="log"|"never"|nil,      -- (#38) nil: on, "chat"
-             reportRank=n|nil, reportsHinted=true|nil,             -- (#38) nil: every rank; the hint not shown yet
+             reportRanks={ [guildKey]=n }|nil,                     -- (#38) per guild; none: every rank
+             reportsHinted=true|nil,                               -- (#38) the one-time hint was shown
              chat={ [kind]=false } },                               -- a kind's chat line off (#4)
   nextSeq=1, window={ x, y },
   guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,

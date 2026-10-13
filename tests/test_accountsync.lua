@@ -353,7 +353,9 @@ end
 do  -- A real exchange through the shell: the catch-up line, once, batched.
     local G = { name = "Parse Partout", realm = "Forever", myRank = 1, ranks = { "GM", "Member" },
                 members = { { name = "Fizzle Sprocketwhistle", rank = 1, level = 30, class = "MAGE", online = true,
-                              guid = "Player-1-00000001", note = "" } },
+                              guid = "Player-1-00000001", note = "" },
+                            { name = "Bo Kay", rank = 1, level = 30, class = "ROGUE", online = true,
+                              guid = "Player-1-00000002", note = "" } },
                 events = {}, eventNames = true, motd = "", canViewOfficerNote = false }
     loadAddon({ setup = function() WoW.guild = G end })
     WoW.fire("PLAYER_LOGIN")
@@ -437,7 +439,13 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     end
     check(forward("abc:1", nil), "a forwarded report: counted in the catch-up line")
     check(not forward("abd:2", "never"), "...not when reports are set to Never")
+    local kept = false
+    for _, e in ipairs(gs.log) do if e.uid == "abd:2" then kept = true end end
+    check(not kept, "...nor kept: forwarded reports follow my own setting (#43 review)")
     GuildSpyDB.settings.reports = nil
+    GuildSpyDB.settings.reportRanks = { [KEY] = 0 }
+    check(not forward("abe:3", nil), "a forwarded report from below the rank I accept: not taken")
+    GuildSpyDB.settings.reportRanks = nil
 
     -- The Sharing page: the status of the other account, and the switch.
     local O = GuildSpy.Options
