@@ -49,6 +49,8 @@ then levels). Click **[open log]** for the rest. Switching characters or `/reloa
 Open it from the **GuildSpy tab in the guild window** (J), with `/gspy log`, the minimap button, or
 a key binding. It's styled like the guild roster.
 
+![The log window on its own, from /gspy log or the minimap button](https://raw.githubusercontent.com/Spotnick2/GuildSpy/main/docs/screenshots/log-standalone.png)
+
 - **What's new at a glance:** a line counting what changed since you last looked, with New and
   Earlier sections. **Mark all as read** when you're done.
 - **Filter by type:** Members, Ranks, Notes, Levels, MOTD, and **Reports** (what guildmates told you).
@@ -66,6 +68,8 @@ which profession, like retail's guild profession view: a heading per profession 
 it and how many are online, opening onto its members (level, class, name, zone or last online,
 rank, note), with "Show offline members" and a name search. There are no skill levels and no
 recipe browser: Forever's server doesn't share them.
+
+![The Professions tab in the guild window](https://raw.githubusercontent.com/Spotnick2/GuildSpy/main/docs/screenshots/professions.png)
 
 ## Settings
 
