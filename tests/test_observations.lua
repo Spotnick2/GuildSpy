@@ -99,16 +99,16 @@ do  -- In a page, a supersession moves the record between quotas: my quota count
     local db, gs = store()
     local was = Log.MAX_ENTRIES
     Log.MAX_ENTRIES = 3
-    Log.Receive(db, gs, obs({ uid = "m:1", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW)
-    Log.Receive(db, gs, obs({ uid = "m:2", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW)
-    Log.Receive(db, gs, obs({ uid = "w9:5", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "guild", "Alt Two", NOW)
+    Log.Receive(db, gs, obs({ uid = "m:1", guid = "Player-1-00000001", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW)
+    Log.Receive(db, gs, obs({ uid = "m:2", guid = "Player-1-00000002", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW)
+    Log.Receive(db, gs, obs({ uid = "w9:5", guid = "Player-1-00000003", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "guild", "Alt Two", NOW)
     local batch = Log.NewBatch(gs, NOW)
-    local a, why = Log.Receive(db, gs, obs({ uid = "w9:5", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW, batch)
+    local a, why = Log.Receive(db, gs, obs({ uid = "w9:5", guid = "Player-1-00000003", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW, batch)
     check(a and why == "superseded", "(a page supersedes a guild copy, filling my quota)")
     eq(batch.count.self, 3, "...my quota counts it")
     eq(batch.count.guild, 0, "...the guild quota no longer does")
     local seq = db.nextSeq
-    local old, why2 = Log.Receive(db, gs, obs({ uid = "m:0", origin = "Alt Two", obs = NOW - 5000, at = NOW - 5000, lo = NOW - 5100, hi = NOW - 5000 }), "acct", nil, NOW, batch)
+    local old, why2 = Log.Receive(db, gs, obs({ uid = "m:0", guid = "Player-1-00000004", origin = "Alt Two", obs = NOW - 5000, at = NOW - 5000, lo = NOW - 5100, hi = NOW - 5000 }), "acct", nil, NOW, batch)
     check(not old and why2 == "full", "an older entry in the same page is then refused, not admitted then pruned")
     eq(db.nextSeq, seq, "...and takes no sequence number")
     Log.MAX_ENTRIES = was
@@ -234,7 +234,7 @@ do  -- Imports never enter the login digest; my own do.
     gs.shownSeq = 0
     Log.Add(db, gs, { kind = "JOIN", guid = "Player-1-00000001", name = "Mine", lo = NOW - 60, hi = NOW }, NOW)
     Log.Receive(db, gs, obs(), "guild", "Bo Kay", NOW)
-    Log.Receive(db, gs, obs({ uid = "z:9", origin = "Alt Two" }), "acct", nil, NOW)
+    Log.Receive(db, gs, obs({ uid = "z:9", origin = "Alt Two", from = 30, to = 31 }), "acct", nil, NOW)
     local lines = Log.Digest(gs, false, NOW)
     local text = table.concat(lines, "\n")
     check(text:find("Mine joined", 1, true), "the digest has my own")
