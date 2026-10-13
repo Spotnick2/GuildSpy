@@ -6,7 +6,7 @@ request**, always (owner's decision, 2026-10-11). The repo is `github.com/Spotni
 ## The loop
 
 ```
-issue  ->  branch  ->  PR  ->  Codex review  ->  address  ->  owner merges
+issue  ->  branch  ->  PR  ->  owner's Codex review  ->  address  ->  owner merges
 ```
 
 1. **Find or open the issue.** Milestones map to the plan's phases (`docs/PLAN.md`). Labels:
@@ -17,20 +17,29 @@ issue  ->  branch  ->  PR  ->  Codex review  ->  address  ->  owner merges
 
    An issue's body holds the decided design: update it when the design changes.
 2. **Branch off `main`**, named for the work: `phase2/log-window`, `fix/digest-twice`. Never commit
-   to `main`. A branch that builds on an unmerged one is a **stacked PR**: its base is that branch,
-   and GitHub retargets it to `main` when the base merges.
+   to `main`. A branch that builds on an unmerged one is a **stacked PR**: its base is that branch.
+   Before the base merges with `--delete-branch`, retarget the stacked PR to `main`
+   (`gh pr edit <N> --base main`); deleting its base branch would otherwise close it.
 3. **Before every commit:** `pwsh tests/run.ps1` green (`luac -p` on every TOC file, then the tests).
    For a behaviour change, prove the new test bites: break the behaviour and watch it go red.
 4. **Open the PR** with `Closes #N`, a short summary, and how it was tested (unit, in game).
-5. **Run the review** (below) and post its verdict as a PR comment.
+5. **The owner runs the review** (below), posts it on the PR, and says so. The agent that opened
+   the PR says it's ready and stops: it never runs `codex exec` on a PR itself (owner's decision,
+   2026-10-12; it duplicated the owner's run and spent their usage). `/codex-consult` on plans and
+   designs is still the agent's to use.
 6. **Address or rebut** each finding: fix it in a commit on the branch, or say in the thread why
-   not. Declined findings with a lasting reason also go in `docs/PLAN.md`.
+   not, and reply on the PR. The review may be posted as a PR comment
+   (`gh pr view <N> --json comments`) or as a formal review
+   (`gh api repos/Spotnick2/GuildSpy/pulls/<N>/reviews`): read both, and match it to the PR by the
+   reviewed SHA. Declined findings with a lasting reason also go in `docs/PLAN.md`.
 7. **The owner merges.** Commit and push only as part of this loop.
 
 In-game measurements (`/gspy probe`) go in `docs/FOREVER-PROBE.md`. Findings that hold for every
 Forever addon go in `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
 
 ## The review on a PR
+
+The owner runs this; it is kept here as the reference for that run.
 
 **Routing.** The model, the effort and whether a review is needed follow the shared
 `$wow-addon-review` skill (AGENTS.md "Review policy"). This section is only the Codex invocation it
@@ -101,5 +110,5 @@ Take its bug-catching seriously; be skeptical when it wants more rigor.
 ## Fallback
 
 If `codex` is unavailable (usage limits, disabled), the PR still gets its independent review:
-Fable runs it instead, and the posted comment says so. It is the same family, so a weaker
+Fable runs it instead, when the owner asks for it, and the posted comment says so. It is the same family, so a weaker
 adversary, but better than none.
