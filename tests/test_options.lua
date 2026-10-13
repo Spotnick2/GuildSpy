@@ -36,8 +36,9 @@ local S = GuildSpyDB.settings
 -- Registered under Options > AddOns, with About under it.
 eq(#WoW.settings.addons, 1, "one page in Options > AddOns")
 eq(WoW.settings.addons[1].name, "GuildSpy", "...named GuildSpy")
-eq(#WoW.settings.subs, 1, "one sub-page")
-check(WoW.settings.subs[1].name == "About" and WoW.settings.subs[1].frame == T.about, "...About")
+eq(#WoW.settings.subs, 2, "two sub-pages")
+check(WoW.settings.subs[1].name == "Sharing" and WoW.settings.subs[1].frame == T.sharing, "...Sharing (#37)")
+check(WoW.settings.subs[2].name == "About" and WoW.settings.subs[2].frame == T.about, "...then About")
 
 -- Hidden at creation, built on its first show (or the first show is blank).
 local page = T.page

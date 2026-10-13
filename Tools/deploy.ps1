@@ -33,30 +33,45 @@ if (-not (Test-Path -LiteralPath (Join-Path $LibGlass "Tools\deploy.ps1"))) {
 
 # The tag .pkgmeta pins is what the packager will ship. A dev checkout elsewhere
 # is legitimate (trying a library change before a pin bump), but an in-game check
-# then tests something the release won't carry: say so.
-# Only the Libs/LibGlass-1.0 entry's pin, as tests/fetch_libglass.sh reads it.
-$pin = $null; $inLib = $false
-foreach ($line in Get-Content -LiteralPath (Join-Path $RepoRoot ".pkgmeta")) {
-    if ($line -match '^  Libs/LibGlass-1\.0:') { $inLib = $true; continue }
-    if ($inLib -and $line -match '^\s{0,2}\S') { break }
-    if ($inLib -and $line -match '^\s+(commit|tag):\s*(\S+)\s*$') { $pin = $Matches[2]; break }
+# then tests something the release won't carry: say so. For each embedded library
+# (LibGlass, and LibAccountSync since #37), its own entry's pin, as
+# tests/fetch_libglass.sh reads it.
+function Test-LibPin([string]$Name, [string]$Checkout) {
+    $pin = $null; $inLib = $false
+    foreach ($line in Get-Content -LiteralPath (Join-Path $RepoRoot ".pkgmeta")) {
+        if ($line -match ('^  Libs/' + [regex]::Escape($Name) + ':')) { $inLib = $true; continue }
+        if ($inLib -and $line -match '^\s{0,2}\S') { break }
+        if ($inLib -and $line -match '^\s+(commit|tag):\s*(\S+)\s*$') { $pin = $Matches[2]; break }
+    }
+    $want = $null; $head = $null; $dirty = $null
+    try {
+        $want = (git -C $Checkout rev-parse --verify --quiet "$pin^{commit}" 2>$null)
+        $head = (git -C $Checkout rev-parse HEAD 2>$null)
+        $dirty = (git -C $Checkout status --porcelain 2>$null)
+    } catch { }
+    if (-not $pin -or -not $want -or $want -ne $head -or $dirty) {
+        Write-Host "WARNING: the $Name checkout is not at the .pkgmeta pin ($pin)$(if ($dirty) { ', or has uncommitted changes' }):" -ForegroundColor Yellow
+        Write-Host "this deploy tests a library the release won't ship." -ForegroundColor Yellow
+    }
 }
-$want = $null; $head = $null; $dirty = $null
-try {
-    $want = (git -C $LibGlass rev-parse --verify --quiet "$pin^{commit}" 2>$null)
-    $head = (git -C $LibGlass rev-parse HEAD 2>$null)
-    $dirty = (git -C $LibGlass status --porcelain 2>$null)
-} catch { }
-if (-not $pin -or -not $want -or $want -ne $head -or $dirty) {
-    Write-Host "WARNING: the LibGlass checkout is not at the .pkgmeta pin ($pin)$(if ($dirty) { ', or has uncommitted changes' }):" -ForegroundColor Yellow
-    Write-Host "this deploy tests a library the release won't ship." -ForegroundColor Yellow
-}
+Test-LibPin "LibGlass-1.0" $LibGlass
 
 # The library first: its deploy checks the checkout and may refuse, and a refusal
 # must leave the deployed addon as it was (a new TOC naming a library that never
 # arrived would load no glass at all).
 & pwsh -NoProfile -File (Join-Path $LibGlass "Tools\deploy.ps1") -Addon GuildSpy -AddOnsPath $AddOnsPath
 if ($LASTEXITCODE -ne 0) { Write-Error "LibGlass deploy refused; GuildSpy was not touched"; exit 1 }
+
+# LibAccountSync-1.0 (#37), the same way, from $env:LIBACCOUNTSYNC, else ..\LibAccountSync.
+$LibAcct = if ($env:LIBACCOUNTSYNC) { $env:LIBACCOUNTSYNC } else { Join-Path (Split-Path -Parent $RepoRoot) "LibAccountSync" }
+if (-not [System.IO.Path]::IsPathRooted($LibAcct)) { $LibAcct = Join-Path $RepoRoot $LibAcct }
+if (-not (Test-Path -LiteralPath (Join-Path $LibAcct "Tools\deploy.ps1"))) {
+    Write-Error "LibAccountSync checkout not found at $LibAcct (clone github.com/Spotnick2/LibAccountSync there, or set `$env:LIBACCOUNTSYNC)"
+    exit 1
+}
+Test-LibPin "LibAccountSync-1.0" $LibAcct
+& pwsh -NoProfile -File (Join-Path $LibAcct "Tools\deploy.ps1") -Addon GuildSpy -AddOnsPath $AddOnsPath
+if ($LASTEXITCODE -ne 0) { Write-Error "LibAccountSync deploy refused; GuildSpy was not touched"; exit 1 }
 
 $dest = Join-Path $AddOnsPath "GuildSpy"
 Write-Host "Deploying GuildSpy -> $dest" -ForegroundColor Cyan
@@ -92,13 +107,14 @@ Get-ChildItem -LiteralPath $dest -File | Where-Object { $files -notcontains $_.N
 $libsSrc = Join-Path $RepoRoot "Libs"
 $libsDest = Join-Path $dest "Libs"
 $glassLib = "LibGlass-1.0"
+$externals = @($glassLib, "LibAccountSync-1.0")      # each deployed by its own script (above)
 if (Test-Path -LiteralPath $libsDest) {
-    Get-ChildItem -LiteralPath $libsDest | Where-Object { $_.Name -ne $glassLib } |
+    Get-ChildItem -LiteralPath $libsDest | Where-Object { $externals -notcontains $_.Name } |
         ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
 }
 if (Test-Path -LiteralPath $libsSrc) {
     New-Item -ItemType Directory -Force -Path $libsDest | Out-Null
-    $vendored = Get-ChildItem -LiteralPath $libsSrc | Where-Object { $_.Name -ne $glassLib }
+    $vendored = Get-ChildItem -LiteralPath $libsSrc | Where-Object { $externals -notcontains $_.Name }
     foreach ($lib in $vendored) { Copy-Item -LiteralPath $lib.FullName -Destination $libsDest -Recurse -Force }
     Write-Host "  Libs\  ($(($vendored | Get-ChildItem -Recurse -File).Count) vendored files, and LibGlass-1.0)"
 }

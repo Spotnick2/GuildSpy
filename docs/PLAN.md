@@ -62,7 +62,9 @@ Pure logic separated from the WoW shell (Gnomesweeper's `Guild.lua`/`Social.lua`
 | `Patterns.lua` | **pure**: patterns from localized `ERR_GUILD_*` (escape magic chars, anchor, `%s`/`%1$s` → `(.+)`); `ParseSystem(msg)`. |
 | `EventLog.lua` | **pure** matcher over rows read by the shell: `{kind, p1, p2, rank, y, m, d, h}` → age interval. |
 | `Scanner.lua` | shell: events, debounce, polling, completeness gate, pending list, calls Diff, feeds Log. |
-| `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. |
+| `Log.lua` | structured entries, caps/pruning, chat output, digest. Text rendered at display time. Observations, receiving and retention (#36, docs/SYNC.md). |
+| `Wire.lua` | **pure**: sync messages as text (#37). |
+| `AccountSync.lua` | sync between my accounts over LibAccountSync-1.0 (#37, docs/SYNC.md §4): a protocol core (two run side by side in tests) and the shell (library, scanner's guild, catch-up line). |
 | `UI.lua` | Log window, styled like the roster (#19): "new" summary, New / Earlier, type tabs, time scope, rank filter (current rank, #23), name search, Mark all as read. A row's tooltip has the member's current notes (#25; the officer note only while readable). |
 | `Options.lua` | Options > AddOns > GuildSpy and its About page (#4, Gnomesweeper recipe): login summary, level-up threshold, days away for "back", chat line per change type. `Options.Set` is the one place a setting changes; `Options.Validate` resets saved values no page could set. |
 | `Minimap.lua` | Minimap button, addon compartment and key binding (#5): LDB + LibDBIcon (vendored like Gnomesweeper), `AddonCompartmentFunc*`, `Bindings.xml` (Key Bindings > GuildSpy). Left-click the log, right-click the settings; the tooltip has the guild, who's online and what's new. |
@@ -150,7 +152,9 @@ matching uses that interval, and it must be **unique**; if it's ambiguous, there
 
 ```
 GuildSpyDB = { version=1, minimap={},
+  accountSync={...},   -- (#37) LibAccountSync's own store (household key, peers): never edit or copy
   settings={ digest=false|nil, levelMin=n|nil, returnDays=n|nil,   -- nil: the default (on, 10, 14)
+             capSound=false|nil, syncAccounts=false|nil,           -- (#34, #37) nil: on
              chat={ [kind]=false } },                               -- a kind's chat line off (#4)
   nextSeq=1, window={ x, y },
   guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,
@@ -158,7 +162,8 @@ GuildSpyDB = { version=1, minimap={},
     ranks = { "Guild Master", ... }, motd = "...",
     members = { [guid] = { name, rank, level, class, note, onote, online, lastSeenAt, missingSince, missingAfter } },
     formers = { [guid] = { name, leftAt, rankName, level } },
-    nextChg=n,     -- (#36) this client's change counter: account sync pages by it
+    nextChg=n,     -- (#36) this client's change counter (never below the clock in ms): account sync pages by it
+    peerMark = { [peerGuid] = n },   -- (#37) per account of mine: its counter I have up to
     log = { { seq, at, approx=bool|nil, kind, guid, name, actor, from, to,
               after=epoch|nil,   -- (#19) the previous scan: a scan-noticed change is in (after, at]
               -- (#36) the observation, docs/SYNC.md §1:

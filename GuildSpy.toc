@@ -10,6 +10,7 @@
 ## AddonCompartmentFuncOnLeave: GuildSpy_OnAddonCompartmentLeave
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
+Libs\LibAccountSync-1.0\LibAccountSync-1.0.xml
 Libs\LibStub\LibStub.lua
 Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
 Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
@@ -20,7 +21,9 @@ Roster.lua
 Patterns.lua
 EventLog.lua
 Log.lua
+Wire.lua
 Scanner.lua
+AccountSync.lua
 UI.lua
 Options.lua
 Minimap.lua

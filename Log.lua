@@ -454,10 +454,14 @@ function Log.NewUid()
     return writer .. ":" .. counter
 end
 
--- This client's change counter for the guild: strictly increasing, persisted.
--- Account sync pages by it; wall time stays for display and retention.
+-- This client's change counter for the guild: strictly increasing, persisted,
+-- and never below the clock (milliseconds): if the saved file goes back (a
+-- crash before it was written, a reset guild), new changes still number above
+-- any cursor a peer holds (#40 review). Account sync pages by it; wall time
+-- stays for display and retention.
 function Log.NextChg(gs)
-    gs.nextChg = (tonumber(gs.nextChg) or 0) + 1
+    local floor = math.floor((time and time() or 0) * 1000)
+    gs.nextChg = math.max((tonumber(gs.nextChg) or 0) + 1, floor)
     return gs.nextChg
 end
 
@@ -487,12 +491,29 @@ local function limits(q)
     return Log.MAX_ENTRIES, Log.MAX_DAYS
 end
 
+-- For a batch of receipts (a page, #40 review): uids indexed once, counts per
+-- quota kept as entries are admitted; the caller prunes once at the end.
+function Log.NewBatch(gs, now)
+    local b = { byUid = {}, count = { self = 0, guild = 0 }, now = now }
+    for i, e in ipairs(gs.log or {}) do
+        if e.uid then
+            local list = b.byUid[e.uid] or {}
+            list[#list + 1] = e
+            b.byUid[e.uid] = list
+        end
+        local _, days = limits(quotaOf(e))
+        if now - observed(e) <= days * 86400 then b.count[quotaOf(e)] = b.count[quotaOf(e)] + 1 end
+    end
+    return b
+end
+
 -- Whether a received entry keeps its place: young enough, and room in its
 -- quota or newer (in retention order) than the oldest kept.
-function Log.Admits(gs, e, now)
+function Log.Admits(gs, e, now, batch)
     local q = quotaOf(e)
     local max, days = limits(q)
     if now - observed(e) > days * 86400 then return false end
+    if batch and batch.count[q] < max then return true end
     local n, oldest = 0, nil
     for _, x in ipairs(gs.log or {}) do
         if quotaOf(x) == q and now - observed(x) <= days * 86400 then
@@ -565,7 +586,7 @@ end
 -- Receiving one entry (#36, SYNC.md §2). via "acct" (proven by LibAccountSync)
 -- or "guild" (sender = the GUILD transport name). Returns the entry and what
 -- happened ("added", "updated", "superseded"), or nil and why not.
-function Log.Receive(db, gs, inc, via, sender, now)
+function Log.Receive(db, gs, inc, via, sender, now, batch)
     if type(inc) ~= "table" then return nil, "not an entry" end
     local ns
     if via == "guild" then
@@ -585,7 +606,8 @@ function Log.Receive(db, gs, inc, via, sender, now)
     end
     gs.log = gs.log or {}
     local existing, twin, twinAt
-    for i, e in ipairs(gs.log) do
+    local same = batch and (batch.byUid[inc.uid] or {}) or gs.log
+    for i, e in ipairs(same) do
         if e.uid == inc.uid then
             local ens = Log.Ns(e)
             if ens == ns then existing = e
@@ -613,8 +635,11 @@ function Log.Receive(db, gs, inc, via, sender, now)
     else
         e.trust, e.ns, e.reporter = "guild", ns, ns:sub(3)
     end
-    if twin then table.remove(gs.log, twinAt) end
-    if not Log.Admits(gs, e, now) then
+    if twin then
+        for i, x in ipairs(gs.log) do if x == twin then twinAt = i; break end end
+        table.remove(gs.log, twinAt)
+    end
+    if not Log.Admits(gs, e, now, batch) then
         if twin then table.insert(gs.log, twinAt, twin) end
         return nil, "full"                                    -- not offered again (non-backfill, SYNC.md §7)
     end
@@ -622,7 +647,21 @@ function Log.Receive(db, gs, inc, via, sender, now)
     e.seq, db.nextSeq = db.nextSeq, db.nextSeq + 1
     e.chg = Log.NextChg(gs)
     gs.log[#gs.log + 1] = e
-    Log.Prune(gs, now)
+    if batch then
+        local list = batch.byUid[e.uid] or {}
+        if twin then
+            -- The guild copy leaves its quota and the index; mine takes a place
+            -- in my quota, like any other (#40 Codex review).
+            for i, x in ipairs(list) do if x == twin then table.remove(list, i); break end end
+            local _, gdays = limits("guild")
+            if now - observed(twin) <= gdays * 86400 then batch.count.guild = batch.count.guild - 1 end
+        end
+        list[#list + 1] = e
+        batch.byUid[e.uid] = list
+        batch.count[quotaOf(e)] = batch.count[quotaOf(e)] + 1
+    else
+        Log.Prune(gs, now)
+    end
     return e, twin and "superseded" or "added"
 end
 

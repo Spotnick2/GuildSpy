@@ -38,6 +38,8 @@ local function initDB()
     GuildSpy.Options.Validate(db.settings)
     -- LibDBIcon's table: made here and never replaced after (it keeps a reference).
     if type(db.minimap) ~= "table" then db.minimap = {} end
+    -- LibAccountSync's store (#37): account-wide; it holds the household key.
+    if type(db.accountSync) ~= "table" then db.accountSync = {} end
     if type(db.guilds) ~= "table" then db.guilds = {} end
     if type(db.nextSeq) ~= "number" then db.nextSeq = 1 end
 end

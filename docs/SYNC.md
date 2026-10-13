@@ -87,12 +87,15 @@ it). Two namespaces never alias each other.
 - **Embedded in GuildSpy's own `Libs\LibAccountSync-1.0`** (owner, 2026-10-12): no separate
   addon (no AltStableSyncLink-style plugin). A `.pkgmeta` external pinned `r5` with its ignore
   list, gitignored like LibGlass, deployed by `..\LibAccountSync\Tools\deploy.ps1 -Addon GuildSpy`
-  from `Tools/deploy.ps1`; its TOC line before our files; tests load the real library
-  (`..\LibAccountSync`; CI fetches the pin). One instance, tag `GuildSpy`, `messages = true` (else
+  from `Tools/deploy.ps1`; its TOC line before our files; the tests answer `LibStub("LibAccountSync-1.0")`
+  with a scripted fake that answers as the real `SendTo` does (1, 0 while not ready, nil when off),
+  as AltStable's tests do; the real library is checked in game. One instance, tag `GuildSpy`, `messages = true` (else
   disabled). Store `GuildSpyDB.accountSync`, in GuildSpy's own saved variables (GuildSpy has no
   file-transfer feature, so AltStableSync's separate-SV reason doesn't apply).
-- **Capability:** `CAP|1` to every `Peers()` entry on each discovery pass (login, peer change,
-  every 5 min) until answered; forgotten when the peer leaves.
+- **Capability:** `CAP <guildKey> <heard>` to every `Peers()` entry: counted as sent only when the
+  library took it (it answers "not ready" until the peer's handshake is done); again after 10 s
+  until the peer's own CAP says it heard ours, then every 5 min or when my guild changes; forgotten
+  when the peer leaves (#40 review).
 - **Same guild only (owner, 2026-10-12):** two of my accounts exchange only the log of the guild
   their current characters are **both** in (guild key = name + the guild's own realm, as today).
   Characters in different guilds, or a guildless one, sync nothing. `CAP|1` carries the sender's
@@ -100,9 +103,13 @@ it). Two namespaces never alias each other.
   either side drops what's in flight.
 - **Pull by change counter, one page in flight per peer and guild:**
   `REQ|<rid>|<guildKey>|<cursor>` → `PAGE|<rid>|<guildKey>|<cursor>|<next>|<more>` + entries with
-  `chg > cursor` in chg order, one library payload ≤ 12 KB encoded. The requester accepts a PAGE
-  only for its outstanding `rid` and matching `cursor`, stores `next` only after the whole page,
-  then asks again if `more`. Timeout 30 s → same request again. An empty page returns `next`.
+  `chg > cursor` in chg order, one library payload ≤ 6 KB encoded (under 10 s at ChatThrottleLib's
+  800 B/s). The requester accepts a PAGE only from a peer it has asked, for its current guild, and
+  **continuing from its stored cursor** (a late page still counts: a page can outlast the timeout;
+  one for an older cursor doesn't), stores `next` only after the whole page, then asks again if
+  `more`. Timeout 90 s → ask again. An empty page returns `next`. `chg` never goes below the clock
+  in ms, so a saved file that went back (a crash) can't number new changes under a peer's cursor
+  (#40 review). A page is received as one batch (uids indexed once, one prune at the end).
 - **Polling:** a pull per capable peer at login +10 s, when it appears, and every 5 min.
 - Shared: every entry, officer notes included (display stays gated by `CanViewOfficerNote()`
   everywhere: Log.Visible, MemberNotes, tooltips, search, counts). Guild-origin entries too,

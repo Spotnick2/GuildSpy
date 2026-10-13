@@ -16,6 +16,9 @@ externals:
   Libs/LibGlass-1.0:
     url: https://github.com/Spotnick2/LibGlass
     tag: r5
+  Libs/LibAccountSync-1.0:
+    url: https://github.com/Spotnick2/LibAccountSync
+    tag: r5
 
 # YAML list, not markdown bullets: a `*` here silently ignores nothing, which
 # is how development files end up in a published zip.
@@ -39,3 +42,9 @@ ignore:
   - Libs/LibGlass-1.0/AGENTS.md
   - Libs/LibGlass-1.0/CLAUDE.md
   - Libs/LibGlass-1.0/README.md
+  # LibAccountSync-1.0 (#37), its README's list. Never ChatThrottleLib/ or LibStub/: its XML loads them.
+  - Libs/LibAccountSync-1.0/tests
+  - Libs/LibAccountSync-1.0/docs
+  - Libs/LibAccountSync-1.0/Tools
+  - Libs/LibAccountSync-1.0/CLAUDE.md
+  - Libs/LibAccountSync-1.0/README.md

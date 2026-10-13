@@ -57,7 +57,7 @@ do
     check(e.trust == "guild" and e.reporter == "Bo Kay" and e.ns == "g:Bo Kay" and e.here == false,
         "...as Bo's report, not this account's")
     eq(Log.Source(e), "Reported by Bo Kay", "...and says so")
-    check(e.seq == 1 and e.chg == 1, "...with a local seq and change")
+    check(e.seq == 1 and type(e.chg) == "number" and e.chg >= math.floor(time() * 1000), "...with a local seq and change")
     e, why = Log.Receive(db, gs, obs(), "guild", "Bo Kay", NOW)
     check(not e and why == "known", "the same report again: ignored")
     e, why = Log.Receive(db, gs, obs({ rev = 2, actor = "Enzo Matrix" }), "guild", "Bo Kay", NOW)
@@ -93,6 +93,25 @@ do  -- Supersession: my other account's copy replaces a guild copy of the same o
     check(a.trust == "self" and a.here == false and a.actor == nil, "...as mine, inheriting nothing")
     eq(count(gs), 1, "...one record left")
     eq(Log.Source(a), "Seen on Alt Two", "...seen on my other character")
+end
+
+do  -- In a page, a supersession moves the record between quotas: my quota counts it (#40 Codex review).
+    local db, gs = store()
+    local was = Log.MAX_ENTRIES
+    Log.MAX_ENTRIES = 3
+    Log.Receive(db, gs, obs({ uid = "m:1", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW)
+    Log.Receive(db, gs, obs({ uid = "m:2", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW)
+    Log.Receive(db, gs, obs({ uid = "w9:5", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "guild", "Alt Two", NOW)
+    local batch = Log.NewBatch(gs, NOW)
+    local a, why = Log.Receive(db, gs, obs({ uid = "w9:5", origin = "Alt Two", obs = NOW - 100, at = NOW - 100, lo = NOW - 200, hi = NOW - 100 }), "acct", nil, NOW, batch)
+    check(a and why == "superseded", "(a page supersedes a guild copy, filling my quota)")
+    eq(batch.count.self, 3, "...my quota counts it")
+    eq(batch.count.guild, 0, "...the guild quota no longer does")
+    local seq = db.nextSeq
+    local old, why2 = Log.Receive(db, gs, obs({ uid = "m:0", origin = "Alt Two", obs = NOW - 5000, at = NOW - 5000, lo = NOW - 5100, hi = NOW - 5000 }), "acct", nil, NOW, batch)
+    check(not old and why2 == "full", "an older entry in the same page is then refused, not admitted then pruned")
+    eq(db.nextSeq, seq, "...and takes no sequence number")
+    Log.MAX_ENTRIES = was
 end
 
 do  -- Account forwarding keeps a guild report a guild report, and its text identical.
