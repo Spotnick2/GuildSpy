@@ -93,10 +93,20 @@ local function validGuild(gs)
     if type(gs.ranks) ~= "table" then gs.ranks = {} end
     if type(gs.shownSeq) ~= "number" then gs.shownSeq = 0 end
     if gs.nextChg ~= nil and type(gs.nextChg) ~= "number" then gs.nextChg = nil end
+    -- A guildmate's report whose identity is damaged is dropped: migrating it
+    -- would make it mine (#39 review). My own damaged uid is given a new one.
+    local kept = {}
     for _, e in ipairs(gs.log) do
-        if e.uid ~= nil and type(e.uid) ~= "string" then e.uid = nil end
-        if e.ns ~= nil and type(e.ns) ~= "string" then e.ns, e.trust = nil, nil end
+        local guild = e.trust == "guild" or e.ns ~= nil
+        local idOk = type(e.uid) == "string" and (e.ns == nil or (type(e.ns) == "string" and e.ns:find("^g:.+")))
+        if guild and (not idOk or e.trust ~= "guild") then
+            -- dropped
+        else
+            if e.uid ~= nil and type(e.uid) ~= "string" then e.uid = nil end
+            kept[#kept + 1] = e
+        end
     end
+    gs.log = kept
     -- Observations (#36): legacy entries get their identity once.
     Log.Migrate(gs)
     if gs.viewedSeq ~= nil and type(gs.viewedSeq) ~= "number" then gs.viewedSeq = nil end
@@ -399,7 +409,7 @@ function Scanner.PrintLog(n)
         if Log.Visible(e, canView()) then
             local src = Log.Source(e)
             table.insert(out, 1, date("%m-%d %H:%M", e.at) .. (e.approx and "~ " or "  ") .. Log.Line(e, now())
-                .. (src and (" |cff8f8f8f(" .. src:sub(1, 1):lower() .. src:sub(2):gsub("|", "||") .. ")|r") or ""))
+                .. (src and (" |cff8f8f8f(" .. Log.Esc(src:sub(1, 1):lower() .. src:sub(2)) .. ")|r") or ""))
             shown = shown + 1
             if shown >= n then break end
         end

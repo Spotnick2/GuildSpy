@@ -19,7 +19,10 @@ and with other users from the guild". Replaces docs/PLAN.md "Deferred" once agre
 1. **Observations are never destroyed or rewritten by anyone but their observer.** Each entry is
    one observer's observation, kept as recorded, with its provenance. Sync adds observations.
 2. **Provenance is bound to the transport,** never to the payload: own accounts by LibAccountSync's
-   proof, guildmates by the GUILD sender name.
+   proof, guildmates by the GUILD sender name. Measured (Gnomesweeper, build 70205;
+   `References\PORTING-TBC-TO-FOREVER.md`, Gnomesweeper `docs/SOCIAL.md`): that sender is
+   "First Surname", no realm, the same string `API.PlayerFullName` gives an entry's `origin`.
+   Re-measure on the live client, where realms may appear (phase 3 checks it in game).
 3. **The digest and live chat stay about this account's own scans.** Imported observations reach
    the player through the window and one batched catch-up line.
 4. **Retention is deterministic** (by observation time and uid, never by arrival), with a separate

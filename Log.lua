@@ -106,6 +106,13 @@ end
 
 -- Received text is stored canonical (unescaped, #36); every rendering escapes
 -- the UI's control character, so a "|" in a name or note can't start markup.
+-- Idempotent: a run of pipes that is already escaped (even) is left as is,
+-- so text the client may hand back escaped isn't doubled (#39 review).
+function Log.Esc(s)
+    if type(s) ~= "string" or not s:find("|", 1, true) then return s end
+    return (s:gsub("|+", function(run) if #run % 2 == 1 then return run .. "|" end end))
+end
+
 local TEXT_FIELDS = { "name", "actor", "from", "to", "origin", "reporter" }
 function Log.Safe(e)
     local view
@@ -113,7 +120,7 @@ function Log.Safe(e)
         local v = e[f]
         if type(v) == "string" and v:find("|", 1, true) then
             view = view or setmetatable({}, { __index = e })
-            view[f] = (v:gsub("|", "||"))
+            view[f] = Log.Esc(v)
         end
     end
     return view or e
@@ -171,7 +178,10 @@ end
 
 -- Text without colour codes (and links reduced to their text).
 function Log.Plain(s)
-    return (s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1"))
+    -- An escaped pipe ("||") is text, not the start of a code (#39 review).
+    s = s:gsub("||", "\1")
+    s = s:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|H.-|h(.-)|h", "%1")
+    return (s:gsub("\1", "|"))
 end
 
 -- The local midnight that starts `now`'s day, or the day `back` days before
@@ -413,7 +423,7 @@ function Log.Add(db, gs, ev, now)
                 origin = ev.origin or Log.Origin(), trust = "self", here = true, rev = 1, chg = Log.NextChg(gs) }
     db.nextSeq = db.nextSeq + 1
     gs.log[#gs.log + 1] = e
-    Log.Prune(gs, now)
+    Log.Prune(gs, now, e)
     return e
 end
 
@@ -516,20 +526,26 @@ function Log.Valid(e, via, now)
     local kinds = via == "guild" and Log.PUBLIC_KINDS or Log.ALL_KINDS
     if not kinds[e.kind] then return false, "kind" end
     if type(e.uid) ~= "string" or #e.uid > 40 or not e.uid:find("^[%w]+:%d+$") then return false, "uid" end
-    if not (type(e.rev) == "number" and e.rev >= 1 and e.rev == math.floor(e.rev)) then return false, "rev" end
+    if not (type(e.rev) == "number" and e.rev >= 1 and e.rev <= 1e6 and e.rev == math.floor(e.rev)) then
+        return false, "rev"
+    end
     if not NO_GUID[e.kind] and not (type(e.guid) == "string" and e.guid:find("^Player%-%d+%-%x+$")) then
         return false, "guid"
     end
     if not (str(e.name, 48) and str(e.actor, 48) and str(e.origin, 48) and str(e.class, 16) and str(e.how, 8)) then
         return false, "text"
     end
-    local long = via == "guild" and 124 or 1024             -- a note is 31 characters (UTF-8 up to 4 bytes)
+    -- from/to by kind (SYNC.md §6): ranks 32 B, names 48 B, notes 31 characters
+    -- (UTF-8: up to 124 B); the MOTD and rank lists (my accounts only) longer.
+    local size = (e.kind == "NOTE" or e.kind == "ONOTE") and 124 or e.kind == "NAME" and 48
+        or (e.kind == "MOTD" or e.kind == "RANKS") and 1024 or 32
     if e.kind == "LEVEL" then
-        local cap = 200
+        local api = GuildSpy.API
+        local cap = api and api.LevelCap and api.LevelCap() or 200
         for _, v in ipairs({ e.from, e.to }) do
             if not (type(v) == "number" and v >= 1 and v <= cap and v == math.floor(v)) then return false, "level" end
         end
-    elseif not (str(e.from, long) and str(e.to, long)) then
+    elseif not (str(e.from, size) and str(e.to, size)) then
         return false, "text"
     end
     if not (num(e.at) and num(e.lo) and num(e.hi) and num(e.obs) and num(e.days) and num(e.level) and num(e.leftAt)) then
@@ -550,16 +566,22 @@ end
 -- or "guild" (sender = the GUILD transport name). Returns the entry and what
 -- happened ("added", "updated", "superseded"), or nil and why not.
 function Log.Receive(db, gs, inc, via, sender, now)
-    local ok, why = Log.Valid(inc, via, now)
-    if not ok then return nil, why end
+    if type(inc) ~= "table" then return nil, "not an entry" end
     local ns
     if via == "guild" then
-        if type(sender) ~= "string" or inc.origin ~= sender then return nil, "not the sender's" end
-        ns = "g:" .. sender
+        ns = "g:" .. tostring(sender)
     elseif via == "acct" then
         ns = (type(inc.ns) == "string" and inc.ns:find("^g:.+")) and inc.ns or "self"
     else
         return nil, "via"
+    end
+    -- A guildmate's report, direct or forwarded by my other account, keeps the
+    -- guild rules: only what that reporter could have sent (#39 review).
+    local rules = ns == "self" and "acct" or "guild"
+    local ok, why = Log.Valid(inc, rules, now)
+    if not ok then return nil, why end
+    if ns ~= "self" and (type(inc.origin) ~= "string" or inc.origin ~= ns:sub(3)) then
+        return nil, "not the sender's"
     end
     gs.log = gs.log or {}
     local existing, twin, twinAt
@@ -606,12 +628,15 @@ end
 
 -- Each quota keeps its newest in retention order (#36): my accounts' 1500 /
 -- 180 days, guildmates' reports 500 / 60 days. The log keeps its order.
-function Log.Prune(gs, now)
+-- `keep`: an observation this account has just made and already shown; it is
+-- never the one evicted, even if its observed time is older (#39 review).
+-- Usually one entry is over: one linear pass each, no sort (#39 review).
+function Log.Prune(gs, now, keep)
     local log = gs.log or {}
     local alive, byQuota = {}, { self = {}, guild = {} }
     for _, e in ipairs(log) do
         local max, days = limits(quotaOf(e))
-        if now - observed(e) <= days * 86400 then
+        if now - observed(e) <= days * 86400 or e == keep then
             alive[#alive + 1] = e
             local list = byQuota[quotaOf(e)]
             list[#list + 1] = e
@@ -620,9 +645,13 @@ function Log.Prune(gs, now)
     local drop = {}
     for q, list in pairs(byQuota) do
         local max = limits(q)
-        if #list > max then
-            table.sort(list, Log.Before)
-            for i = 1, #list - max do drop[list[i]] = true end
+        for _ = 1, #list - max do
+            local oldest
+            for _, e in ipairs(list) do
+                if not drop[e] and e ~= keep and (not oldest or Log.Before(e, oldest)) then oldest = e end
+            end
+            if not oldest then break end
+            drop[oldest] = true
         end
     end
     if #alive == #log and next(drop) == nil then return end

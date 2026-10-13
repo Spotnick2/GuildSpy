@@ -231,4 +231,87 @@ do  -- Imports never enter the login digest; my own do.
     check(#found == 1 and found[1].reporter == "Bo Kay", "search finds a report by who reported it")
 end
 
+-- #39 review --------------------------------------------------------------
+
+do  -- A new own observation is never the one evicted, even with an older observed time.
+    local saved = Log.MAX_ENTRIES
+    Log.MAX_ENTRIES = 2
+    local db, gs = store()
+    Log.Add(db, gs, { kind = "JOIN", guid = "Player-1-00000001", name = "A", lo = NOW - 200, hi = NOW - 100 }, NOW)
+    Log.Add(db, gs, { kind = "JOIN", guid = "Player-1-00000002", name = "B", lo = NOW - 100, hi = NOW - 50 }, NOW)
+    local late = Log.Add(db, gs, { kind = "LEAVE", guid = "Player-1-00000003", name = "C",
+                                   lo = NOW - 90000, hi = NOW - 86400 }, NOW)
+    local names = {}
+    for _, x in ipairs(gs.log) do names[#names + 1] = x.name end
+    eq(table.concat(names, ","), "B,C", "a confirmed departure with an older observed time stays; the oldest other goes")
+    check(late.seq and late == gs.log[2], "...it is the entry just shown")
+    Log.MAX_ENTRIES = saved
+end
+
+do  -- A guild report forwarded by my account keeps the guild rules.
+    local db, gs = store()
+    local function fwd(t)
+        local e = obs(t)
+        e.ns = "g:Bo Kay"
+        return Log.Receive(db, gs, e, "acct", nil, NOW)
+    end
+    local e, why = fwd({ uid = "f:1", kind = "ONOTE", from = "", to = "secret" })
+    check(not e and why == "kind", "a forwarded 'report' of an officer note is refused (Bo could never send one)")
+    e, why = fwd({ uid = "f:2", origin = "Someone Else" })
+    check(not e and why == "not the sender's", "a forwarded report whose observer isn't its reporter is refused")
+    e = fwd({ uid = "f:3" })
+    check(e and e.reporter == "Bo Kay", "a proper forwarded report is kept")
+end
+
+do  -- Escaping is idempotent; search finds text with a pipe.
+    eq(Log.Esc("a|b"), "a||b", "a lone | is escaped")
+    eq(Log.Esc("a||b"), "a||b", "an already escaped || is left as is")
+    eq(Log.Esc("a|||b"), "a||||b", "an odd run is completed")
+    eq(Log.Plain("x||y ||cffff0000red"), "x|y |cffff0000red", "plain text keeps escaped pipes as text")
+    local db, gs = store()
+    Log.Receive(db, gs, obs({ uid = "p:1", kind = "NOTE", from = "", to = "x|y" }), "guild", "Bo Kay", NOW)
+    eq(#Log.Filter(gs, { query = "x|y" }, NOW), 1, "searching for a note with a pipe finds it")
+end
+
+do  -- Tighter validation.
+    local db, gs = store()
+    local cases = {
+        { "rev", obs({ uid = "v:1", rev = 1e7 }) },
+        { "rev", obs({ uid = "v:2", rev = math.huge }) },
+        { "text", obs({ uid = "v:3", kind = "PROMOTE", from = "Member", to = string.rep("r", 33) }) },
+        { "text", obs({ uid = "v:4", kind = "NAME", from = "Ann Lee", to = string.rep("n", 49) }) },
+        { "level", obs({ uid = "v:5", from = 60, to = 61 }) },
+    }
+    for _, c in ipairs(cases) do
+        local e, why = Log.Receive(db, gs, c[2], "guild", "Bo Kay", NOW)
+        check(not e and why == c[1], "refused: " .. c[1] .. " (" .. tostring(why) .. ")")
+    end
+    check(Log.Receive(db, gs, obs({ uid = "v:6", kind = "PROMOTE", from = "Member", to = "Raider" }), "guild", "Bo Kay", NOW),
+        "a normal rank change passes")
+end
+
+do  -- A guild report with a damaged identity is dropped at load, never migrated as mine.
+    local now = time()
+    local saved = { guilds = { ["Parse Partout-Forever"] = { log = {
+        { seq = 1, at = now - 60, kind = "JOIN", guid = "Player-1-00000009", name = "Fake",
+          trust = "guild", ns = "g:Bo Kay", uid = 12345, reporter = "Bo Kay", origin = "Bo Kay" },
+        { seq = 2, at = now - 50, kind = "JOIN", guid = "Player-1-00000008", name = "Real",
+          trust = "guild", ns = "g:Bo Kay", uid = "w:1", reporter = "Bo Kay", origin = "Bo Kay" },
+        { seq = 3, at = now - 40, kind = "JOIN", guid = "Player-1-00000007", name = "Mine" },
+    } } } }
+    loadAddon({ db = saved, setup = function()
+        WoW.guild = { name = "Parse Partout", realm = "Forever", myRank = 3, ranks = { "GM", "Member" },
+                      members = { { name = "Fizzle Sprocketwhistle", rank = 1, level = 30, class = "MAGE",
+                                    online = true, guid = "Player-1-00000001", note = "" } },
+                      events = {}, eventNames = true, motd = "", canViewOfficerNote = false }
+    end })
+    WoW.fire("PLAYER_LOGIN")
+    WoW.fire("GUILD_ROSTER_UPDATE", false)
+    WoW.advance(25)
+    local gs = saved.guilds["Parse Partout-Forever"]
+    local names = {}
+    for _, x in ipairs(gs.log) do names[#names + 1] = x.name .. ":" .. tostring(x.trust) end
+    eq(table.concat(names, ","), "Real:guild,Mine:self", "the damaged report is dropped; the good one and mine stay")
+end
+
 done("test_observations")

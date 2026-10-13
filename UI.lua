@@ -126,10 +126,10 @@ local function buildRow(row)
         GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
         GameTooltip:AddLine(Log.Provenance(entry), 0.6, 0.6, 0.6, true)
         local src = Log.Source(entry)
-        if src then GameTooltip:AddLine((src:gsub("|", "||")), 0.6, 0.8, 1, true) end
+        if src then GameTooltip:AddLine(Log.Esc(src), 0.6, 0.8, 1, true) end
         local gs = current()
         for _, n in ipairs(gs and Log.MemberNotes(gs, entry, canView()) or {}) do
-            GameTooltip:AddLine(n.label .. ": |cff" .. n.color .. n.text .. "|r", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(n.label .. ": |cff" .. n.color .. Log.Esc(n.text) .. "|r", 0.8, 0.8, 0.8, true)
         end
         GameTooltip:Show()
     end)
