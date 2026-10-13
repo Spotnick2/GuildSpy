@@ -165,25 +165,29 @@ it). Two namespaces never alias each other.
 - **Queued sends (round-3 P1, solved in #38):** ChatThrottleLib sends what it already holds
   without our check. So GuildSpy keeps its own small queue and hands CTL **one message at a time**,
   the next only from the previous one's callback, after that message's own check (still this
-  guild, its answer not stopped); a guild change drops our queue, leaving at most one message in
-  flight. A message CTL never reports frees the queue after 60 s.
+  guild, its answer not stopped): from the moment the scanner switches guilds, nothing queued for
+  the old one is handed over, leaving at most one message in flight. A message CTL never reports frees the queue after 60 s.
 - **As built (#38), the wire and what's heard:**
   - one header line and at most one entry line per message (`Wire`, short field names), ≤ 255 B;
     `origin` isn't sent (it's the sender) and `obs` follows from the times;
   - `H` (hello) once per guild per session after the first complete scan; `A`, `E` (one entry
-    each), then `D|<qid>|<cursor>` (empty when nothing remains) end an answer;
+    each), then `D|<qid>|<cursor>|<since>` (cursor empty when nothing remains; `since`: from when
+    that answer answered) end an answer;
   - an answer is heard by every guildmate online, so **any** answer's entries are taken (rank,
     setting and per-reporter cap apply), not only my own ask's;
-  - **every guildmate with entries answers** (#43 review): each answer holds only what its
-    responder saw itself, so "the first answer stops the others" (above) lost data. Instead a
-    responder skips each change (member, kind, from, to) another guildmate already sent in that
-    answer; each message is checked just before it leaves;
+  - **every guildmate with entries answers, with all it saw itself** (#43 reviews): each answer
+    holds only what its responder saw, so "the first answer stops the others" (above) lost data;
+    and skipping a change another guildmate already sent lost reports the asker refused from one
+    sender (rank) but would take from another, and merged changes that can happen twice. Level-ups
+    are deduplicated where they're kept (§3, `Log.Covered`); each message is checked just before
+    it leaves;
   - **one answer to everyone a minute, none dropped** (#43 review): an ask during the minute after
     my last answer is answered when the minute ends, from the widest start among the asks
     waiting; an ask I have nothing for takes no minute;
-  - a guildmate's **complete** answer (its `D` with no cursor) to an ask reaching back at least as
-    far as mine, heard after my hello, means I don't ask them directly; an `A` alone proves
-    nothing; a `D` with a cursor, to my ask or one I heard, has me ask them for the rest;
+  - a guildmate's **complete** answer (its `D` with no cursor) reaching back at least as far as my
+    ask, heard after my hello, means I don't ask them directly; an `A` alone proves nothing; a `D`
+    with a cursor has me ask them for the rest, from its `since`. The `D` carries it, so an answer
+    to an ask I never heard (asked before I logged in, answered together with mine) counts too;
   - my first ask to everyone is queued, so one the 2-minute gap refuses (a guild change, sharing
     turned off and on) goes at the next tick;
   - "Accept reports from" is kept per guild (a rank index means another rank elsewhere), and a

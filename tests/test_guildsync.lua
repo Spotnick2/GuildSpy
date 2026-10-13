@@ -186,7 +186,7 @@ do  -- Nothing to answer: no answer, and the minute isn't taken; asks deferred t
     eq(sent("Bo Kay", "E"), 3, "...from the widest start: the recent one, and the three-day-old one again")
 end
 
-do  -- Every guildmate answers with what it saw itself; a change another already sent isn't sent again (#43 review).
+do  -- Every guildmate answers with all it saw itself (#43 reviews).
     reset()
     local ann = client("Ann Lee")
     local bo, cy = client("Bo Kay", { jitter = 2 }), client("Cy Dee", { jitter = 5 })
@@ -196,8 +196,30 @@ do  -- Every guildmate answers with what it saw itself; a change another already
     ann.core:Hello()
     advance(10)
     eq(sent("Bo Kay", "E"), 2, "Bo sends both of his")
-    eq(sent("Cy Dee", "E"), 1, "Cy only the one Bo didn't send: the level-up both saw went already")
-    eq(reports(ann, "Bo Kay") + reports(ann, "Cy Dee"), 3, "Ann has everything, once")
+    eq(sent("Cy Dee", "E"), 2, "Cy both of his, the level-up Bo sent too included")
+    eq(reports(ann, "Bo Kay") + reports(ann, "Cy Dee"), 3, "Ann keeps the level-up both saw once (Log.Covered)")
+    -- Ann takes Officers and up: Cy (a Member) answers first, Bo (an Officer) later; Bo's report still comes.
+    reset()
+    RANKS["Bo Kay"], RANKS["Cy Dee"] = 1, 4
+    ann = client("Ann Lee", { minRank = 2 })
+    bo, cy = client("Bo Kay", { jitter = 5 }), client("Cy Dee", { jitter = 2 })
+    observe(cy, shared); observe(bo, shared)
+    ann.core:Hello()
+    advance(10)
+    eq(reports(ann, "Bo Kay"), 1, "a report Ann refuses (rank) doesn't keep the one she accepts from coming")
+    eq(reports(ann, "Cy Dee"), 0, "...Cy's refused")
+    RANKS["Bo Kay"], RANKS["Cy Dee"] = 3, 4
+    -- The same promotion, seen by two at different times (a demotion in between): two promotions.
+    reset()
+    ann = client("Ann Lee")
+    bo, cy = client("Bo Kay", { jitter = 2 }), client("Cy Dee", { jitter = 5 })
+    local promo = { kind = "PROMOTE", guid = "Player-1-00000ABD", name = "Up Again", from = "Member", to = "Officer" }
+    observe(bo, promo)
+    local later = observe(cy, promo)
+    later.lo, later.hi = clock - 600, clock - 300
+    ann.core:Hello()
+    advance(10)
+    eq(reports(ann), 2, "the same promotion on two days, from two guildmates: both kept")
     reset()
     ann = client("Ann Lee")
     bo, cy = client("Bo Kay", { jitter = 3 }), client("Cy Dee", { jitter = 3 })
@@ -252,14 +274,14 @@ do  -- A guildmate who logs in later says hello: those who haven't heard from th
     ann.core:OnMessage(Wire.Message("Q", { "zz:1", clock - 14 * 86400, "", "" }), "Cy Dee")
     ann.core:OnMessage(Wire.Message("A", { "zz:1" }), "Ed Lin")
     eq(#ann.core.ask, 1, "Ed's answer begins: still to be asked")
-    ann.core:OnMessage(Wire.Message("D", { "zz:1", "" }), "Ed Lin")
+    ann.core:OnMessage(Wire.Message("D", { "zz:1", "", clock - 14 * 86400 }), "Ed Lin")
     eq(#ann.core.ask, 0, "Ed's answer ended, complete: not asked again")
     ann.core:OnMessage(Wire.Message("H"), "Fay Orr")
-    ann.core:OnMessage(Wire.Message("Q", { "zz:2", clock - 86400, "", "" }), "Cy Dee")
-    ann.core:OnMessage(Wire.Message("D", { "zz:2", "" }), "Fay Orr")
+    ann.core:OnMessage(Wire.Message("D", { "zz:2", "", clock - 86400 }), "Fay Orr")
     eq(#ann.core.ask, 1, "...one that covered only a day: Fay is still to be asked")
-    ann.core:OnMessage(Wire.Message("D", { "zz:1", "9,xx:1" }), "Fay Orr")
-    eq(ann.core.ask[1].cursor, "9,xx:1", "...one cut short: Ann asks Fay for the rest")
+    ann.core:OnMessage(Wire.Message("D", { "zz:3", "9,xx:1", clock - 14 * 86400 }), "Fay Orr")
+    eq(ann.core.ask[1].cursor, "9,xx:1", "...one cut short, to an ask Ann never heard: she asks Fay for the rest")
+    eq(ann.core.ask[1].since, clock - 14 * 86400, "...from that answer's start")
     -- Someone else directed: not mine to answer.
     local bo = client("Bo Kay")
     observe(bo)
@@ -311,6 +333,27 @@ do  -- Whom Ann accepts: her roster, her rank setting, her report setting, a sha
     eq(reports(ann, "Bo Kay"), 3, "at most PER_REPORTER from one guildmate a session")
     eq(#ann.core.ask, 0, "...and their continuation isn't asked for")
     GSync.PER_REPORTER = was
+end
+
+do  -- A late login, answered together with an earlier ask it never heard, still gets the rest (#43 Codex review).
+    reset()
+    local ann, bo, cy = client("Ann Lee"), client("Bo Kay"), client("Cy Dee")
+    for _ = 1, 45 do observe(bo) end
+    ann.core:Hello()
+    advance(10)
+    -- Within Bo's minute: Cy asks, then Di logs in and asks: Bo answers both at once, under Cy's ask.
+    cy.core:Hello()
+    advance(1)
+    local di = client("Di Fox")
+    di.core:Hello()
+    advance(1)
+    -- Cy logs off before asking for the rest.
+    for i, c in ipairs(order) do if c == cy then table.remove(order, i) end end
+    advance(GSync.ANSWER_GAP + GSync.JITTER_MAX)
+    eq(reports(di, "Bo Kay"), GSync.PER_ANSWER, "Di has the first 40 of the shared answer")
+    advance(GSync.Q_GAP)
+    for _ = 1, 3 do di.core:Tick(); advance(5) end
+    eq(reports(di, "Bo Kay"), 45, "...and asks Bo for the rest herself")
 end
 
 do  -- A guild change within two minutes of an ask: the new guild's ask still goes, after the gap (#43 review).
@@ -467,6 +510,9 @@ do
     check(#WoW.ctlHeld == 1 and #T.queue() >= 4, "my answer: one handed over, the rest queued")
     local real = GuildSpy.Scanner.Current
     GuildSpy.Scanner.Current = function() return real(), "Other Guild-Forever" end
+    -- Before our tick notices: the in-flight message leaves, and the next is checked as it would go.
+    WoW.ctlDeliver()
+    eq(#WoW.ctlHeld, 0, "the scanner switched guilds: nothing more is handed over, even before our tick")
     T.tick()
     local old = 0
     for _, m in ipairs(T.queue()) do
@@ -498,7 +544,7 @@ do
     table.remove(WoW.ctlHeld, 1)
     WoW.ctlDeliver()
 
-    -- My answer skips a change another guildmate sent in the same answer.
+    -- My answer: all of mine, whatever another guildmate sent in it.
     T.tick()
     WoW.ctlDeliver()
     sentBefore = #WoW.addonSent
@@ -512,15 +558,15 @@ do
                     from = 1, to = 2, at = time() - 30, lo = time() - 60, hi = time() - 30 }
     hear(GSync.EntryMessage("bq:4", mine1))
     WoW.ctlDeliver()
-    local es = 0
+    local es, last = 0, nil
     for i = sentBefore + 1, #WoW.addonSent do
-        local k, _, ls = Wire.Read(WoW.addonSent[i].message)
-        if k == "E" then
-            es = es + 1
-            check(not ls[1]:find("g=sPlayer-1-0000030D", 1, true), "Bo sent Mine 1's level-up: mine isn't sent again")
-        end
+        local k, f = Wire.Read(WoW.addonSent[i].message)
+        if k == "E" then es = es + 1 end
+        if k == "D" then last = f end
     end
-    eq(es, 3, "...my other three are")
+    eq(es, 4, "all four of mine are sent, whatever Bo sent (#43 Codex review)")
+    check(last and last[2] == "" and tonumber(last[3]) ~= nil,
+        "...and the done says from when it answered")
 
     -- The log's Reports tab: reports only; my own observations stay out of it.
     local own = 0

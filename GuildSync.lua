@@ -11,7 +11,7 @@
 --   Q qid since resp cursor   ask: everyone (resp ""), or one responder (its continuation)
 --   A qid                     I'm answering
 --   E qid  + one entry        one of my own observations
---   D qid cursor              done; a cursor when more remain (ask me for it)
+--   D qid cursor since        done; a cursor when more remain (ask me for it, from that since)
 
 GuildSpy = GuildSpy or {}
 local GSync = {}
@@ -83,7 +83,7 @@ function GSync.Has(gs, me, since, cursor)
     return false
 end
 
--- My answer: up to PER_ANSWER messages ({ text, sig }) since `since`, after
+-- My answer: up to PER_ANSWER messages since `since`, after
 -- `cursor`; the next cursor when more remain.
 function GSync.Pick(gs, me, qid, since, cursor)
     local list = {}
@@ -95,7 +95,7 @@ function GSync.Pick(gs, me, qid, since, cursor)
     for i, e in ipairs(list) do
         if #out >= GSync.PER_ANSWER then return out, last and cursorOf(last) end
         local text = GSync.EntryMessage(qid, e)
-        if text then out[#out + 1] = { text = text, sig = GSync.Sig(e) } end   -- one that doesn't fit isn't sent (§5)
+        if text then out[#out + 1] = text end           -- one that doesn't fit isn't sent (§5)
         last = e
     end
     return out, nil
@@ -113,13 +113,8 @@ Core.__index = Core
 -- accepts(name) (a guildmate whose reports I take: roster, rank, setting),
 -- onReceived(added, key), onChanged(), onStatus() (a guildmate heard) (all optional).
 function GSync.NewCore(o)
-    return setmetatable({ o = o, myQ = {}, qs = {}, sigs = {}, answers = {}, answered = {}, heard = {},
+    return setmetatable({ o = o, myQ = {}, answers = {}, answered = {}, heard = {},
                           ask = {}, admitted = {}, said = nil, lastQ = nil, lastAnswer = nil, deferred = nil }, Core)
-end
-
--- One change, whoever saw it: what a responder skips when another already sent it.
-function GSync.Sig(e)
-    return table.concat({ tostring(e.guid), tostring(e.kind), tostring(e.from), tostring(e.to) }, "\31")
 end
 
 -- What a Q asks for: the last 14 days. (SYNC.md had "or since my oldest entry
@@ -182,7 +177,7 @@ end
 -- My guild changed (or I left it): everything bound to the old one goes.
 function Core:GuildChanged()
     for _, ans in pairs(self.answers) do ans.stopped = true end
-    self.myQ, self.qs, self.sigs, self.answers, self.answered, self.heard, self.ask = {}, {}, {}, {}, {}, {}, {}
+    self.myQ, self.answers, self.answered, self.heard, self.ask = {}, {}, {}, {}, {}
     self.said, self.lastAnswer, self.deferred = nil, nil, nil
 end
 
@@ -200,25 +195,23 @@ function Core:OnMessage(text, sender)
     if kind == "H" then
         if not self.answered[sender] then self:want(sender) end
     elseif kind == "Q" then
-        local qid, since = f[1], tonumber(f[2])
-        if qid and since then self.qs[qid] = { since = since, cursor = f[4] or "" } end
         self:onQ(key, sender, f)
     elseif kind == "E" then
         self:onE(key, sender, f, lines)
     elseif kind == "D" then
-        -- The end of an answer, to my ask or one I heard. Complete, from the
-        -- start of at least my 14 days: I have all of theirs. Cut short: ask
-        -- them for the rest (#43 review: an A alone proved nothing).
-        local qid, cursor = f[1], f[2]
-        local q = qid and (self.myQ[qid] or self.qs[qid])
-        if not (q and self.said) then return end
+        -- The end of an answer, to any ask: it says from when it answered, so
+        -- one I didn't hear (asked before I logged in, answered together
+        -- with mine) counts too (#43 Codex review). Complete, from as far
+        -- back as my ask: I have all of theirs. Cut short: ask them for the
+        -- rest, from that start (an A alone proves nothing).
+        local cursor, since = f[2], tonumber(f[3])
+        if not (since and self.said) then return end
+        if since > self:since() + GSync.Q_GAP then return end            -- answered less than I ask
         if cursor == nil or cursor == "" then
-            if q.since <= self:since() + GSync.Q_GAP then
-                self.answered[sender] = true
-                drop(self.ask, sender)
-            end
+            self.answered[sender] = true
+            drop(self.ask, sender)
         elseif (self.admitted[sender] or 0) < GSync.PER_REPORTER then
-            self:want(sender, cursor, q.since)
+            self:want(sender, cursor, since)
         end
     end
 end
@@ -270,15 +263,15 @@ function Core:answer(ans, since, cursor)
     if not gs then return end
     local list, nextCursor = GSync.Pick(gs, self.o.me(), ans.qid, since, cursor)
     if #list == 0 then return end
-    -- Each message asks again just before it leaves: still this guild; an
-    -- entry, also not already sent in this answer by another guildmate.
+    -- Each message asks again just before it leaves: still this guild. Every
+    -- responder sends all of its own: skipping what another sent dropped
+    -- reports the asker took from one and not the other, and merged changes
+    -- that can happen twice (#43 Codex review); level-ups are deduplicated
+    -- where they're kept (Log.Covered).
     local function ok() return not ans.stopped and self.o.key() == key end
-    local heard = self.sigs
     self.o.send(Wire.Message("A", { ans.qid }), ok)
-    for _, item in ipairs(list) do
-        self.o.send(item.text, function() return ok() and not (heard[ans.qid] and heard[ans.qid][item.sig]) end)
-    end
-    self.o.send(Wire.Message("D", { ans.qid, nextCursor or "" }), ok)
+    for _, text in ipairs(list) do self.o.send(text, ok) end
+    self.o.send(Wire.Message("D", { ans.qid, nextCursor or "", since }), ok)
 end
 
 -- An entry from a guildmate: any answer counts (everyone hears it), from
@@ -287,9 +280,6 @@ function Core:onE(key, sender, f, lines)
     local qid = f[1]
     local e = qid and lines and lines[1] and Wire.ReadEntry(lines[1], ALLOWED, GSync.ALIAS)
     if not e then return end
-    -- Sent in this answer: another responder doesn't send it again.
-    self.sigs[qid] = self.sigs[qid] or {}
-    self.sigs[qid][GSync.Sig(e)] = true
     if not self.o.accepts(sender) then return end
     if (self.admitted[sender] or 0) >= GSync.PER_REPORTER then return end
     e.origin = sender
@@ -474,7 +464,6 @@ local function tick()
     local k = key()
     if k ~= lastKey then
         lastKey = k
-        queue = {}                                           -- what was queued for the old guild
         core:GuildChanged()
         if GuildSpy.Options and GuildSpy.Options.RefreshSharing then GuildSpy.Options.RefreshSharing() end
     end
