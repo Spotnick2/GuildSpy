@@ -234,7 +234,7 @@ do  -- Imports never enter the login digest; my own do.
     gs.shownSeq = 0
     Log.Add(db, gs, { kind = "JOIN", guid = "Player-1-00000001", name = "Mine", lo = NOW - 60, hi = NOW }, NOW)
     Log.Receive(db, gs, obs(), "guild", "Bo Kay", NOW)
-    Log.Receive(db, gs, obs({ uid = "z:9", origin = "Alt Two" }), "acct", nil, NOW)
+    Log.Receive(db, gs, obs({ uid = "z:9", origin = "Alt Two", from = 30, to = 31 }), "acct", nil, NOW)
     local lines = Log.Digest(gs, false, NOW)
     local text = table.concat(lines, "\n")
     check(text:find("Mine joined", 1, true), "the digest has my own")

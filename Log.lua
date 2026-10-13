@@ -539,24 +539,26 @@ end
 ------------------------------------------------------------
 -- Duplicates (#41): an observation my more precise ones cover isn't kept
 ------------------------------------------------------------
--- Two of my accounts see the same change: one live ("reached 22", then
--- "reached 23"), the other at its login scan ("from 21 to 23"). Only my own
--- observations cover (a guildmate's report never removes mine), a record is
--- never dropped for a vaguer one, and every account picks the same: the
--- order is total. Owner: dedupe what's stored, not only what's shown.
-
--- Kinds compared together; ones with no from/to; what undoes a point kind.
-local FAMILY = { PROMOTE = "rank", DEMOTE = "rank", RANK = "rank", JOIN = "join", REJOIN = "join" }
-local POINT = { join = true, LEAVE = true, RETURN = true }
-local UNDO = { join = "LEAVE", LEAVE = "join" }
-local function family(e) return FAMILY[e.kind] or e.kind end
+-- Two of my accounts see the same level-up: one live ("reached 22", then
+-- "reached 23"), the other at its login scan ("from 21 to 23"). Owner: dedupe
+-- what's stored, not only what's shown.
+--
+-- Level-ups only, for now (owner, #42 review): a level is reached once, so
+-- the same from/to is the same change whenever it was seen, and a step is a
+-- step whatever its time. Nothing arriving later can show a dropped record
+-- was a different change, so the outcome doesn't depend on arrival order.
+-- Kinds that can be undone (notes, ranks, joins) could; they stay as they are.
+--
+-- Only my own observations cover (a guildmate's report never removes mine),
+-- a record is never dropped for a vaguer one, and every account keeps the
+-- same: the order is total.
+Log.DEDUPE = { LEVEL = true }
 local function val(v) return v == nil and "" or tostring(v) end
 
--- Records about the same member (or, for the MOTD and rank list, the same kind).
+-- Records compared together: a member's level-ups. Anything else is never compared.
 function Log.DupKey(e)
-    if e.guid then return "m:" .. tostring(e.guid) end
-    if e.kind == "MOTD" or e.kind == "RANKS" then return "k:" .. e.kind end
-    return "t:" .. tostring(e)                            -- no member: never compared
+    if Log.DEDUPE[e.kind] and e.guid then return "m:" .. tostring(e.guid) end
+    return "t:" .. tostring(e)
 end
 
 -- The group of a key: the batch's index, or one pass over the log (a fresh list).
@@ -566,83 +568,49 @@ function Log.Group(gs, key, batch)
         return batch.byKey[key]
     end
     local g = {}
+    if key:find("^t:") then return g end
     for _, x in ipairs(gs.log or {}) do if Log.DupKey(x) == key then g[#g + 1] = x end end
     return g
 end
 
--- When it happened, as far as its observer knows: the exact time if seen
--- live, else the interval.
-local function span(e)
-    if e.approx == false and type(e.at) == "number" then return e.at, e.at end
+-- How precisely its observer knows when: 0 if seen live, else the interval.
+local function width(e)
+    if e.approx == false and type(e.at) == "number" then return 0 end
     local hi = tonumber(e.hi) or tonumber(e.at) or 0
     local lo = tonumber(e.lo) or tonumber(e.after) or hi
-    if lo > hi then lo = hi end
-    return lo, hi
+    return math.max(0, hi - lo)
 end
-local function width(e) local lo, hi = span(e); return hi - lo end
--- a strictly more precise than b: narrower, then namespace, then uid.
+-- a strictly more precise than b: narrower, then mine over a guildmate's, then uid.
 local function finer(a, b)
     local wa, wb = width(a), width(b)
     if wa ~= wb then return wa < wb end
-    local na, nb = Log.Ns(a), Log.Ns(b)
-    if na ~= nb then return na < nb end
+    local qa, qb = quotaOf(a), quotaOf(b)
+    if qa ~= qb then return qa == "self" end
     return tostring(a.uid) < tostring(b.uid)
 end
-local function overlap(a, b)
-    local al, ah = span(a)
-    local bl, bh = span(b)
-    return al <= bh and bl <= ah
-end
-local function within(a, b)
-    local al, ah = span(a)
-    local bl, bh = span(b)
-    return al >= bl and ah <= bh
-end
 
--- The same change, and nothing recorded that undid it in between (else it
--- may have happened twice).
-local function same(x, r, group)
-    local fam = family(r)
-    if family(x) ~= fam then return false end
-    if not POINT[fam] and not (val(x.from) == val(r.from) and val(x.to) == val(r.to)) then return false end
-    for _, y in ipairs(group) do
-        if y ~= x and y ~= r and (overlap(y, r) or overlap(y, x)) then
-            if POINT[fam] then
-                if UNDO[fam] and family(y) == UNDO[fam] then return false end
-            elseif family(y) == fam and val(y.from) == val(r.to) and val(y.to) == val(r.from) then
-                return false
-            end
-        end
-    end
-    return true
-end
-
--- Steps a -> x -> ... -> b, each mine, recorded inside r's span and narrower.
+-- Steps a -> x -> ... -> b, each mine and narrower than r.
 local function chained(r, group)
-    local fam = family(r)
-    local a, b = val(r.from), val(r.to)
-    if POINT[fam] or a == b then return false end
-    local steps = {}
+    local a, b = tonumber(r.from), tonumber(r.to)
+    if not (a and b) or a >= b then return false end
+    local edges = {}
     for _, x in ipairs(group) do
-        if x ~= r and x.trust ~= "guild" and family(x) == fam and val(x.from) ~= val(x.to)
-                and within(x, r) and width(x) < width(r) then
-            steps[#steps + 1] = x
+        local f, t = tonumber(x.from), tonumber(x.to)
+        if x ~= r and x.trust ~= "guild" and f and t and f < t and width(x) < width(r) then
+            edges[f] = edges[f] or {}
+            edges[f][t] = true
         end
     end
-    if #steps < 2 then return false end
-    local seen, todo = { [a] = true }, {}
-    for _, s in ipairs(steps) do
-        if val(s.from) == a and val(s.to) ~= b then todo[#todo + 1] = val(s.to) end
-    end
+    -- Levels only go up: values reachable from a, below b, and whether b is (in two steps or more).
+    local reach, todo = {}, {}
+    for t in pairs(edges[a] or {}) do if t < b then todo[#todo + 1] = t end end
     while #todo > 0 do
         local v = table.remove(todo)
-        if not seen[v] then
-            seen[v] = true
-            for _, s in ipairs(steps) do
-                if val(s.from) == v then
-                    if val(s.to) == b then return true end
-                    todo[#todo + 1] = val(s.to)
-                end
+        if not reach[v] then
+            reach[v] = true
+            for t in pairs(edges[v] or {}) do
+                if t == b then return true end
+                if t < b then todo[#todo + 1] = t end
             end
         end
     end
@@ -651,8 +619,10 @@ end
 
 -- Whether my other observations in its group cover r.
 function Log.Covered(r, group)
+    if not Log.DEDUPE[r.kind] then return false end
     for _, x in ipairs(group) do
-        if x ~= r and x.trust ~= "guild" and finer(x, r) and overlap(x, r) and same(x, r, group) then
+        if x ~= r and x.trust ~= "guild" and x.kind == r.kind and val(x.from) == val(r.from)
+                and val(x.to) == val(r.to) and finer(x, r) then
             return true
         end
     end

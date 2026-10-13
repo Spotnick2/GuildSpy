@@ -7,9 +7,10 @@
   both, marked with the character that saw it, and one chat line says how many arrived. Only ever
   within your current guild. Turn it off, and see which of your accounts last synced, in Options >
   AddOns > GuildSpy > Sharing.
-- **No duplicates between your accounts.** When both saw the same change, only the most precise
-  record is kept: "reached level 22" and "reached level 23", seen live on one, replace "leveled
-  from 21 to 23" noticed later by the other. Duplicates already saved are cleaned up at login.
+- **No duplicate level-ups between your accounts.** When both saw the same level-up, only the most
+  precise record is kept: "reached level 22" and "reached level 23", seen live on one, replace
+  "leveled from 21 to 23" noticed later by the other. Duplicates already saved are cleaned up at
+  login.
 - **Reaching the level cap stands out**: "Ann Lee reached level 60, the level cap!" in gold, in chat,
   the login summary (listed before the other level-ups) and the log window, with a fanfare. Turn
   the sound off in the settings ("Sound at the level cap").

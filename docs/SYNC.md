@@ -18,10 +18,11 @@ and with other users from the guild". Replaces docs/PLAN.md "Deferred" once agre
 
 1. **Observations are never destroyed or rewritten by anyone but their observer.** Each entry is
    one observer's observation, kept as recorded, with its provenance. Sync adds observations.
-   **One exception, for duplicates (#41, owner: "we have to dedupe", stored, not only hidden):** an
-   observation that more precise observations **of mine** cover is not kept, and one already kept
-   goes when they arrive (see §3). All my accounts' observations are mine, and every account applies
-   the same total order, so they converge on the same set. A guildmate's report never removes mine.
+   **One exception, for duplicate level-ups (#41, owner: "we have to dedupe", stored, not only
+   hidden):** a level-up that more precise level-ups **of mine** cover is not kept, and one already
+   kept goes when they arrive (see §3). All my accounts' observations are mine, and every account
+   applies the same total order, so they converge on the same set. A guildmate's report never
+   removes mine.
 2. **Provenance is bound to the transport,** never to the payload: own accounts by LibAccountSync's
    proof, guildmates by the GUILD sender name. Measured (Gnomesweeper, build 70205;
    `References\PORTING-TBC-TO-FOREVER.md`, Gnomesweeper `docs/SOCIAL.md`): that sender is
@@ -82,17 +83,21 @@ it). Two namespaces never alias each other.
   actor as that reporter's claim. Self rows from my other accounts say "Seen on <origin>".
 - `/gspy log <n>` prints provenance too ("(reported by Ann Lee)").
 - New markers, search (also on reporter/origin), filters and time scope work per row as today.
-- **Duplicates are dropped from storage (#41).** Found in game: one account saw "reached 22" and
-  "reached 23" live, the other "from 21 to 23" at its login scan. GRM has no such rule because it
-  never syncs its log. The rule (`Log.Covered`, `Log.Sweep`):
+- **Duplicate level-ups are dropped from storage (#41).** Found in game: one account saw "reached
+  22" and "reached 23" live, the other "from 21 to 23" at its login scan. GRM has no such rule
+  because it never syncs its log. The rule (`Log.DEDUPE`, `Log.Covered`, `Log.Sweep`):
+  - **level-ups only** (owner, after the #42 review): a level is reached once, so the same from/to is
+    the same change whenever it was seen, and a step is a step whatever its time. Nothing arriving
+    later can show a dropped record was another change: the outcome doesn't depend on arrival order.
+    Kinds that can be undone (notes, ranks, names, joins, the MOTD) keep every record. Deleting one
+    there could lose a change a later "changed back" record would have shown was distinct (Codex,
+    #42); revisit after beta testing;
   - only my observations (`trust = "self"`) cover; a record is never dropped for a vaguer one;
-  - precision: the span is the exact time if seen live, else `lo`..`hi`; narrower is finer, then
-    namespace, then uid (a total order: every account keeps the same one);
-  - **same change** (same member, family and from/to; promote/demote/rank one family, join/rejoin
-    one; the MOTD and rank list by kind): the less precise goes when their spans overlap, unless a
-    record of the reverse change (or, for a join, a leave) overlaps them;
-  - **a chain**: a -> b goes when steps a -> x -> ... -> b, each mine, inside its span and narrower,
-    are all there;
+  - precision: 0 if seen live, else the interval's width; narrower is finer, then mine over a
+    guildmate's, then uid (a total order: every account keeps the same one);
+  - **the same level-up** (same member and from/to) keeps only the finest;
+  - **a chain**: a coarse a -> b goes when steps a -> x -> ... -> b, each mine and narrower, are all
+    there (21 -> 23 by 21 -> 22 and 22 -> 23);
   - applied on a local scan (the change isn't kept, printed or given a seq), on each received entry
     (a page's batch keeps its indexes and counts), after an enrichment, and once at load.
 

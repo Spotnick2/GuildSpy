@@ -93,33 +93,24 @@ do  -- Two scans of the same change, overlapping: every account keeps the same o
     eq(uids(gs3), "c:3", "...and a stored pair keeps exactly one")
 end
 
-do  -- What isn't the same change stays.
+do  -- Level-ups only (owner, #42 review): kinds that can be undone keep every record.
     local db, gs = store()
-    Log.Receive(db, gs, obs({ uid = "b:4", kind = "PROMOTE", from = "Member", to = "Officer",
-                              lo = NOW - 7200, hi = NOW - 3600 }), "acct", nil, NOW)
-    Log.Receive(db, gs, live("a:4", "Member", "Officer", NOW - 60, { kind = "PROMOTE" }), "acct", nil, NOW)
-    eq(#gs.log, 2, "the same promotion at times that can't overlap: two promotions")
+    Log.Receive(db, gs, obs({ uid = "b:4", kind = "PROMOTE", from = "Member", to = "Officer" }), "acct", nil, NOW)
+    Log.Receive(db, gs, live("a:4", "Member", "Officer", NOW - 1000, { kind = "PROMOTE" }), "acct", nil, NOW)
+    eq(#gs.log, 2, "a promotion seen live inside a scan's span: both kept")
     local db2, gs2 = store()
     Log.Receive(db2, gs2, obs({ uid = "b:5", kind = "NOTE", from = "a", to = "b" }), "acct", nil, NOW)
-    Log.Receive(db2, gs2, live("a:5", "b", "a", NOW - 2000, { kind = "NOTE" }), "acct", nil, NOW)
-    Log.Receive(db2, gs2, live("a:6", "a", "b", NOW - 1000, { kind = "NOTE" }), "acct", nil, NOW)
-    eq(#gs2.log, 3, "a note changed back in between: the coarse a to b may be another change, kept")
-    local db5, gs5 = store()
-    Log.Receive(db5, gs5, live("a:12", "a", "x", NOW - 5 * 3600, { kind = "NOTE" }), "acct", nil, NOW)
-    Log.Receive(db5, gs5, live("a:13", "x", "b", NOW - 4 * 3600, { kind = "NOTE" }), "acct", nil, NOW)
-    Log.Receive(db5, gs5, obs({ uid = "b:9", kind = "NOTE", from = "a", to = "b" }), "acct", nil, NOW)
-    eq(#gs5.log, 3, "steps recorded before the coarse change's interval don't cover it")
+    Log.Receive(db2, gs2, live("a:5", "a", "x", NOW - 2000, { kind = "NOTE" }), "acct", nil, NOW)
+    Log.Receive(db2, gs2, live("a:6", "x", "b", NOW - 1000, { kind = "NOTE" }), "acct", nil, NOW)
+    eq(#gs2.log, 3, "a note's a to b with a to x and x to b inside: all kept (a later b to a could make it another change)")
     local db3, gs3 = store()
     Log.Receive(db3, gs3, point(obs({ uid = "b:6", kind = "JOIN" })), "acct", nil, NOW)
-    Log.Receive(db3, gs3, point(live("a:7", 1, 2, NOW - 2000, { kind = "LEAVE" })), "acct", nil, NOW)
-    Log.Receive(db3, gs3, point(live("a:8", 1, 2, NOW - 1000, { kind = "JOIN" })), "acct", nil, NOW)
-    eq(#gs3.log, 3, "a leave in between: two joins")
-    Log.Receive(db3, gs3, point(live("a:9", 1, 2, NOW - 900, { kind = "JOIN", guid = "Player-1-00000B0B" })), "acct", nil, NOW)
-    eq(#gs3.log, 4, "another member's join is another change")
+    Log.Receive(db3, gs3, point(live("a:7", 1, 2, NOW - 1000, { kind = "JOIN" })), "acct", nil, NOW)
+    eq(#gs3.log, 2, "the same join seen twice: both kept")
     local db4, gs4 = store()
-    Log.Receive(db4, gs4, point(obs({ uid = "b:7", kind = "JOIN" })), "acct", nil, NOW)
-    Log.Receive(db4, gs4, point(live("a:10", 1, 2, NOW - 1000, { kind = "REJOIN" })), "acct", nil, NOW)
-    eq(uids(gs4), "a:10", "a join and a rejoin of the same member at the same time: the same change")
+    Log.Receive(db4, gs4, obs({ uid = "b:7", from = 14, to = 15 }), "acct", nil, NOW)
+    Log.Receive(db4, gs4, live("a:8", 14, 15, NOW - 1000, { guid = "Player-1-00000B0B" }), "acct", nil, NOW)
+    eq(#gs4.log, 2, "another member's level-up is another change")
 end
 
 do  -- A guildmate's report never removes mine; mine covers theirs.
@@ -161,6 +152,90 @@ do  -- At load: what an older version kept goes.
     eq(Log.Dedupe(gs), 2, "two duplicates in a stored log")
     eq(uids(gs), "a:1,a:2,a:3", "...the precise records stay")
     eq(Log.Dedupe(gs), 0, "...a second pass finds nothing")
+end
+
+-- Every order of a list (small lists).
+local function orders(list)
+    local out = {}
+    local function go(rest, acc)
+        if #rest == 0 then out[#out + 1] = acc; return end
+        for i = 1, #rest do
+            local r2, a2 = {}, {}
+            for j, v in ipairs(rest) do if j ~= i then r2[#r2 + 1] = v end end
+            for _, v in ipairs(acc) do a2[#a2 + 1] = v end
+            a2[#a2 + 1] = rest[i]
+            go(r2, a2)
+        end
+    end
+    go(list, {})
+    return out
+end
+-- The uids kept after receiving `list` in every order, and after a load-time
+-- pass over all of them: one answer if they all agree, else "differs".
+local function outcome(list)
+    local seen
+    local function note(r) if seen == nil then seen = r elseif seen ~= r then seen = "differs" end end
+    for _, o in ipairs(orders(list)) do
+        local db, gs = store()
+        for _, e in ipairs(o) do Log.Receive(db, gs, obs(e), "acct", nil, NOW) end
+        note(uids(gs))
+    end
+    local _, gs = store()
+    for _, e in ipairs(list) do local c = obs(e); c.trust = "self"; gs.log[#gs.log + 1] = c end
+    Log.Dedupe(gs)
+    note(uids(gs))
+    return seen
+end
+local T0 = NOW - 7200
+local function at(min) return T0 + min * 60 end
+-- A level-up observed over minutes lo..hi (exact when lo == hi).
+local function lvl(uid, from, to, lo, hi)
+    local e = { uid = uid, from = from, to = to, lo = at(lo), hi = at(hi), at = at(hi), obs = at(hi) }
+    if lo == hi then e.approx = false end
+    return e
+end
+
+do  -- The outcome doesn't depend on arrival order (#42 review): a level is reached once.
+    -- Spans that overlap in a chain (A and C can't overlap): still one level-up, the finest kept.
+    eq(outcome({ lvl("l:1", 14, 15, 0, 8), lvl("l:2", 14, 15, 7, 17), lvl("l:3", 14, 15, 16, 28) }), "l:1",
+        "the same level-up seen three times: the finest, in every order and at load")
+    eq(outcome({ lvl("l:4", 14, 15, 0, 60), lvl("l:5", 14, 15, 100, 101) }), "l:5",
+        "...even when the spans don't touch")
+    eq(outcome({ lvl("c:1", 21, 23, 0, 60), lvl("s:1", 21, 22, 10, 10), lvl("s:2", 22, 23, 20, 20) }), "s:1,s:2",
+        "21 to 23 with both steps: the steps, in every order")
+    eq(outcome({ lvl("c:1", 21, 23, 5, 60), lvl("s:1", 21, 22, 0, 6), lvl("s:2", 22, 23, 30, 31) }), "s:1,s:2",
+        "...a step seen just before the coarse span still covers it")
+    eq(outcome({ lvl("c:1", 21, 24, 0, 60), lvl("s:1", 21, 22, 10, 10), lvl("s:2", 23, 24, 20, 20) }), "c:1,s:1,s:2",
+        "a missing step: the coarse record stays, in every order")
+    eq(outcome({ lvl("c:1", 21, 23, 0, 60), lvl("s:1", 21, 22, 10, 10), lvl("s:2", 22, 23, 20, 20),
+                 lvl("c:2", 21, 23, 30, 90) }), "s:1,s:2",
+        "two coarse records and the steps: only the steps")
+    eq(outcome({ lvl("c:1", 21, 23, 0, 10), lvl("s:1", 21, 22, 0, 30), lvl("s:2", 22, 23, 0, 40) }), "c:1,s:1,s:2",
+        "steps vaguer than the coarse record don't cover it")
+    eq(outcome({ lvl("c:1", 21, 23, 0, 60), lvl("s:1", 21, 22, 10, 10), lvl("s:2", 22, 24, 20, 20) }), "c:1,s:1,s:2",
+        "steps that pass over the coarse record's level don't cover it")
+end
+
+do  -- Only level-ups are ever compared, whoever asks.
+    local n1 = obs({ uid = "z:1", kind = "NOTE", from = "a", to = "b", trust = "self" })
+    local n2 = live("z:2", "a", "b", NOW - 1000, { kind = "NOTE", trust = "self" })
+    check(not Log.Covered(n1, { n1, n2 }), "Log.Covered: a note is never covered, even by a finer same change")
+    check(Log.DupKey(n1) ~= Log.DupKey(n2), "Log.DupKey: notes of one member aren't grouped")
+    local l1, l2 = obs({ uid = "z:3", trust = "self" }), live("z:4", 21, 23, NOW - 1000, { trust = "self" })
+    eq(Log.DupKey(l1), Log.DupKey(l2), "...a member's level-ups are")
+    check(Log.DupKey(live("z:5", 21, 23, NOW - 1000, { guid = "Player-1-00000B0B" })) ~= Log.DupKey(l1), "...per member")
+end
+
+do  -- Guildmates' records: an equally precise one of mine wins; theirs never chain over mine.
+    local db, gs = store()
+    Log.Receive(db, gs, obs({ uid = "z:9", from = 14, to = 15 }), "acct", nil, NOW)
+    local e, why = Log.Receive(db, gs, obs({ uid = "a:9", from = 14, to = 15, origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
+    check(not e and why == "covered", "a guildmate's report as precise as mine: mine stays, theirs isn't kept")
+    local db2, gs2 = store()
+    Log.Receive(db2, gs2, obs(), "acct", nil, NOW)
+    Log.Receive(db2, gs2, live("q:3", 21, 22, NOW - 3600, { origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
+    Log.Receive(db2, gs2, live("q:4", 22, 23, NOW - 1320, { origin = "Bo Kay" }), "guild", "Bo Kay", NOW)
+    eq(#gs2.log, 3, "a guildmate's steps don't remove my 21 to 23")
 end
 
 do  -- The scanner: a change a poll finds, already covered by my other account's steps, prints nothing.
