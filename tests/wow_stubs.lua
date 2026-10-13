@@ -576,7 +576,8 @@ ERR_GUILD_DEMOTE_SSS = "%s has demoted %s to %s."
 ERR_GUILD_LEADER_CHANGED_SS = "%s has made %s the new Guild Master."
 
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
-Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }
+Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 },
+         ClubMemberPresence = { Unknown = 0, Online = 1, OnlineMobile = 2, Offline = 3, Away = 4, Busy = 5 } }
 function issecretvalue(v) return false end
 function table.wipe(t) for k in pairs(t) do t[k] = nil end return t end
 wipe = table.wipe

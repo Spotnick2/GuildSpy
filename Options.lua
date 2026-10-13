@@ -40,6 +40,13 @@ Options.ITEMS = {
           st().capSound = v
           if v then GuildSpy.Scanner.CapSound() end
       end },
+    { key = "professionsTab", kind = "toggle", label = "Guild professions tab",
+      note = "A tab in the guild window listing who has which profession, as in retail. No skill levels or recipes: the server doesn't share them.",
+      get = function() return st().professionsTab ~= false end,
+      set = function(v)
+          if v then st().professionsTab = nil else st().professionsTab = false end
+          if GuildSpy.UI and GuildSpy.UI.PlaceTab then GuildSpy.UI.PlaceTab() end
+      end },
     { key = "minimapButton", kind = "toggle", label = "Minimap button",
       note = "Left-click opens or closes the log, right-click opens these settings. Drag it around the minimap.",
       get = function() return GuildSpy.Minimap.Shown() end,
