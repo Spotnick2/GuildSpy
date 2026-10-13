@@ -48,10 +48,12 @@ before touching an unfamiliar API.
 
 ## Layout
 
-TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → the vendored `Libs\` (LibStub,
+TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibAccountSync-1.0\LibAccountSync-1.0.xml`
+(a `.pkgmeta` external like LibGlass, gitignored; deployed by `..\LibAccountSync\Tools\deploy.ps1`;
+the tests answer `LibStub("LibAccountSync-1.0")` with a scripted fake) → the vendored `Libs\` (LibStub,
 CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0, copied from Gnomesweeper; the tests load
 recording fakes instead) → `Compat.lua` → `Glass.lua` → `Roster.lua` → `Patterns.lua` →
-`EventLog.lua` → `Log.lua` → `Scanner.lua` → `UI.lua` → `Options.lua` → `Minimap.lua` →
+`EventLog.lua` → `Log.lua` → `Wire.lua` → `Scanner.lua` → `AccountSync.lua` → `UI.lua` → `Options.lua` → `Minimap.lua` →
 `Probe.lua` → `ProbeProfessions.lua` → `GuildSpy.lua`. `Bindings.xml` isn't in the TOC: the
 client finds it by name (the package check names it).
 

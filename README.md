@@ -67,6 +67,13 @@ In the game's **Options > AddOns > GuildSpy**, or with `/gspy options`:
 - **Chat lines:** on or off for each type of change. The login summary and the log window always
   keep everything.
 
+Under **Options > AddOns > GuildSpy > Sharing**:
+
+- **Sync with my other accounts**, on or off. While another of your WoW accounts is online in the
+  same guild, the two share their logs over Battle.net, so what one saw while the other was offline
+  shows up on both. Only ever within your current guild. The page shows which of your accounts last
+  synced, and when.
+
 The key binding is under **Key Bindings > GuildSpy**, with no key set by default.
 
 ## Commands

@@ -302,6 +302,7 @@ function WoW.reset()
     -- Retail's Settings framework: Options > AddOns. Recorded in WoW.settings.
     WoW.settings = { canvas = {}, addons = {}, subs = {} }
     WoW.ldb, WoW.ldbi = nil, nil                -- made on first use (LibStub, above)
+    WoW.las, WoW.lasSent, WoW.lasPeers, WoW.lasSnapshots, WoW.noAccountSync = nil, {}, {}, nil, nil
     -- Blizzard's Settings window (HIGH strata), hidden until opened.
     SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
     SettingsPanel._strata = "HIGH"
@@ -316,6 +317,7 @@ end
 local function fakeLib(major)
     if major == "LibDataBroker-1.1" then WoW.ldb = WoW.ldb or WoW.newLDB(); return WoW.ldb end
     if major == "LibDBIcon-1.0" then WoW.ldbi = WoW.ldbi or WoW.newLDBI(); return WoW.ldbi end
+    if major == "LibAccountSync-1.0" and not WoW.noAccountSync then WoW.las = WoW.las or WoW.newLAS(); return WoW.las end
 end
 function WoW.fakeLibs(stub)
     setmetatable(stub, { __call = function(self, major, silent)
@@ -343,6 +345,31 @@ function WoW.newLDBI()
     function lib:Hide(name) self.buttons[name]:Hide() end
     function lib:GetMinimapButton(name) return self.buttons[name] end
     return lib
+end
+
+-- A scripted LibAccountSync-1.0 (#37), as AltStable's tests use: New records
+-- the instance; SendTo records sends in WoW.lasSent; WoW.lasPeers is Peers();
+-- WoW.lasDeliver(payload, sender) hands a message to the registered handler.
+function WoW.newLAS()
+    local lib = { instances = {} }
+    function lib:New(o)
+        local inst = { opts = o, messages = (o.messages == true and not WoW.lasSnapshots) or nil, enabled = true }
+        inst.OnMessage = function(fn) inst.handler = fn end
+        inst.Peers = function() return WoW.lasPeers or {} end
+        inst.SendTo = function(guid, payload, cb)
+            WoW.lasSent[#WoW.lasSent + 1] = { guid = guid, payload = payload }
+            return 1
+        end
+        inst.SetEnabled = function(on) inst.enabled = on end
+        inst.IsEnabled = function() return inst.enabled end
+        self.instances[#self.instances + 1] = inst
+        return inst
+    end
+    return lib
+end
+function WoW.lasDeliver(payload, sender)
+    local inst = WoW.las and WoW.las.instances[1]
+    if inst and inst.handler then inst.handler(payload, sender, 1) end
 end
 
 Settings = {
@@ -423,6 +450,18 @@ C_Timer = {
         WoW.timers[#WoW.timers + 1] = { at = WoW.now + seconds, fn = fn, seq = #WoW.timers }
     end,
 }
+-- In the 1.60.1.70338 dump; repeats until cancelled.
+function C_Timer.NewTicker(seconds, fn)
+    local t = { cancelled = false }
+    local function step()
+        if t.cancelled then return end
+        fn()
+        C_Timer.After(seconds, step)
+    end
+    C_Timer.After(seconds, step)
+    function t:Cancel() self.cancelled = true end
+    return t
+end
 function WoW.advance(seconds)
     local target = WoW.now + seconds
     while true do

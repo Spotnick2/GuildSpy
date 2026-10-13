@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Sync between your accounts.** While another of your WoW accounts is online in the same guild,
+  the two share their logs over Battle.net: what one saw while the other was offline shows up on
+  both, marked with the character that saw it, and one chat line says how many arrived. Only ever
+  within your current guild. Turn it off, and see which of your accounts last synced, in Options >
+  AddOns > GuildSpy > Sharing.
 - **Reaching the level cap stands out**: "Ann Lee reached level 60, the level cap!" in gold, in chat,
   the login summary (listed before the other level-ups) and the log window, with a fanfare. Turn
   the sound off in the settings ("Sound at the level cap").

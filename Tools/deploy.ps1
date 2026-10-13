@@ -58,6 +58,16 @@ if (-not $pin -or -not $want -or $want -ne $head -or $dirty) {
 & pwsh -NoProfile -File (Join-Path $LibGlass "Tools\deploy.ps1") -Addon GuildSpy -AddOnsPath $AddOnsPath
 if ($LASTEXITCODE -ne 0) { Write-Error "LibGlass deploy refused; GuildSpy was not touched"; exit 1 }
 
+# LibAccountSync-1.0 (#37), the same way, from $env:LIBACCOUNTSYNC, else ..\LibAccountSync.
+$LibAcct = if ($env:LIBACCOUNTSYNC) { $env:LIBACCOUNTSYNC } else { Join-Path (Split-Path -Parent $RepoRoot) "LibAccountSync" }
+if (-not [System.IO.Path]::IsPathRooted($LibAcct)) { $LibAcct = Join-Path $RepoRoot $LibAcct }
+if (-not (Test-Path -LiteralPath (Join-Path $LibAcct "Tools\deploy.ps1"))) {
+    Write-Error "LibAccountSync checkout not found at $LibAcct (clone github.com/Spotnick2/LibAccountSync there, or set `$env:LIBACCOUNTSYNC)"
+    exit 1
+}
+& pwsh -NoProfile -File (Join-Path $LibAcct "Tools\deploy.ps1") -Addon GuildSpy -AddOnsPath $AddOnsPath
+if ($LASTEXITCODE -ne 0) { Write-Error "LibAccountSync deploy refused; GuildSpy was not touched"; exit 1 }
+
 $dest = Join-Path $AddOnsPath "GuildSpy"
 Write-Host "Deploying GuildSpy -> $dest" -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -92,13 +102,14 @@ Get-ChildItem -LiteralPath $dest -File | Where-Object { $files -notcontains $_.N
 $libsSrc = Join-Path $RepoRoot "Libs"
 $libsDest = Join-Path $dest "Libs"
 $glassLib = "LibGlass-1.0"
+$externals = @($glassLib, "LibAccountSync-1.0")      # each deployed by its own script (above)
 if (Test-Path -LiteralPath $libsDest) {
-    Get-ChildItem -LiteralPath $libsDest | Where-Object { $_.Name -ne $glassLib } |
+    Get-ChildItem -LiteralPath $libsDest | Where-Object { $externals -notcontains $_.Name } |
         ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
 }
 if (Test-Path -LiteralPath $libsSrc) {
     New-Item -ItemType Directory -Force -Path $libsDest | Out-Null
-    $vendored = Get-ChildItem -LiteralPath $libsSrc | Where-Object { $_.Name -ne $glassLib }
+    $vendored = Get-ChildItem -LiteralPath $libsSrc | Where-Object { $externals -notcontains $_.Name }
     foreach ($lib in $vendored) { Copy-Item -LiteralPath $lib.FullName -Destination $libsDest -Recurse -Force }
     Write-Host "  Libs\  ($(($vendored | Get-ChildItem -Recurse -File).Count) vendored files, and LibGlass-1.0)"
 }

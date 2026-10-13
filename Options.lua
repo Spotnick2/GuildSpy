@@ -71,7 +71,17 @@ for _, c in ipairs(Options.CHAT) do
     end
 end
 
+-- Options > AddOns > GuildSpy > Sharing (owner, SYNC.md §10). Phase 2 (#37):
+-- my other accounts; phase 3 adds guildmates.
+Options.SHARING = {
+    { key = "syncAccounts", kind = "toggle", label = "Sync with my other accounts",
+      note = "While another of your accounts is online in the same guild, the two share their logs over Battle.net.",
+      get = function() return GuildSpy.AccountSync.Enabled() end,
+      set = function(v) GuildSpy.AccountSync.SetEnabled(v) end },
+}
+
 local BY_KEY = {}
+for _, item in ipairs(Options.SHARING) do BY_KEY[item.key] = item end
 for _, item in ipairs(Options.ITEMS) do BY_KEY[item.key] = item end
 for _, item in ipairs(Options.CHAT) do BY_KEY[item.key] = item end
 
@@ -95,6 +105,7 @@ local views = {}     -- refresh functions of the built views
 
 function Options.Refresh()
     for _, fn in ipairs(views) do fn() end
+    if Options.RefreshSharing then Options.RefreshSharing() end
 end
 
 -- Checks and saves one setting. False (and nothing changed) when the value
@@ -381,12 +392,100 @@ about:SetScript("OnShow", function(self)
     end
 end)
 
+------------------------------------------------------------
+-- Options > AddOns > GuildSpy > Sharing (#37)
+------------------------------------------------------------
+
+local sharing = CreateFrame("Frame")
+sharing.name = "Sharing"
+sharing:Hide()              -- see `page`: or its first show is blank
+
+local function ago(t)
+    if not t then return nil end
+    return GuildSpy.Log.Relative and GuildSpy.Log.Relative(t, time()) or (GuildSpy.Log.Ago(time() - t) .. " ago")
+end
+
+-- One line per account the library sees: synced when, or why not.
+function Options.SharingLines()
+    local AS = GuildSpy.AccountSync
+    local peers, running = AS.Status()
+    local _, myKey = GuildSpy.Scanner.Current()
+    local lines = {}
+    if not AS.Enabled() then return { "Off." } end
+    if not running then return { "Not available: Battle.net sync didn't start on this client." } end
+    for _, p in ipairs(peers) do
+        local state
+        if p.syncedAt then state = "synced " .. ago(p.syncedAt)
+        elseif p.guild and myKey and p.guild ~= myKey then state = "online, in another guild (not synced)"
+        elseif not p.guild then state = "online, not in a guild yet (not synced)"
+        else state = "online, syncing" end
+        lines[#lines + 1] = p.name .. ": " .. state
+    end
+    if #lines == 0 then lines[1] = "None of your other accounts seen this session. Log in on one, in the same guild." end
+    return lines
+end
+
+local function sharingLabel(text, template, width)
+    local fs = sharing:CreateFontString(nil, "OVERLAY", template or "GameFontHighlight")
+    fs:SetJustifyH("LEFT")
+    if width then fs:SetWidth(width) end
+    fs:SetText(text)
+    return fs
+end
+
+local function buildSharing()
+    local title = sharingLabel("Sharing", "GameFontNormalHuge")
+    title:SetPoint("TOPLEFT", sharing, "TOPLEFT", 16, -16)
+    local sub = sharingLabel("What GuildSpy shares, and with whom. Only ever within your current guild.",
+        "GameFontHighlightSmall", 620)
+    sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 2, -6)
+    sharing.controls = {}
+    local y = -72
+    for _, item in ipairs(Options.SHARING) do
+        local cb, templated = GuildSpy.API.SafeFrame("CheckButton", sharing, "UICheckButtonTemplate", "text")
+        if not templated then
+            cb:SetNormalTexture("Interface\\Buttons\\UI-CheckBox-Up")
+            cb:SetCheckedTexture("Interface\\Buttons\\UI-CheckBox-Check")
+        end
+        cb:SetSize(24, 24)
+        cb:SetPoint("TOPLEFT", sharing, "TOPLEFT", 16, y)
+        cb:SetScript("OnClick", function(self) Options.Set(item.key, self:GetChecked() and true or false) end)
+        local fs = sharingLabel(item.label)
+        fs:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+        local note = sharingLabel(item.note, "GameFontHighlightSmall", 560)
+        note:SetPoint("TOPLEFT", sharing, "TOPLEFT", 48, y - 22)
+        sharing.controls[item.key] = { check = cb, label = fs, note = note }
+        y = y - 56
+    end
+    local head = sharingLabel("Your other accounts", "GameFontNormalLarge")
+    head:SetPoint("TOPLEFT", sharing, "TOPLEFT", 16, y)
+    sharing.status = sharingLabel("", "GameFontHighlightSmall", 600)
+    sharing.status:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 4, -8)
+end
+
+function Options.RefreshSharing()
+    if not sharing.built or not sharing:IsShown() then return end
+    for _, item in ipairs(Options.SHARING) do
+        sharing.controls[item.key].check:SetChecked(Options.Get(item.key) and true or false)
+    end
+    sharing.status:SetText(table.concat(Options.SharingLines(), "\n"))
+end
+
+sharing:SetScript("OnShow", function(self)
+    if not self.built then
+        self.built = true
+        buildSharing()
+    end
+    Options.RefreshSharing()
+end)
+
 local function register()
     local Settings = rawget(_G, "Settings")
     if category or not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
     category = Settings.RegisterCanvasLayoutCategory(page, page.name)
     Settings.RegisterAddOnCategory(category)
     if Settings.RegisterCanvasLayoutSubcategory then
+        pcall(Settings.RegisterCanvasLayoutSubcategory, category, sharing, sharing.name)
         pcall(Settings.RegisterCanvasLayoutSubcategory, category, about, about.name)
     end
     -- The log window is in the DIALOG strata, above Settings (HIGH): it steps aside.
@@ -417,5 +516,6 @@ reg:SetScript("OnEvent", register)
 Options._test = {
     page = page,
     about = about,
+    sharing = sharing,
     category = function() return category end,
 }

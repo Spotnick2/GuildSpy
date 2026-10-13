@@ -46,6 +46,7 @@ end
 -- run loudly; a silently skipped library would test nothing (after
 -- GlassUnitFrames' harness).
 LIBGLASS_XML = "Libs\\LibGlass-1.0\\LibGlass-1.0.xml"
+LIBACCOUNTSYNC_XML = "Libs\\LibAccountSync-1.0\\LibAccountSync-1.0.xml"
 function libGlassRoot()
     local root = (os.getenv("LIBGLASS") or "../LibGlass"):gsub("\\", "/"):gsub("/$", "")
     local f = io.open(root .. "/LibGlass-1.0.xml", "rb")
@@ -92,6 +93,8 @@ function loadAddon(opts)
         if line == LIBGLASS_XML then
             LibStub = nil
             files = libGlassScripts()
+        elseif line == LIBACCOUNTSYNC_XML then
+            files = {}          -- a scripted fake answers LibStub("LibAccountSync-1.0") (wow_stubs)
         elseif line:match("^Libs\\") then
             files = {}
         elseif line:match("%.lua$") then

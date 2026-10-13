@@ -14,3 +14,5 @@ dist/
 # copied from ..\LibGlass by Tools/deploy.ps1. Never commit a copy. Any other
 # Libs\ are vendored and stay committed.
 Libs/LibGlass-1.0/
+# The embedded LibAccountSync-1.0 (#37): the same, from ..\LibAccountSync.
+Libs/LibAccountSync-1.0/
