@@ -158,12 +158,17 @@ GuildSpyDB = { version=1, minimap={},
     ranks = { "Guild Master", ... }, motd = "...",
     members = { [guid] = { name, rank, level, class, note, onote, online, lastSeenAt, missingSince, missingAfter } },
     formers = { [guid] = { name, leftAt, rankName, level } },
+    nextChg=n,     -- (#36) this client's change counter: account sync pages by it
     log = { { seq, at, approx=bool|nil, kind, guid, name, actor, from, to,
-              after=epoch|nil },   -- (#19) the previous scan: a scan-noticed change is in (after, at]
+              after=epoch|nil,   -- (#19) the previous scan: a scan-noticed change is in (after, at]
+              -- (#36) the observation, docs/SYNC.md §1:
+              uid, lo, hi, obs, origin, trust="self"|"guild", here=bool, rev, chg,
+              ns="g:<reporter>"|nil, reporter },
             ... } } } }
 ```
 Caps are enforced **on append** (plus a sweep at login): log ≤ 1500 entries and ≤ 180 days per
-guild; formers ≤ 500 and ≤ 365 days; at most 5 guilds, dropping the least recently observed; note
+guild for my accounts' observations, and ≤ 500 / 60 days for guildmates' reports, each kept in
+retention order (observed time, namespace, uid; docs/SYNC.md §7); formers ≤ 500 and ≤ 365 days; at most 5 guilds, dropping the least recently observed; note
 strings are already bounded by the game. Shape is validated on load, and an unreadable guild table
 is reset to "baseline needed". No per-character SV.
 
@@ -180,15 +185,12 @@ is reset to "baseline needed". No per-character SV.
 
 ## Deferred (not on the roadmap until v1 is measured)
 
-- **GuildSpy↔GuildSpy enrichment.** Only plausible gain: exact time/actor for events the event log
-  can't attribute, and note edits seen live. Costs: spoofable claims (any member can send anything),
-  privacy rules beyond "no ONOTE". If ever built: public kinds only, single 240-B packets via
-  ChatThrottleLib v32 (Gnomesweeper pattern), peer data shown as "reported by X", never creating
-  membership facts.
+- **Sync with guildmates and between my accounts:** no longer deferred. v1 was measured in a real
+  guild, and the owner asked for both (2026-10-12). The design is **docs/SYNC.md** (three Codex
+  rounds), built in phases #36, #37, #38.
 - **GRM listener.** Passive `GRM_SYNC`/GUILD only yields manual join/promo dates and alt links,
   incomplete (removals, rank-restricted senders: `GRM_GuildSync.lua:8300`) and a protocol to track.
   Cheaper variant if wanted: read GRM's "Joined: <date>" text out of public notes.
-- **LibAccountSync**: share logs between the owner's own WoW accounts.
 
 ## Repo init (mirrors siblings)
 

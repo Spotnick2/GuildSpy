@@ -92,6 +92,13 @@ local function validGuild(gs)
     if type(gs.formers) ~= "table" then gs.formers = {} end
     if type(gs.ranks) ~= "table" then gs.ranks = {} end
     if type(gs.shownSeq) ~= "number" then gs.shownSeq = 0 end
+    if gs.nextChg ~= nil and type(gs.nextChg) ~= "number" then gs.nextChg = nil end
+    for _, e in ipairs(gs.log) do
+        if e.uid ~= nil and type(e.uid) ~= "string" then e.uid = nil end
+        if e.ns ~= nil and type(e.ns) ~= "string" then e.ns, e.trust = nil, nil end
+    end
+    -- Observations (#36): legacy entries get their identity once.
+    Log.Migrate(gs)
     if gs.viewedSeq ~= nil and type(gs.viewedSeq) ~= "number" then gs.viewedSeq = nil end
     return gs
 end
@@ -149,7 +156,7 @@ function Scanner.Enrich()
     for _, item in ipairs(S.enrichable) do
         if t - item.recordedAt <= Scanner.ENRICH_WINDOW then
             local attr = attribute(item.ev)
-            if attr then Log.Enrich(item.entry, attr) else kept[#kept + 1] = item end
+            if attr then Log.Enrich(item.entry, attr, S.state) else kept[#kept + 1] = item end
         end
     end
     S.enrichable = kept
@@ -374,7 +381,9 @@ function Scanner.PrintLog(n)
     for i = #gs.log, 1, -1 do
         local e = gs.log[i]
         if Log.Visible(e, canView()) then
-            table.insert(out, 1, date("%m-%d %H:%M", e.at) .. (e.approx and "~ " or "  ") .. Log.Line(e, now()))
+            local src = Log.Source(e)
+            table.insert(out, 1, date("%m-%d %H:%M", e.at) .. (e.approx and "~ " or "  ") .. Log.Line(e, now())
+                .. (src and (" |cff8f8f8f(" .. src:sub(1, 1):lower() .. src:sub(2):gsub("|", "||") .. ")|r") or ""))
             shown = shown + 1
             if shown >= n then break end
         end
