@@ -33,6 +33,13 @@ Options.ITEMS = {
                   { 60, "Away 60 days or more" } },
       note = "Only when GuildSpy saw the member away that long before they came back.",
       get = function() return st().returnDays or Options.RETURN_DEFAULT end },
+    { key = "capSound", kind = "toggle", label = "Sound at the level cap",
+      note = "A fanfare when a guildmate reaches the level cap: once live, once for a login summary. Ticking it plays it.",
+      get = function() return st().capSound ~= false end,
+      set = function(v)
+          st().capSound = v
+          if v then GuildSpy.Scanner.CapSound() end
+      end },
     { key = "minimapButton", kind = "toggle", label = "Minimap button",
       note = "Left-click opens or closes the log, right-click opens these settings. Drag it around the minimap.",
       get = function() return GuildSpy.Minimap.Shown() end,

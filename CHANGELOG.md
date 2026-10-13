@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Reaching the level cap stands out**: "Ann Lee reached level 60, the level cap!" in gold, in chat,
+  the login summary (listed before the other level-ups) and the log window, with a fanfare. Turn
+  the sound off in the settings ("Sound at the level cap").
 - **Notes in the log's tooltips.** Hover a row to see the member's note, and their officer note if
   your character can read officer notes.
 

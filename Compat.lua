@@ -32,6 +32,19 @@ function API.SafeFrame(ftype, parent, template, proof)
     return CreateFrame(ftype, nil, parent), false
 end
 
+-- The level cap (#34): the expansion's max level, else the player's. Both are
+-- in the 1.60.1.70338 dump; nil when neither answers a positive number.
+function API.LevelCap()
+    for _, name in ipairs({ "GetMaxLevelForPlayerExpansion", "GetMaxPlayerLevel" }) do
+        local fn = rawget(_G, name)
+        if type(fn) == "function" then
+            local ok, v = pcall(fn)
+            if ok and type(v) == "number" and v > 0 then return v end
+        end
+    end
+    return nil
+end
+
 -- The addon's version from its TOC, or "dev" for an unpackaged copy (the
 -- packager replaces the "@" .. "project-version@" token in every file it ships,
 -- so the check is for an "@", never for the whole token).
