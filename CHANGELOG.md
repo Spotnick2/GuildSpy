@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **LibGlass r6.** No visible change: the default glass is the same as before.
+
 ## v0.2.0
 
 Sharing: between your own accounts, and with guildmates who use GuildSpy. Sharing gets its real
