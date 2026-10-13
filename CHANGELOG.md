@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **LibGlass r6.** No visible change: the default glass is the same as before.
+- **A cleaner glass** for the log window (LibGlass r6): thin rims, no grain, softer shine.
 
 ## v0.2.0
 
