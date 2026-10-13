@@ -14,6 +14,8 @@ ranks, notes get rewritten, and that rogue who vanished a month ago is suddenly 
 game tells you some of this in chat if you happen to be online when it happens, and the rest
 nowhere at all. GuildSpy watches the roster and tells you.
 
+![The log window, in the guild window's GuildSpy tab](https://raw.githubusercontent.com/Spotnick2/GuildSpy/main/docs/screenshots/log-window.png)
+
 It is the informational half of Guild Roster Manager and nothing else. **GuildSpy only reads.** It
 never changes a rank, a note or a member, and it sends nothing to anyone.
 
