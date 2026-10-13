@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
+
+Who has which profession, in the guild window, and a cleaner glass. The Professions tab is new:
+a profession without its icon, or a member under the wrong one, is worth a report.
 
 - **Guild professions.** A Professions tab in the guild window lists who has which profession, as
   in retail: a heading per profession with its count and who's online, its members under it, show

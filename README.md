@@ -1,7 +1,8 @@
 # GuildSpy
 
 **Know what's going on in your guild.** Who joined, who left, who got promoted, who levelled and who
-came back: live while you play, and in one short summary when you log in.
+came back: live while you play, and in one short summary when you log in. And who in the guild has
+which profession, in the guild window.
 
 For **World of Warcraft: Forever**.
 
@@ -35,6 +36,7 @@ character saw itself goes to guildmates who use GuildSpy.
 - **A new message of the day.**
 - **What you missed while offline**, from your other accounts and from guildmates with GuildSpy who
   were online at the time.
+- **Who has which profession**, in a Professions tab in the guild window.
 
 ## Live, and while you were away
 
@@ -132,6 +134,9 @@ The key binding is under **Key Bindings > GuildSpy**, with no key set by default
   guild window makes.
 - **Your accounts sync completely, but only together.** Two of your accounts share their logs only
   while both are online, in the same guild.
+- **Professions come from the game's member list**, for every member, offline ones too, with no
+  extra request to the server. The server shares no skill levels and no recipes, so neither does
+  the tab.
 - **Guildmates' reports are best effort.** They come only from guildmates online with GuildSpy, each
   marked with who reported it, and only what that guildmate saw themselves. Never officer notes,
   the message of the day or the rank list. Turn sharing off, or choose whose reports you take, under
@@ -146,7 +151,8 @@ error (turn them on with `/console scriptErrors 1`, or use BugSack) and the outp
 
 **Sharing is new in 0.2.0** and gets its real test on the Forever beta, between players. What
 arrives from guildmates (or doesn't), and anything odd in "reported by" lines, is especially worth
-a report.
+a report. So is anything odd in the **Professions tab** (new in 0.3.0): a profession without its
+icon, or a member missing or under the wrong profession.
 
 ## Credits
 
