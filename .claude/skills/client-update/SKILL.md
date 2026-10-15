@@ -1,32 +1,26 @@
 ---
 name: client-update
-description: Handle a new WoW Forever client build for GuildSpy - find (or have AltStable produce) the new API dump in C:\Projects\WoW\References, diff it against the previous build for names this addon uses, and prepare the MEASURED_ON_BUILD bump PR. Use when the owner says there is a new build/API bump, "apidump done", "new api build", or a build newer than MEASURED_ON_BUILD shows up in C:\Projects\WoW\References.
+description: Handle a new WoW Forever client build for GuildSpy - after the shared forever-api-dump skill has dumped, converted and diffed the build, check the names this addon uses and prepare the MEASURED_ON_BUILD bump PR. Use when the owner says there is a new build/API bump, "apidump done", "new api build", or a build newer than MEASURED_ON_BUILD shows up in C:\Projects\WoW\References.
 version: 1.0.0
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
 
 # A new Forever client build
 
-Adapted from AltStable's `client-update` skill. **GuildSpy does not own the dump tooling**: the
-dump addon and its converters live in `..\AltStable\Tools\ForeverAPIDump\`, and the converted dumps
-are shared by every Forever project in `C:\Projects\WoW\References\forever-api-<version>.<build>.md`.
+The dump, its conversion and the diff are shared by every project: run the `forever-api-dump`
+skill (`C:\Projects\WoW\.claude\skills\forever-api-dump\SKILL.md`) first. This skill covers what
+is specific to GuildSpy.
 
 ## Who does what
 
 | Step | Who | What |
 |---|---|---|
-| 1. Dump | **owner**, in game | only if `C:\Projects\WoW\References` has no dump for the new build yet: deploy AltStable's dump addon, `/apidump`, `/reload` |
-| 1. Convert | you | `pwsh ..\AltStable\Tools\ForeverAPIDump\Convert-Dump.ps1` (skip if the file already exists — another session may have done it) |
-| 2. Diff | you | `pwsh ..\AltStable\Tools\ForeverAPIDump\Compare-Dumps.ps1` |
+| 1-2. Dump, convert, diff | owner + you | the shared `forever-api-dump` skill |
 | 3. Check | you | grep this repo for every changed name |
 | 4. Bump PR | you | edits, tests, branch, PR (commit/push only when asked) |
 
-**Never delete old dumps**; that is the owner's call.
+## 3. Check
 
-## 2–3. Diff and check
-
-- The documented sections (functions, events, tables, **widget methods**, namespace functions) are
-  the client. The `_G` walks pick up whatever addons were loaded — never a finding on their own.
 - For every documented change, grep `*.lua` and `tests/` for the name. GuildSpy's surface is the
   guild API (`GetGuildRosterInfo`, `GetGuildRosterLastOnline`, `GetNumGuildMembers`,
   `GuildControlGetRankName`, `GetGuildEventInfo`, `C_GuildInfo.*`, `C_Club.*`), the `GUILD_*` and
