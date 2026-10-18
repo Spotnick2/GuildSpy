@@ -1,6 +1,6 @@
 ---
 name: client-update
-description: Handle a new WoW Forever client build for GuildSpy - after the shared forever-api-dump skill has dumped, converted and diffed the build, check the names this addon uses and prepare the MEASURED_ON_BUILD bump PR. Use when the owner says there is a new build/API bump, "apidump done", "new api build", or a build newer than MEASURED_ON_BUILD shows up in C:\Projects\WoW\References.
+description: Handle a new WoW Forever client build for GuildSpy - after the shared forever-api-dump skill has dumped, converted and diffed the build, check the names this addon uses and prepare the MEASURED_ON_BUILD bump PR. Use when the owner says there is a new build/API bump, "apidump done", "new api build", or a build newer than MEASURED_ON_BUILD shows up in C:\Projects\WoW\References\Forever\api.
 version: 1.0.0
 allowed-tools: [Bash, Read, Edit, Write, Grep, Glob]
 ---
@@ -45,5 +45,5 @@ Branch `build-<build>` from `main`:
 Then `pwsh tests\run.ps1` green, `pwsh Tools\deploy.ps1`, a `/reload` in game, and `/gspy probe`.
 Commit, push and open the PR (`Closes #N`) **only when the owner asks** — the owner runs every review.
 
-Addon-agnostic findings about the new build go in `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`,
+Addon-agnostic findings about the new build go in `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`,
 not here.

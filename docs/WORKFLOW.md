@@ -35,7 +35,7 @@ issue  ->  branch  ->  PR  ->  owner's Codex review  ->  address  ->  owner merg
 7. **The owner merges.** Commit and push only as part of this loop.
 
 In-game measurements (`/gspy probe`) go in `docs/FOREVER-PROBE.md`. Findings that hold for every
-Forever addon go in `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
+Forever addon go in `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 
 ## The review on a PR
 
