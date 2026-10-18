@@ -173,6 +173,7 @@ function Options.Validate(settings)
     -- The Sharing page's (#38): what no page could have set goes.
     if settings.shareGuild ~= nil and type(settings.shareGuild) ~= "boolean" then settings.shareGuild = nil end
     if settings.reports ~= "log" and settings.reports ~= "never" then settings.reports = nil end
+    if settings.windowGlass ~= "clean" then settings.windowGlass = nil end   -- /gspy glass (#60)
     settings.reportRank = nil                       -- a pre-release shape: one index for every guild
     if settings.reportRanks ~= nil then
         if type(settings.reportRanks) ~= "table" then settings.reportRanks = nil

@@ -2,7 +2,10 @@
 
 ## Unreleased
 
-- **LibGlass r10.** The glass looks the same; the library is current.
+- **A reflective glass** for the log window: a smoked shell with a lit rim and a soft header
+  reflection, and a calm reading pane under the list, where the roster's marble was. The tab in
+  the guild window keeps the marble. `/gspy glass` switches back to the previous look.
+- **LibGlass r10.**
 
 ## v0.3.0
 

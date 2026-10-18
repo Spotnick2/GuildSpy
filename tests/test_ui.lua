@@ -90,7 +90,7 @@ WoW.chat = {}
 WoW.slash("/gspy log")
 local win = T.window()
 check(win and win:IsShown(), "/gspy log opens the window")
-eq(win.glass and win.glass.size, "thin", "...in the clean glass: thin rims (LibGlass r6, #46)")
+eq(win.glass and win.glass.size, "thin", "...on the clean preset's thin rims (LibGlass r6, #46)")
 local panel = T.panel()
 eq(#panel.rows, 3, "...listing what this character may see")
 eq(panel.box._dataProvider:GetSize(), 4, "...handed to the scroll box under a \"New\" heading")
@@ -99,6 +99,42 @@ local found = false
 for _, name in ipairs(UISpecialFrames) do if name == "GuildSpyLogWindow" then found = true end end
 check(found, "Escape closes it")
 eq(#WoW.chat, 0, "...and nothing printed")
+
+-- The reflective glass (#60): the shell, its lit layers and a reading pane; no marble.
+eq(UI.WindowGlass(), "reflective", "the window's glass is reflective by default (#60)")
+local g = win.glass
+eq(g.tint._color[4], UI.REFLECTIVE.tint[4], "...the smoked shell's tint")
+check(g.reflect and g.reflect.rim and g.reflect.top and g.reflect.header, "...its lit rim, top line and header reflection")
+eq(g.reflect.header:GetHeight(), UI.HEADER_REFLECTION, "...the reflection as tall as the header")
+check(UI.HEADER_REFLECTION > 0 and UI.HEADER_REFLECTION <= 125, "...and no taller than the recipe's 125 px")
+check(win.backing:IsShown() and win.pane:IsShown(), "...a masked backing and the reading pane")
+check(win.pane._parent == win.content and win.content:GetFrameLevel() < panel:GetFrameLevel(),
+    "...the pane under the panel's rows")
+check(not panel.bg:IsShown(), "...and the roster's marble hidden in the window")
+eq(g.rim:GetAlpha(), UI.REFLECTIVE.rim, "...the shell's quiet base rim")
+eq(g.grain:GetAlpha(), 0, "...no grain")
+
+-- /gspy glass: the clean look again, live, and back.
+local builtTint = g.tint.glassColor or GuildSpy.Glass.STYLE.tint
+WoW.chat = {}
+WoW.slash("/gspy glass")
+eq(UI.WindowGlass(), "clean", "/gspy glass switches to the clean glass")
+eq(GuildSpyDB.settings.windowGlass, "clean", "...saved account-wide")
+check(WoW.chat[1] and WoW.chat[1]:find("clean glass", 1, true), "...and says so")
+eq(g.tint._color[4], builtTint[4], "...the tint as built")
+eq(g.dark:GetAlpha(), win.built.dark, "...the dark rim as built")
+eq(g.grain:GetAlpha(), win.built.grain, "...the grain as built")
+check(not win.backing:IsShown() and not win.pane:IsShown(), "...no backing or pane")
+check(not g.reflect.rim:IsShown() and not g.reflect.header:IsShown(), "...no reflection")
+check(panel.bg:IsShown(), "...the marble back")
+WoW.slash("/gspy glass")
+eq(UI.WindowGlass(), "reflective", "/gspy glass again: reflective")
+eq(GuildSpyDB.settings.windowGlass, nil, "...the default, so nothing saved")
+check(win.pane:IsShown() and g.reflect.header:IsShown() and not panel.bg:IsShown(), "...the pane and reflection back, no marble")
+eq(g.tint._color[4], UI.REFLECTIVE.tint[4], "...the smoked tint back")
+local bad = { windowGlass = "shiny" }
+GuildSpy.Options.Validate(bad)
+eq(bad.windowGlass, nil, "a saved windowGlass no command could set goes back to the default")
 
 -- Rows: the initializer draws an entry, with the "new" marker past the last look.
 local view = panel.box._view
@@ -555,6 +591,7 @@ check(not win:IsShown(), "/gspy log leaves it in the guild window")
 WoW.advance(0)
 check(UI.guildHost:GetFrameStrata() == "HIGH", "the panel sits a strata above the guild window (MEDIUM)")
 eq(UI.guildHost.bg._color[4], 1, "the panel's background is fully opaque (nothing under it shows through)")
+check(panel.bg:IsShown(), "...the roster's marble on it, whatever the window's glass (#60)")
 
 -- The current Blizzard tab clicked again (SetDisplayMode returns early): our panel goes away.
 cf:clickTab("RosterTab", "ROSTER")

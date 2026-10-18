@@ -516,6 +516,15 @@ function UI.SetRank(name)
     UI.Refresh()
 end
 
+local function db() return GuildSpyDB end
+
+-- The standalone window's glass (#60): "reflective" (the default) or "clean",
+-- the look before it, kept for comparing (/gspy glass).
+function UI.WindowGlass()
+    local s = db() and db().settings
+    return s and s.windowGlass == "clean" and "clean" or "reflective"
+end
+
 local function setHost(host, level)
     if not panel then build() end
     panel:SetParent(host)
@@ -523,6 +532,9 @@ local function setHost(host, level)
     panel:SetAllPoints(host)
     panel:SetFrameStrata(host:GetFrameStrata())
     panel:SetFrameLevel(level)
+    -- The roster's marble in the guild window; in the reflective window the
+    -- glass and its reading pane show instead.
+    panel.bg:SetShown(not (win and host == win.content and UI.WindowGlass() == "reflective"))
     panel:Show()
 end
 
@@ -530,7 +542,57 @@ end
 -- The standalone window
 ------------------------------------------------------------
 
-local function db() return GuildSpyDB end
+-- The reflective recipe (References\Docs\LIBGLASS-WINDOW-STYLING.md, GRF's
+-- accepted values): a smoked shell over a masked backing, its lit layers
+-- (Glass.Reflect, LibGlass r9), and one reading pane under the list.
+UI.REFLECTIVE = {
+    tint = { 0.085, 0.095, 0.115, 0.78 },
+    backing = { 0.03, 0.03, 0.035, 0.55 },
+    rim = 0.12, dark = 0.55, shadow = 0.18,
+    pane = { 0.072, 0.082, 0.10, 0.94 },
+}
+-- The pane's top, from the window's: the list's, a little above it. The
+-- header reflection fades out 12 px over it.
+local function paneTop() return Glass.Inset("large") + 24 + UI.LIST_Y - 4 end
+UI.HEADER_REFLECTION = math.min(125, paneTop() - 12)
+
+-- Paints the window in its glass, either way and back: "clean" gives every
+-- region the value it was built with.
+local function paintWindow()
+    local g, R, built = win.glass, UI.REFLECTIVE, win.built
+    local reflective = UI.WindowGlass() == "reflective"
+    if reflective then
+        Glass.SetSurfaceTint(g, unpack(R.tint))
+        Glass.SetWash(g, 0)
+        Glass.SetEdge(g, 0, 0, 0)
+        Glass.SetSurfaceAlpha(g, "rim", R.rim)
+        Glass.SetSurfaceAlpha(g, "dark", R.dark)
+        Glass.SetSurfaceAlpha(g, "shadow", R.shadow)
+        Glass.SetSurfaceAlpha(g, "grain", 0)
+    else
+        Glass.SetSurfaceTint(g)
+        Glass.SetWash(g, built.wash)
+        Glass.SetEdge(g, built.edge, built.edge * Glass.EDGE.glow, built.edge * Glass.EDGE.bottom, Glass.EDGE.glowh)
+        Glass.SetSurfaceRim(g)
+        Glass.SetSurfaceAlpha(g, "dark", built.dark)
+        Glass.SetSurfaceAlpha(g, "shadow", built.shadow)
+        Glass.SetSurfaceAlpha(g, "grain", built.grain)
+    end
+    win.backing:SetShown(reflective)
+    win.pane:SetShown(reflective)
+    for _, layer in pairs(g.reflect) do layer:SetShown(reflective) end
+    if panel and panel:GetParent() == win.content then
+        panel.bg:SetShown(not reflective)
+    end
+end
+
+-- /gspy glass: the other look, at once if the window is built.
+function UI.ToggleWindowGlass()
+    local clean = UI.WindowGlass() == "reflective"
+    db().settings.windowGlass = clean and "clean" or nil
+    if win then paintWindow() end
+    return UI.WindowGlass()
+end
 
 local function savePosition()
     local left, top = win:GetLeft(), win:GetTop()
@@ -554,7 +616,18 @@ local function buildWindow()
         win:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end
     table.insert(UISpecialFrames, UI.WINDOW_NAME)     -- Escape closes it
-    win.glass = Glass.Apply(win, "large")
+    local g = Glass.Apply(win, "large")
+    win.glass = g
+    win.built = {
+        wash = Glass.STYLE.wash, edge = Glass.STYLE.edge,
+        dark = g.dark:GetAlpha(), shadow = g.shadow:GetAlpha(), grain = g.grain:GetAlpha(),
+    }
+    -- Above the library's shadow (-8), under its tint (-6).
+    win.backing = win:CreateTexture(nil, "BACKGROUND", nil, -7)
+    win.backing:SetAllPoints(win)
+    win.backing:AddMaskTexture(g.mask)
+    win.backing:SetColorTexture(unpack(UI.REFLECTIVE.backing))
+    Glass.Reflect(g, win, { header = UI.HEADER_REFLECTION })
     local inset = Glass.Inset("large")
     win.title = Glass.Font(win, 14, "LEFT")
     win.title:SetPoint("TOPLEFT", win, "TOPLEFT", inset + 4, -inset - 2)
@@ -564,6 +637,15 @@ local function buildWindow()
     win.content = CreateFrame("Frame", nil, win)
     win.content:SetPoint("TOPLEFT", win, "TOPLEFT", inset, -inset - 24)
     win.content:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -inset, inset)
+    -- The reading pane: on the content frame, over the shell and under the
+    -- panel's rows; sized to the list and footer, never to the rows.
+    win.pane = win.content:CreateTexture(nil, "BACKGROUND", nil, -7)
+    win.pane:SetPoint("TOPLEFT", win, "TOPLEFT", inset, -paneTop())
+    win.pane:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -inset, inset)
+    win.pane:SetColorTexture(unpack(UI.REFLECTIVE.pane))
+    local S = Glass.SIZES.thin_small
+    win.pane:AddMaskTexture(Glass.Mask(win.content, S.mask, S.maskMargin, 0, win.pane))
+    paintWindow()
     win:Hide()
     -- Only after that first Hide: a frame is made shown, and hiding it here
     -- would mark the whole log seen before anyone looked.

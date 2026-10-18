@@ -20,6 +20,7 @@ GuildSpy.HELP = {
     { "/gspy status", "what GuildSpy knows about your guild" },
     { "/gspy scan", "look at the roster now" },
     { "/gspy rebaseline", "start over from the current roster (the log is kept)" },
+    { "/gspy glass", "switch the log window between the reflective and the clean glass" },
     { "/gspy version", "the addon's version and the client build" },
     { "/gspy probe", "dump the guild API's shapes (for measuring)" },
     { "/gspy probe watch", "record every system message (for measuring)" },
@@ -73,6 +74,8 @@ local function slash(msg)
         say("asked the server for the roster.")
     elseif cmd == "rebaseline" then
         GuildSpy.Scanner.Rebaseline()
+    elseif cmd == "glass" then
+        say("log window: " .. GuildSpy.UI.ToggleWindowGlass() .. " glass.")
     elseif cmd == "version" then
         say(API.AddOnVersion(ADDON) .. " on client " .. tostring(API.ClientBuild())
             .. " (measured on " .. GuildSpy.MEASURED_ON_BUILD .. ")")
