@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **LibGlass r10.** The glass looks the same; the library is current.
+
 ## v0.3.0
 
 Who has which profession, in the guild window, and a cleaner glass. The Professions tab is new:
