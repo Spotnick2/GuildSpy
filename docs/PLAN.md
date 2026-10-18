@@ -215,7 +215,7 @@ is reset to "baseline needed". No per-character SV.
 - `.github/workflows/package-check.yml` from Gnomesweeper, renamed + expected file list.
 - `Tools/deploy.ps1`, `Tools/LibGlassPin.ps1` from Gnomesweeper/GlassChat.
 - `tests/`: `run.ps1`, `harness.lua`, `wow_stubs.lua` (+ guild stubs: roster rows, event log,
-  system messages, CanViewOfficerNote), `events-1.60.1.70338.txt`, `fetch_libglass.sh`,
+  system messages, CanViewOfficerNote), `events-1.60.1.70450.txt`, `fetch_libglass.sh`,
   `test_toc.lua`, `test_roster.lua`, `test_patterns.lua`, `test_eventlog.lua`, `test_scanner.lua`.
   Fixtures: partial login roster, show-offline off, officer→alt→officer, rank insert/rename,
   delayed event log, repeated actions, guild switch, surname names, pattern magic characters.
