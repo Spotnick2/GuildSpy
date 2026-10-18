@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **One row per change.** When several guildmates (or several of your accounts) saw the same
+  join, rank change or level-up, the log shows it once, and its tooltip says who else saw it. A
+  late report of something you've already seen isn't marked new again. "Leveled from 6 to 10" and
+  "reached level 10" are one row. Nothing is deleted.
 - **LibGlass r10.** The glass looks the same; the library is current.
 
 ## v0.3.0

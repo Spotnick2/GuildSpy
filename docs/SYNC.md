@@ -77,7 +77,7 @@ it). Two namespaces never alias each other.
 
 ## 3. The window (phase 1: no grouping)
 
-- One row per observation. Guildmates' reports also have their own **Reports** tab (and show
+- One row per change (#59; until then one per observation, see the last bullet). Guildmates' reports also have their own **Reports** tab (and show
   under All, unless the setting says Never). A row not observed by me (`trust == "guild"`) shows a
   small "reported" mark; its tooltip says "Reported by Ann Lee" and gives its interval or exact time and its own
   actor as that reporter's claim. Self rows from my other accounts say "Seen on <origin>".
@@ -100,6 +100,24 @@ it). Two namespaces never alias each other.
     there (21 -> 23 by 21 -> 22 and 22 -> 23);
   - applied on a local scan (the change isn't kept, printed or given a seq), on each received entry
     (a page's batch keeps its indexes and counts), after an enrichment, and once at load.
+- **Several observers of one change fold into one row (#59)**, in the window only (`Log.Groups`,
+  `Log.Filter`, `Log.NewCounts`). Storage keeps every record (the #42 rule above stands). Found in
+  game with a few guildmates on GuildSpy: one join three times (two of my accounts and a report),
+  "from 6 to 10" next to "reached 10". Reviewed with Codex before code. The rule:
+  - **level-ups**: the same member and level fold (a level is reached once). The row reads from the
+    lowest level (mine first; a report's start never shows as mine) at the lead's time;
+  - **anything else**: the same member, kind (a join and a rejoin are one), from and to, and **one
+    time window every member shares** (an exact time counts ±60 s: two clients receive one message
+    a little apart). Never a chain through a broad record: A~B and B~C with A and C disjoint stay
+    two rows. Groups fill by window start, then namespace and uid, so every account forms the same;
+  - a record with no window (before #36) stays alone: missing evidence isn't a guess;
+  - the row is the group's **lead**: mine before a guildmate's (the row's claims and its "reported"
+    mark are the lead's), then the finest, then namespace and uid. The Reports tab shows a change
+    as its finest report. The tooltip lists the other records, each as its observer has it;
+  - folded first, over everything this character may see, then filtered: a tab or a search never
+    changes what a change is. Search matches any member. A change is **new only while every record
+    of it is**, so a late report of a change already seen doesn't light it up or count again;
+  - not changed: the digest (my own records only) and the chat lines for received reports.
 
 ## 4. Account sync (LibAccountSync, complete)
 

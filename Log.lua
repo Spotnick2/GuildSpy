@@ -318,15 +318,143 @@ function rowText(e, now, classOf)
     return Log.Line(e, now)
 end
 
--- The summary groups with entries past `since` this character may see:
--- { { n, word, color }, ... } in Log.NEW_GROUPS order.
+------------------------------------------------------------
+-- One row per change (#59): what several observers recorded of one change
+------------------------------------------------------------
+-- Storage keeps every observation (a change that can be undone isn't deleted
+-- for a look-alike, #42); the window, its counts and its New marker fold
+-- them. Folded on every render, so arrival order can't matter, and a record
+-- that fits no group only makes another row. Records fold when they are:
+--   * level-ups of the same member to the same level (a level is reached once,
+--     as Log.Covered has it);
+--   * otherwise the same member, kind (a rejoin as a join: one account's join
+--     is another's rejoin), from and to, with one time window all of them
+--     share: never a chain through a broad one (Codex, #59). A record with no
+--     window (before #36) stays alone.
+-- The row shown is the group's lead: mine before a guildmate's (the row's
+-- claims and its "reported" mark are the lead's), then the finest, then
+-- namespace and uid.
+Log.FOLD_LIVE_SLACK = 60        -- an exact time: two clients receive one message a little apart
+local FOLD_KIND = { REJOIN = "JOIN" }
+
+local function str0(v) return v == nil and "" or tostring(v) end
+-- Each field length-prefixed: a note may hold "|", so "a|b" -> "c" and
+-- "a" -> "b|c" must not meet (#61 review).
+local function foldKey(e)
+    local kind = FOLD_KIND[e.kind] or e.kind
+    -- A rejoin's from is the rank it once left, which a join doesn't have
+    -- (Roster.Apply): a membership change is who and to (#61 review).
+    local from = (kind ~= "JOIN" and kind ~= "LEVEL") and e.from or nil
+    local key = {}
+    for i, v in ipairs({ kind, str0(e.guid), str0(from), str0(e.to) }) do key[i] = #v .. ":" .. v end
+    return table.concat(key)
+end
+-- Its time window, or nil when it has none.
+local function window(e)
+    if e.approx == false and type(e.at) == "number" then
+        return e.at - Log.FOLD_LIVE_SLACK, e.at + Log.FOLD_LIVE_SLACK
+    end
+    local lo, hi = tonumber(e.lo), tonumber(e.hi) or tonumber(e.at)
+    if lo and hi and lo <= hi then return lo, hi end
+end
+local function precision(e)
+    if e.approx == false then return 0 end
+    local lo, hi = window(e)
+    return lo and (hi - lo) or math.huge
+end
+local function leadBefore(a, b)
+    local sa, sb = a.trust ~= "guild", b.trust ~= "guild"
+    if sa ~= sb then return sa end
+    local pa, pb = precision(a), precision(b)
+    if pa ~= pb then return pa < pb end
+    if Log.Ns(a) ~= Log.Ns(b) then return Log.Ns(a) < Log.Ns(b) end
+    return str0(a.uid) < str0(b.uid)
+end
+-- Every account forms the same groups: by window start, then namespace and uid.
+local function byStart(a, b)
+    local la, lb = window(a), window(b)
+    la, lb = la or math.huge, lb or math.huge
+    if la ~= lb then return la < lb end
+    if Log.Ns(a) ~= Log.Ns(b) then return Log.Ns(a) < Log.Ns(b) end
+    return str0(a.uid) < str0(b.uid)
+end
+
+-- The groups of the records `keep(e)` admits: { members, lead, seq (the
+-- lowest: the group is new only when every record is), from (a level-up's
+-- lowest, mine first) }, and each record's group.
+function Log.Groups(gs, keep)
+    local buckets, order = {}, {}
+    for _, e in ipairs(gs and gs.log or {}) do
+        if keep(e) then
+            local k = foldKey(e)
+            if not buckets[k] then buckets[k], order[#order + 1] = {}, k end
+            table.insert(buckets[k], e)
+        end
+    end
+    local groups, of = {}, {}
+    for _, k in ipairs(order) do
+        local list = buckets[k]
+        if list[1].kind == "LEVEL" and list[1].guid then
+            groups[#groups + 1] = { members = list }
+        else
+            table.sort(list, byStart)
+            local open = {}
+            for _, e in ipairs(list) do
+                local lo, hi = window(e)
+                local into
+                for _, g in ipairs(lo and open or {}) do
+                    if math.max(g.lo, lo) <= math.min(g.hi, hi) then into = g; break end
+                end
+                if into then
+                    into.members[#into.members + 1] = e
+                    into.lo, into.hi = math.max(into.lo, lo), math.min(into.hi, hi)
+                else
+                    local g = { members = { e }, lo = lo, hi = hi }
+                    groups[#groups + 1] = g
+                    if lo then open[#open + 1] = g end
+                end
+            end
+        end
+    end
+    for _, g in ipairs(groups) do
+        local mine, all
+        for _, e in ipairs(g.members) do
+            if not g.lead or leadBefore(e, g.lead) then g.lead = e end
+            if not g.seq or e.seq < g.seq then g.seq = e.seq end
+            local f = e.kind == "LEVEL" and tonumber(e.from)
+            if f and (not all or f < all) then all = f end
+            if f and e.trust ~= "guild" and (not mine or f < mine) then mine = f end
+            of[e] = g
+        end
+        g.from = mine or all
+    end
+    return groups, of
+end
+
+-- The record a row shows for `lead` in its group: a level-up from the group's
+-- lowest level ("leveled from 6 to 10", at the lead's time); else the lead.
+function Log.View(g, lead)
+    if not (g and lead.kind == "LEVEL" and g.from and tonumber(lead.from) and g.from < lead.from) then
+        return lead
+    end
+    local v = {}
+    for k, x in pairs(lead) do v[k] = x end
+    v.from = g.from
+    return v
+end
+
+-- The summary groups with changes past `since` this character may see:
+-- { { n, word, color }, ... } in Log.NEW_GROUPS order. A change counts once,
+-- and only while all its records are new (#59).
 function Log.NewCounts(gs, since, canViewOfficer, hideReports)
     local out = {}
+    local changes = Log.Groups(gs, function(e)
+        return Log.Visible(e, canViewOfficer) and not (hideReports and e.trust == "guild")
+    end)
     for _, g in ipairs(Log.NEW_GROUPS) do
         local n = 0
-        for _, e in ipairs(gs and gs.log or {}) do
-            if e.seq > (since or 0) and g.kinds[e.kind] and Log.Visible(e, canViewOfficer)
-                    and not (hideReports and e.trust == "guild") then n = n + 1 end
+        for _, c in ipairs(changes) do
+            if c.seq > (since or 0) and g.kinds[c.lead.kind] then n = n + 1 end
         end
         if n > 0 then out[#out + 1] = { n = n, word = n == 1 and g.one or g.many, color = Log.COLORS[g.color] } end
     end
@@ -384,7 +512,8 @@ function Log.InRank(e, gs, rank)
     return type(f) == "table" and f.rankName == rank
 end
 
--- The log window's rows: the entries this character may see, newest first,
+-- The log window's rows: one entry per change this character may see (the
+-- lead of its group, #59; the second result maps each to its group), newest first,
 -- in `opts.category` (a Log.CATEGORIES key; nil = all), at or after
 -- `opts.since` (nil = any time) and containing `opts.query` (plain,
 -- case-insensitive, matched against the shown text, so a member's name, an
@@ -400,19 +529,39 @@ function Log.Filter(gs, opts, now)
     local hideReports = opts.hideReports and trust ~= "guild"
     local q = opts.query and opts.query:lower():match("^%s*(.-)%s*$")
     if q == "" then q = nil end
+    -- Folded first (#59), over every record this character may see, so a tab
+    -- or a search never changes what a change is or whether it's new.
+    local groups = Log.Groups(gs, function(e)
+        return Log.Visible(e, opts.canViewOfficer) and not (hideReports and e.trust == "guild")
+    end)
+    local function matches(g)
+        for _, e in ipairs(g.members) do
+            if (Log.Plain(Log.Text(e, now)) .. " " .. (Log.Source(e) or "")):lower():find(q, 1, true) then
+                return true
+            end
+        end
+    end
+    local shown = {}
+    for _, g in ipairs(groups) do
+        -- The Reports tab shows the change as its finest report.
+        local lead = not trust and g.lead or nil
+        for _, e in ipairs(trust and g.members or {}) do
+            if e.trust == trust and (not lead or leadBefore(e, lead)) then lead = e end
+        end
+        if lead and (not kinds or kinds[lead.kind])
+                and (not opts.since or (lead.at or 0) >= opts.since)
+                and (not opts.rank or Log.InRank(lead, gs, opts.rank))
+                and (not q or matches(g)) then
+            shown[lead] = g
+        end
+    end
     local out = {}
     local log = gs.log or {}
     for i = #log, 1, -1 do
-        local e = log[i]
-        if Log.Visible(e, opts.canViewOfficer) and (not kinds or kinds[e.kind])
-                and (not trust or e.trust == trust) and not (hideReports and e.trust == "guild")
-                and (not opts.since or (e.at or 0) >= opts.since)
-                and (not opts.rank or Log.InRank(e, gs, opts.rank))
-                and (not q or (Log.Plain(Log.Text(e, now)) .. " " .. (Log.Source(e) or "")):lower():find(q, 1, true)) then
-            out[#out + 1] = e
-        end
+        if shown[log[i]] then out[#out + 1] = log[i] end
     end
-    return out
+    -- And each row's group: its New state, its text and its tooltip.
+    return out, shown
 end
 
 -- Appends an event as an entry; caps are enforced here, on every append.

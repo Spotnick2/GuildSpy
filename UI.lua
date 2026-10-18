@@ -125,11 +125,21 @@ local function buildRow(row)
         if not entry or not Log.Visible(entry, canView()) then return end
         tipOwner = self
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        local now = time()
         GameTooltip:SetText(date("%Y-%m-%d %H:%M", entry.at))
-        GameTooltip:AddLine(Log.Line(entry, time()), 1, 1, 1, true)
+        GameTooltip:AddLine(Log.Line(Log.View(self.group, entry), now), 1, 1, 1, true)
         GameTooltip:AddLine(Log.Provenance(entry), 0.6, 0.6, 0.6, true)
         local src = Log.Source(entry)
         if src then GameTooltip:AddLine(Log.Esc(src), 0.6, 0.8, 1, true) end
+        -- The change's other records (#59), each as its observer has it.
+        for _, m in ipairs(self.group and self.group.members or {}) do
+            if m ~= entry then
+                local who = (Log.Source(m) or "Seen here"):gsub("^%u", string.lower)
+                GameTooltip:AddLine("Also " .. Log.Esc(who)
+                    -- Plain gives "||" back as "|": escaped again for the tooltip (#61 review).
+                    .. ": " .. Log.Esc(Log.Plain(Log.Text(m, now))) .. " (" .. Log.When(m, now) .. ")", 0.6, 0.8, 1, true)
+            end
+        end
         local gs = current()
         for _, n in ipairs(gs and Log.MemberNotes(gs, entry, canView()) or {}) do
             GameTooltip:AddLine(n.label .. ": |cff" .. n.color .. Log.Esc(n.text) .. "|r", 0.8, 0.8, 0.8, true)
@@ -139,20 +149,28 @@ local function buildRow(row)
     row:SetScript("OnLeave", function() tipOwner = nil; GameTooltip:Hide() end)
 end
 
+-- New: every record of its change is past the boundary (#59), so a late
+-- report of a change already seen doesn't light it up again.
+local function isNew(e)
+    local g = panel.groups and panel.groups[e]
+    return (g and g.seq or e.seq) > newSince
+end
+
 -- One list element: a section heading ({ header }) or an entry ({ entry, odd }).
 local function initRow(row, el)
     if not row.text then buildRow(row) end
     local e = el.entry
     row.entry = e
+    row.group = e and panel.groups and panel.groups[e]
     row.header:SetShown(el.header ~= nil)
     row.header:SetText(el.header or "")
     for _, part in ipairs({ row.stripe, row.mark, row.icon, row.when, row.text }) do part:SetShown(e ~= nil) end
     if not e then return end
     row.stripe:SetShown(el.odd == true)
-    row.mark:SetShown(e.seq > newSince)
+    row.mark:SetShown(isNew(e))
     classIcon(row.icon, e.class)
     row.when:SetText(Log.When(e, time()))
-    row.text:SetText(Log.Row(e, time(), panel.classOf))
+    row.text:SetText(Log.Row(Log.View(row.group, e), time(), panel.classOf))
 end
 
 local function selectPill()
@@ -385,7 +403,7 @@ end
 -- something is new, alternate rows striped.
 local function elements(rows)
     local els, newCount = {}, 0
-    for _, e in ipairs(rows) do if e.seq > newSince then newCount = newCount + 1 end end
+    for _, e in ipairs(rows) do if isNew(e) then newCount = newCount + 1 end end
     local odd = false
     for i, e in ipairs(rows) do
         if newCount > 0 and i == 1 then els[#els + 1] = { header = "New" } end
@@ -401,10 +419,15 @@ end
 local function byTime(rows)
     local new, old = {}, {}
     for _, e in ipairs(rows) do
-        if e.seq > newSince then new[#new + 1] = e else old[#old + 1] = e end
+        if isNew(e) then new[#new + 1] = e else old[#old + 1] = e end
     end
+    -- One scan dates what it noticed to the same second; their windows still
+    -- order them (#59): a departure the next scan confirmed ended before a
+    -- join it saw, as a recreated character's old self leaves the name free.
     local function later(a, b)
         if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+        local ha, hb = tonumber(a.hi) or a.at or 0, tonumber(b.hi) or b.at or 0
+        if ha ~= hb then return ha > hb end
         return a.seq > b.seq
     end
     table.sort(new, later)
@@ -469,9 +492,13 @@ function UI.Refresh()
     if rank and not hasRank(gs, rank) then UI.SetRank(nil); return end
     local now = time()
     local keep, below = anchor()
-    local rows = gs and Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
-                                         since = Log.ScopeSince(scope, now), rank = rank,
-                                         hideReports = hideReports() }, now) or {}
+    local rows, groups = {}, {}
+    if gs then
+        rows, groups = Log.Filter(gs, { category = category, query = query, canViewOfficer = canView(),
+                                        since = Log.ScopeSince(scope, now), rank = rank,
+                                        hideReports = hideReports() }, now)
+    end
+    panel.groups = groups
     rows = byTime(rows)
     panel.rows = rows
     panel.elements = elements(rows)
