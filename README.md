@@ -7,6 +7,8 @@ which profession, in the guild window.
 For **World of Warcraft: Forever**.
 
 [Download on CurseForge](https://www.curseforge.com/wow/addons/guildspy) ·
+[Wago](https://addons.wago.io/addons/ANz7YQ64) ·
+[GitHub releases](https://github.com/Spotnick2/GuildSpy/releases) ·
 [Report a bug](https://github.com/Spotnick2/GuildSpy/issues/new/choose) ·
 [What's new](https://github.com/Spotnick2/GuildSpy/blob/main/CHANGELOG.md)
 

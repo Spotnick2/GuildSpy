@@ -145,14 +145,21 @@ restart (the script says so); otherwise `/reload`.
 
 ## Releasing
 
-CurseForge's packager builds from the tag webhook, reading `.pkgmeta`; no API key lives here.
-`git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Every tag needs a player-facing
-`CHANGELOG.md` section (`## vX.Y.Z`). The same version is also a **GitHub release** (TimeIsMoney's
-model): run the package check on the tag (`gh workflow run package-check.yml --ref vX.Y.Z`),
-download its `guildspy-package` artifact (`GuildSpy-vX.Y.Z.zip`), then
-`gh release create vX.Y.Z <zip> --title "GuildSpy X.Y.Z" --notes-file <notes>`, the notes being
-that version's changelog section. `.github/workflows/package-check.yml` dry-runs the BigWigs
-packager on PRs and `main` and checks the zip's shape. Check the published zip by hand afterwards.
+The shared guide is `C:\Projects\WoW\References\Docs\RELEASING.md`; the workflow and
+`tests/release_files.sh` are its templates (#52). `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Every tag needs a
+player-facing `CHANGELOG.md` section (`## vX.Y.Z`). A tag publishes in three places:
+- **CurseForge** (project 1741939) builds its own file from the tag webhook, reading `.pkgmeta`; no
+  CurseForge key lives here.
+- **GitHub:** `.github/workflows/package-check.yml`'s `check` dry-runs the BigWigs packager (`-d`)
+  and checks the zip's shape on every PR, `main` push and tag. On a tag, `release` publishes that
+  zip (`GuildSpy-vX.Y.Z-forever.zip`) with `release.json`, the tag's changelog section as notes.
+- **Wago Addons** (project `ANz7YQ64`, `https://addons.wago.io/addons/ANz7YQ64`): `wago` uploads
+  the same zip to the project the packaged TOC's `X-Wago-ID` names, with the `WAGO_API_TOKEN`
+  secret. It fails while Wago doesn't list the TOC's patch for Forever.
+
+An `-alpha1`/`-beta1` tag is a pre-release everywhere. Publish a tag again with
+`gh workflow run package-check.yml --ref main -f tag=vX.Y.Z -f publish=wago|github|both`. Check
+CurseForge's zip against the GitHub one afterwards (guide §4).
 
 ## Conventions
 
