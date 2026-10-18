@@ -338,9 +338,16 @@ Log.FOLD_LIVE_SLACK = 60        -- an exact time: two clients receive one messag
 local FOLD_KIND = { REJOIN = "JOIN" }
 
 local function str0(v) return v == nil and "" or tostring(v) end
+-- Each field length-prefixed: a note may hold "|", so "a|b" -> "c" and
+-- "a" -> "b|c" must not meet (#61 review).
 local function foldKey(e)
-    if e.kind == "LEVEL" and e.guid then return "LEVEL|" .. e.guid .. "|" .. str0(e.to) end
-    return (FOLD_KIND[e.kind] or e.kind) .. "|" .. str0(e.guid) .. "|" .. str0(e.from) .. "|" .. str0(e.to)
+    local kind = FOLD_KIND[e.kind] or e.kind
+    -- A rejoin's from is the rank it once left, which a join doesn't have
+    -- (Roster.Apply): a membership change is who and to (#61 review).
+    local from = (kind ~= "JOIN" and kind ~= "LEVEL") and e.from or nil
+    local key = {}
+    for i, v in ipairs({ kind, str0(e.guid), str0(from), str0(e.to) }) do key[i] = #v .. ":" .. v end
+    return table.concat(key)
 end
 -- Its time window, or nil when it has none.
 local function window(e)

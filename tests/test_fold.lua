@@ -70,9 +70,15 @@ do  -- Before #36 a record has no window: it stays alone.
     eq(#rows(gs), 2, "two records with no window: two rows (no guessed slack)")
 end
 
-do  -- One account's join is another's rejoin.
-    local gs = { log = { rec(), rec({ kind = "REJOIN", here = false, origin = "Alt" }) } }
-    eq(#rows(gs), 1, "a join and a rejoin of one change: one row")
+do  -- One account's join is another's rejoin, which carries the rank once left (Roster.Apply).
+    local gs = { log = { rec(), rec({ kind = "REJOIN", from = "Member", leftAt = NOW - 40 * H, here = false, origin = "Alt" }) } }
+    eq(#rows(gs), 1, "a join and a rejoin (from the rank left) of one change: one row (#61 review)")
+end
+
+do  -- A note may hold "|": "a|b" -> "c" and "a" -> "b|c" are two edits (#61 review).
+    local gs = { log = { rec({ kind = "NOTE", from = "a|b", to = "c" }),
+                         rec({ kind = "NOTE", from = "a", to = "b|c", here = false, origin = "Alt" }) } }
+    eq(#rows(gs), 2, "two notes whose fields only differ by where a pipe is: two rows")
 end
 
 do  -- Exact times: two clients receive one message a little apart.

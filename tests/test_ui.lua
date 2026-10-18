@@ -146,6 +146,21 @@ local also = false
 for _, l in ipairs(GameTooltip._lines or {}) do if l:find("Also reported by Ann Lee", 1, true) then also = true end end
 check(also, "...its tooltip names the guildmate who reported it too")
 row._scripts.OnLeave(row)
+-- A folded record's markup stays text in the tooltip (#61 review).
+add({ kind = "NOTE", name = "Cy Fox", guid = "Player-1-00000004", from = "", to = "hi |cffff0000FAKE", lo = now - 600 })
+check(Log.Receive(GuildSpyDB, gs, { uid = "r:2", rev = 1, kind = "NOTE", guid = "Player-1-00000004", name = "Cy Fox",
+                                    from = "", to = "hi |cffff0000FAKE", lo = now - 900, hi = now - 60, at = now - 60,
+                                    obs = now - 60, origin = "Ann Lee" }, "guild", "Ann Lee", now), "(the note's report is kept)")
+UI.Refresh()
+local noteRow
+for _, e in ipairs(panel.rows) do if e.kind == "NOTE" and e.name == "Cy Fox" then noteRow = e end end
+draw(row, noteRow)
+row._scripts.OnEnter(row)
+local alsoLine
+for _, l in ipairs(GameTooltip._lines or {}) do if l:find("^Also") then alsoLine = l end end
+check(alsoLine and alsoLine:find("hi ||cffff0000FAKE", 1, true), "a folded report's note is escaped in the tooltip")
+check(alsoLine and not alsoLine:gsub("||", ""):find("|c", 1, true), "...no live colour code in it")
+row._scripts.OnLeave(row)
 -- One scan, one second: a character recreated under its name. The old one's
 -- departure (confirmed by this scan, its window ending before) and the new
 -- one's join get the same time; the join was written first.

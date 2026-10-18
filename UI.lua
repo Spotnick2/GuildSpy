@@ -136,7 +136,8 @@ local function buildRow(row)
             if m ~= entry then
                 local who = (Log.Source(m) or "Seen here"):gsub("^%u", string.lower)
                 GameTooltip:AddLine("Also " .. Log.Esc(who)
-                    .. ": " .. Log.Plain(Log.Text(m, now)) .. " (" .. Log.When(m, now) .. ")", 0.6, 0.8, 1, true)
+                    -- Plain gives "||" back as "|": escaped again for the tooltip (#61 review).
+                    .. ": " .. Log.Esc(Log.Plain(Log.Text(m, now))) .. " (" .. Log.When(m, now) .. ")", 0.6, 0.8, 1, true)
             end
         end
         local gs = current()
