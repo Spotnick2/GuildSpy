@@ -1,12 +1,17 @@
 # Changelog
 
-## Unreleased
+## v0.4.0
+
+Fewer duplicates now that guildmates share what they see, and two more places to get GuildSpy.
 
 - **One row per change.** When several guildmates (or several of your accounts) saw the same
   join, rank change or level-up, the log shows it once, and its tooltip says who else saw it. A
   late report of something you've already seen isn't marked new again. "Leveled from 6 to 10" and
   "reached level 10" are one row. Nothing is deleted.
 - **LibGlass r10.** The glass looks the same; the library is current.
+- **Also on Wago Addons and GitHub.** Each version is published on
+  [Wago Addons](https://addons.wago.io/addons/ANz7YQ64) (the Wago app installs and updates it) and
+  as a GitHub release that addon managers such as WowUp can read, as well as on CurseForge.
 
 ## v0.3.0
 

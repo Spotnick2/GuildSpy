@@ -6,6 +6,9 @@ local toc = io.open("GuildSpy.toc"):read("*a")
 check(toc:find("## Interface: 16001", 1, true), "interface 16001 (1.60.1; 11601 is the transposed-digit bug)")
 check(toc:find("## Version: @project-version@", 1, true), "packager version token kept")
 check(toc:find("## SavedVariables: GuildSpyDB", 1, true), "saved variables declared")
+-- The `wago` job uploads to the project the packaged TOC names (#52).
+check(toc:find("## X%-Curse%-Project%-ID: 1741939\r?\n"), "the CurseForge project ID")
+check(toc:find("## X%-Wago%-ID: ANz7YQ64\r?\n"), "the Wago project ID")
 
 -- The packager substitutes keywords in EVERY file it ships, Lua included (Priestly #83,
 -- Gnomesweeper #75): no shipped Lua file may hold one whole, not even in a comment.

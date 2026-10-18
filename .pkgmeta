@@ -31,6 +31,7 @@ ignore:
   - AGENTS.md
   - CLAUDE.md
   - README.md
+  - README.curseforge.md
   - CHANGELOG.md
   # Every pattern matches the WHOLE path from the package root, so the names
   # above never reach inside Libs/ (Libs/LibGlass-1.0/LICENSE must ship: MIT).
