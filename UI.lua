@@ -420,8 +420,13 @@ local function byTime(rows)
     for _, e in ipairs(rows) do
         if isNew(e) then new[#new + 1] = e else old[#old + 1] = e end
     end
+    -- One scan dates what it noticed to the same second; their windows still
+    -- order them (#59): a departure the next scan confirmed ended before a
+    -- join it saw, as a recreated character's old self leaves the name free.
     local function later(a, b)
         if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+        local ha, hb = tonumber(a.hi) or a.at or 0, tonumber(b.hi) or b.at or 0
+        if ha ~= hb then return ha > hb end
         return a.seq > b.seq
     end
     table.sort(new, later)

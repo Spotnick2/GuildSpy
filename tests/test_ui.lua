@@ -146,6 +146,17 @@ local also = false
 for _, l in ipairs(GameTooltip._lines or {}) do if l:find("Also reported by Ann Lee", 1, true) then also = true end end
 check(also, "...its tooltip names the guildmate who reported it too")
 row._scripts.OnLeave(row)
+-- One scan, one second: a character recreated under its name. The old one's
+-- departure (confirmed by this scan, its window ending before) and the new
+-- one's join get the same time; the join was written first.
+add({ kind = "JOIN", name = "Cy Fox", guid = "Player-1-00000006", at = now, lo = now - 8, hi = now })
+add({ kind = "LEAVE", name = "Cy Fox", guid = "Player-1-00000005", at = now, lo = now - 300, hi = now - 30 })
+UI.Refresh()
+local order = {}
+for _, e in ipairs(panel.rows) do
+    if e.guid == "Player-1-00000005" or e.guid == "Player-1-00000006" then order[#order + 1] = e.kind end
+end
+eq(table.concat(order, ","), "JOIN,LEAVE", "the same second: the window ending first is the older (#59)")
 -- (Cy Fox goes again: the counts below are without him.)
 for i = #gs.log, 1, -1 do if gs.log[i].name == "Cy Fox" then table.remove(gs.log, i) end end
 UI.Refresh()
