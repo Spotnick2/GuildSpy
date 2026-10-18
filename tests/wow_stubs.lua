@@ -3,7 +3,7 @@
 -- AN ALLOWLIST, like the siblings' (..\GlassRaidFrames\tests\wow_stubs.lua):
 --   * Globals are STRICT: reading one that isn't defined here is an error.
 --     Before stubbing a global, confirm it is in
---     C:\Projects\WoW\References\forever-api-1.60.1.70338.md and copy its signature;
+--     C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70338.md and copy its signature;
 --     defining something Forever lacks lets a broken call pass.
 --   * RegisterEvent throws on an event the client doesn't have (the list is
 --     tests/events-1.60.1.70338.txt, generated from the dump by

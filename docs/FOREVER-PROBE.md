@@ -1,7 +1,7 @@
 # Forever probe — guild API measurements
 
 What GuildSpy measures on the live client before phase 1 relies on it (`docs/PLAN.md`, phase 0).
-Addon-agnostic findings also go to `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
+Addon-agnostic findings also go to `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 
 **Status: measured on 1.60.1.70338 (2026-10-11).** Two runs, both by characters without officer
 rights, in a 151–153-member guild on connected realms (GUIDs from realms 4618 and 4620):

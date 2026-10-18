@@ -84,11 +84,11 @@ For GuildSpy, good things to hand Codex:
 - any plan that grows scope toward a management tool or a sync protocol (both out or deferred).
 
 **Always hand it `AGENTS.md` and `docs/PLAN.md` alongside the diff or plan**, plus
-`docs/FOREVER-PROBE.md` and `C:/Projects/WoW/References/PORTING-TBC-TO-FOREVER.md`. Those findings
+`docs/FOREVER-PROBE.md` and `C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md`. Those findings
 were measured on the live client; without them a cold reviewer argues from Classic-era or Retail
-behaviour that doesn't hold here. `C:/Projects/WoW/References/forever-api-1.60.1.70338.md` is the
+behaviour that doesn't hold here. `C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70338.md` is the
 full API surface when a question turns on whether something exists. GRM, the addon whose
-informational half this keeps, is at `C:/Projects/WoW/References/Guild_Roster_Manager_R1.99422/`.
+informational half this keeps, is at `C:/Projects/WoW/References/Addons/Guild/GuildRosterManager/`.
 
 ## Concurrency / safety
 

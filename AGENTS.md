@@ -14,9 +14,9 @@ Repository-specific additions:
 - Post every pull-request review and follow-up review on the PR, then link the posted review in the
   final response.
 - Match `MEASURED_ON_BUILD` in `Compat.lua` to
-  `C:\Projects\WoW\References\forever-api-<version>.<build>.md`. Runtime measurements live in
+  `C:\Projects\WoW\References\Forever\api\forever-api-<version>.<build>.md`. Runtime measurements live in
   `docs/FOREVER-PROBE.md`; addon-agnostic Forever findings live in the canonical
-  `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`.
+  `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 - For an adversarial second opinion on a plan or a risky diff, use `/codex-consult`
   (`.claude/skills/codex-consult`).
 
@@ -28,13 +28,13 @@ officer note edits, level-ups, name changes, who came back after a long absence.
 you're online, and as one **"while you were away" digest** at login.
 
 It keeps only the *informational* half of Guild Roster Manager
-(`C:\Projects\WoW\References\Guild_Roster_Manager_R1.99422`). **It is not a management tool: it
+(`C:\Projects\WoW\References\Addons\Guild\GuildRosterManager`). **It is not a management tool: it
 never writes to the roster** (no notes, ranks, invites, kicks, bans). The design, decided with the
 owner and reviewed adversarially (Codex, four rounds), is `docs/PLAN.md`. Read it before changing
 detection, attribution, the digest or the saved shape.
 
 Forever runs Vanilla content on Blizzard's **Mainline (Retail) codebase**: content assumptions are
-Vanilla, API assumptions are Retail. Read `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`
+Vanilla, API assumptions are Retail. Read `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`
 before touching an unfamiliar API.
 
 - **Namespace:** one global table `GuildSpy`; every file starts `local ADDON = ...` /
