@@ -13,10 +13,10 @@ local API = {}
 GuildSpy.API = API
 
 -- The client build the notes and stubs describe: the API dump the tests check
--- against (C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70338.md).
-GuildSpy.MEASURED_ON_BUILD = "1.60.1.70338"
+-- against (C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70450.md).
+GuildSpy.MEASURED_ON_BUILD = "1.60.1.70450"
 
--- The running client's "version.build", e.g. "1.60.1.70338".
+-- The running client's "version.build", e.g. "1.60.1.70450".
 function API.ClientBuild()
     local version, build = GetBuildInfo()
     if type(version) ~= "string" then return nil end

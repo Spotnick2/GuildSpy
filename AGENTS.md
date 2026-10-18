@@ -122,7 +122,7 @@ No build step. The Lua 5.1 toolchain is at `C:\Program Files (x86)\Lua\5.1\` (`l
 
 - `tests/wow_stubs.lua` is an **allowlist model of the Forever client**, driven through the global
   `WoW` table: globals are strict (reading an unstubbed one errors), and `RegisterEvent` throws on an
-  event missing from `tests/events-1.60.1.70338.txt` (checked against the dump by `test_toc`).
+  event missing from `tests/events-1.60.1.70450.txt` (checked against the dump by `test_toc`).
 - **The stubs must model Forever, not Classic or Retail.** Before stubbing a global, confirm it's in
   the API dump. The guild tuple shapes in the stub are **measured on 70338**
   (`docs/FOREVER-PROBE.md`); keep them matched to it on every new measurement or build.

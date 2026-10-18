@@ -58,7 +58,7 @@ check(WoW.chat[1] and WoW.chat[1]:find("70999", 1, true), "a different build is 
 
 -- The event list the stub validates against is checked in; it must be the dump's.
 do
-    local DUMP = os.getenv("GUILDSPY_API_DUMP") or "C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70338.md"
+    local DUMP = os.getenv("GUILDSPY_API_DUMP") or "C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70450.md"
     local f = io.open(DUMP, "r")
     if f then
         local inEvents, dumpEvents, n = false, {}, 0
