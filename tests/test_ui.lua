@@ -125,6 +125,31 @@ check(row.mark:IsShown(), "...marked new")
 draw(row, panel.rows[2])
 check(not row.mark:IsShown(), "an entry seen before isn't")
 
+-- #59: a guildmate's report of a join already listed and seen folds into its row.
+add({ kind = "JOIN", name = "Cy Fox", guid = "Player-1-00000004", lo = now - 600 })
+win:Hide()
+WoW.slash("/gspy log")
+local before = #panel.rows
+check(Log.Receive(GuildSpyDB, gs, { uid = "r:1", rev = 1, kind = "JOIN", guid = "Player-1-00000004", name = "Cy Fox",
+                                    lo = now - 900, hi = now - 60, at = now - 60, obs = now - 60, origin = "Ann Lee" },
+                  "guild", "Ann Lee", now), "(Ann Lee's report is kept)")
+UI.Refresh()
+eq(#panel.rows, before, "a report of a join already listed adds no row (#59)")
+local cy
+for _, e in ipairs(panel.rows) do if e.name == "Cy Fox" then cy = e end end
+check(cy and cy.trust == "self", "...the row is still mine")
+draw(row, cy)
+check(not row.mark:IsShown(), "...and not new again: the join was seen")
+check(not row.text:GetText():find("reported", 1, true), "...nor marked reported")
+row._scripts.OnEnter(row)
+local also = false
+for _, l in ipairs(GameTooltip._lines or {}) do if l:find("Also reported by Ann Lee", 1, true) then also = true end end
+check(also, "...its tooltip names the guildmate who reported it too")
+row._scripts.OnLeave(row)
+-- (Cy Fox goes again: the counts below are without him.)
+for i = #gs.log, 1, -1 do if gs.log[i].name == "Cy Fox" then table.remove(gs.log, i) end end
+UI.Refresh()
+
 -- A pill narrows the list; the search box too.
 panel.pills[2]._scripts.OnClick(panel.pills[2])          -- Members
 eq(#panel.rows, 2, "the Members pill: the join and the leave")
