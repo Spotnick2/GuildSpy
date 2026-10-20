@@ -5,6 +5,7 @@
 ## Version: @project-version@
 ## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
 ## SavedVariables: GuildSpyDB
+## OptionalDeps: GlassUI
 ## X-Curse-Project-ID: 1741939
 ## X-Wago-ID: ANz7YQ64
 ## AddonCompartmentFunc: GuildSpy_OnAddonCompartmentClick

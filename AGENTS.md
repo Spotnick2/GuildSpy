@@ -85,7 +85,10 @@ client finds it by name (the package check names it).
   window** (a Forever taint trap); only `hooksecurefunc`, `HookScript`, `SetChecked` on its tabs, and
   child frames of our own. `tests/test_ui.lua` fails on any field write. Its look (#19) uses the
   roster's own art and Blizzard templates checked in `wow-ui-source`; a template the client lacks
-  (`DoesTemplateExist`) falls back to `UIPanelButtonTemplate`.
+  (`DoesTemplateExist`) falls back to `UIPanelButtonTemplate`. With Glass UI installed, it hands
+  its two side tabs and `guildHost` to Glass UI's tenant API (`SkinTab`, `SkinPanel`; #63),
+  feature-detected at API 1; without it nothing changes. The panels sit at the host's level + 2,
+  over Glass UI's glass at + 1.
 - **`ProbeProfessions.lua`**: measuring only. It records whether the server serves guild
   professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
