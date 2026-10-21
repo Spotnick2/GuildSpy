@@ -39,6 +39,9 @@ UI.WINDOW_NAME = "GuildSpyLogWindow"
 -- isn't enough (in game the member list and chat showed through), so the host
 -- also takes the strata above the window's.
 UI.GUILD_LEVEL = 1300
+-- The panels, over the host. Not + 1: that's Glass UI's glass when its guild
+-- skin is on (#63), and frames at one level have no guaranteed draw order.
+UI.GUILD_PANEL_LEVEL = UI.GUILD_LEVEL + 2
 -- Fully opaque: at 0.97 bright chat text and member names still showed through.
 UI.GUILD_BG = { 0.04, 0.045, 0.055, 1 }
 UI.STRATA_ABOVE = { BACKGROUND = "LOW", LOW = "MEDIUM", MEDIUM = "HIGH", HIGH = "DIALOG",
@@ -52,6 +55,7 @@ local category, query, scope, rank = nil, "", "all", nil
 local newSince = 0             -- entries past this seq are marked new while the panel is open
 local visit                    -- the guild state whose rows the open panel shows
 local tipOwner                 -- the row or summary whose tooltip is up
+local glassed = false          -- Glass UI's guild skin is applied to guildHost (#63)
 
 local function canView() return API.CanViewOfficerNote() == true end
 local function current() return GuildSpy.Scanner.Current() end
@@ -543,6 +547,12 @@ function UI.SetRank(name)
     UI.Refresh()
 end
 
+-- A panel's marble, hidden while it sits on Glass UI's glass in the guild
+-- window (#63). The standalone window keeps it.
+local function marble(p)
+    if p then p.bg:SetShown(not (glassed and p:GetParent() == guildHost)) end
+end
+
 local function setHost(host, level)
     if not panel then build() end
     panel:SetParent(host)
@@ -550,6 +560,7 @@ local function setHost(host, level)
     panel:SetAllPoints(host)
     panel:SetFrameStrata(host:GetFrameStrata())
     panel:SetFrameLevel(level)
+    marble(panel)
     panel:Show()
 end
 
@@ -892,7 +903,7 @@ function UI.ShowInGuild()
     if ptab then ptab:SetChecked(false) end
     local was = guildHost:IsShown()
     guildHost:Show()
-    setHost(guildHost, UI.GUILD_LEVEL + 1)
+    setHost(guildHost, UI.GUILD_PANEL_LEVEL)
     tab:SetChecked(true)
     blizzardTabs(cf, false)
     if was then UI.Refresh() else opened() end
@@ -914,7 +925,8 @@ function UI.ShowProfessions()
     prof:ClearAllPoints()
     prof:SetAllPoints(guildHost)
     prof:SetFrameStrata(guildHost:GetFrameStrata())
-    prof:SetFrameLevel(UI.GUILD_LEVEL + 1)
+    prof:SetFrameLevel(UI.GUILD_PANEL_LEVEL)
+    marble(prof)
     prof:Show()
     tab:SetChecked(false)
     ptab:SetChecked(true)
@@ -959,6 +971,52 @@ function UI.PlaceTab()
     end
 end
 
+------------------------------------------------------------
+-- Glass UI's guild skin (#63)
+------------------------------------------------------------
+-- Optional. With Glass UI installed and its guild skin on, our side tabs and
+-- guildHost take its look through its tenant API (GlassUI docs/SUITE.md,
+-- "Tenants"): it styles the tabs, and puts its glass on the host at the host's
+-- level + 1. We paint the host's base in the window floor's colour and hide the
+-- panels' marble; the rows keep their stripes, as the roster's do. Glass UI
+-- never writes our frames, and we read nothing of it but these calls. Without
+-- it (or with a version that doesn't speak API 1), nothing changes.
+
+-- Glass UI on, or off again (it calls this under pcall).
+local function onSkin(on, look)
+    glassed = on == true
+    local c = glassed and type(look) == "table" and look.backing
+    if type(c) ~= "table" or type(c[1]) ~= "number" or type(c[2]) ~= "number" or type(c[3]) ~= "number" then
+        c = UI.GUILD_BG
+    end
+    guildHost.bg:SetColorTexture(c[1], c[2], c[3], 1)      -- opaque always: see GUILD_BG
+    marble(panel)
+    marble(prof)
+end
+
+-- One of Glass UI's tenant calls, if this Glass UI has it. Raw reads only, so
+-- nothing of Glass UI's runs here.
+local function suite(name)
+    local G = rawget(_G, "GlassUI")
+    local S = type(G) == "table" and rawget(G, "Suite")
+    if type(S) ~= "table" or rawget(S, "API") ~= 1 then return nil end
+    local fn = rawget(S, name)
+    return type(fn) == "function" and fn or nil
+end
+
+local function handOver()
+    local skinTab, skinPanel = suite("SkinTab"), suite("SkinPanel")
+    if skinTab then
+        pcall(skinTab, ADDON, tab)
+        pcall(skinTab, ADDON, ptab)
+    end
+    if skinPanel then pcall(skinPanel, ADDON, guildHost, onSkin) end
+end
+
+------------------------------------------------------------
+-- Attaching to the guild window
+------------------------------------------------------------
+
 function UI.AttachGuild()
     local cf = rawget(_G, "CommunitiesFrame")
     if not cf or tab then return end
@@ -999,6 +1057,7 @@ function UI.AttachGuild()
     guildHost:Hide()
     guildHost:SetScript("OnHide", closed)
     UI.guildHost = guildHost
+    handOver()                                     -- after the host's level: Glass UI's glass goes at + 1
 
     hooksecurefunc(cf, "UpdateCommunitiesTabs", UI.PlaceTab)
     -- A Blizzard tab clicked (even the one already current) or a mode change.

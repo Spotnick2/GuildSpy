@@ -6,6 +6,8 @@ local toc = io.open("GuildSpy.toc"):read("*a")
 check(toc:find("## Interface: 16001", 1, true), "interface 16001 (1.60.1; 11601 is the transposed-digit bug)")
 check(toc:find("## Version: @project-version@", 1, true), "packager version token kept")
 check(toc:find("## SavedVariables: GuildSpyDB", 1, true), "saved variables declared")
+-- Glass UI first when it's installed, so its tenant API is there when the guild window attaches (#63).
+check(toc:find("## OptionalDeps: GlassUI\r?\n"), "Glass UI an optional dependency")
 -- The `wago` job uploads to the project the packaged TOC names (#52).
 check(toc:find("## X%-Curse%-Project%-ID: 1741939\r?\n"), "the CurseForge project ID")
 check(toc:find("## X%-Wago%-ID: ANz7YQ64\r?\n"), "the Wago project ID")
