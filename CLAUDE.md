@@ -45,3 +45,22 @@ Hand these to any external review, and don't let a blind reviewer override them:
 
 Adversarial critique only as the Codex fallback, and post-phase diff review. Implementation use
 needs the owner's explicit per-turn approval.
+
+## Consulting Codex
+
+The shared `codex-consult` skill (user level) has the invocation and the gotchas. For this repo:
+
+For GuildSpy, good things to hand Codex:
+- the roster diff and its gates (`Roster.lua`, `Scanner.lua`): completeness, two-scan departures,
+  rank-structure changes, officer-note visibility across alts;
+- attribution (`Patterns.lua`, `EventLog.lua`): matching system messages and the guild event log to
+  diff events without inventing an actor;
+- the digest's boundary and timing, and any change to the `GuildSpyDB` shape once released;
+- any plan that grows scope toward a management tool or a sync protocol (both out or deferred).
+
+**Always hand it `AGENTS.md` and `docs/PLAN.md` alongside the diff or plan**, plus
+`docs/FOREVER-PROBE.md` and `C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md`. Those findings
+were measured on the live client; without them a cold reviewer argues from Classic-era or Retail
+behaviour that doesn't hold here. `C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md` (take the highest build) is the
+full API surface when a question turns on whether something exists. GRM, the addon whose
+informational half this keeps, is at `C:/Projects/WoW/References/Addons/Guild/GuildRosterManager/`.
