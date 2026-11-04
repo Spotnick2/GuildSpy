@@ -51,7 +51,9 @@ then levels). Click **[open log]** for the rest. Switching characters or `/reloa
 ## The log window
 
 Open it from the **GuildSpy tab in the guild window** (J), with `/gspy log`, the minimap button, or
-a key binding. It's styled like the guild roster.
+a key binding. It's styled like the guild roster. With **Glass UI** installed and its guild skin on,
+GuildSpy's tabs and its panel in the guild window take Glass UI's look; the standalone window keeps
+its own glass.
 
 ![The log window on its own, from /gspy log or the minimap button](https://raw.githubusercontent.com/Spotnick2/GuildSpy/main/docs/screenshots/log-standalone.png)
 
@@ -151,10 +153,10 @@ guilds get found**: [open an issue](https://github.com/Spotnick2/GuildSpy/issues
 error (turn them on with `/console scriptErrors 1`, or use BugSack) and the output of
 `/gspy status` help the most. Ideas are welcome too.
 
-**Sharing is new in 0.2.0** and gets its real test on the Forever beta, between players. What
-arrives from guildmates (or doesn't), and anything odd in "reported by" lines, is especially worth
-a report. So is anything odd in the **Professions tab** (new in 0.3.0): a profession without its
-icon, or a member missing or under the wrong profession.
+Especially worth a report: what arrives from guildmates (or doesn't) and anything odd in
+"reported by" lines; a profession without its icon, or a member missing or under the wrong
+profession in the **Professions tab**; and, with Glass UI's guild skin on, a GuildSpy tab or panel
+that doesn't match it.
 
 ## Credits
 
@@ -164,7 +166,8 @@ icon, or a member missing or under the wrong profession.
 - **Libraries**, embedded under their own licences: LibStub, CallbackHandler-1.0,
   LibDataBroker-1.1, LibDBIcon-1.0 and ChatThrottleLib. Their authors and licences are listed in
   [LICENSE](https://github.com/Spotnick2/GuildSpy/blob/main/LICENSE).
-- **The glass** is LibGlass, the material shared by the Glass addons.
+- **The glass** is LibGlass, the material shared by the Glass addons. With Glass UI installed, the
+  guild tabs follow its guild skin (optional, never required).
 - **Account sync** is LibAccountSync, shared with AltStable.
 
 ## Development
