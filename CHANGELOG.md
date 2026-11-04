@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.5.0
+## v1.0.0
 
 GuildSpy's guild tabs now match Glass UI's guild skin.
 
