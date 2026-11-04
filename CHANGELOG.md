@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.5.0
+
+GuildSpy's guild tabs now match Glass UI's guild skin.
+
+- **Glass UI's guild skin.** When Glass UI is installed and its guild skin is on, GuildSpy's tabs
+  and its panel in the guild window take Glass UI's look. Without Glass UI, or with an older
+  version, nothing changes. The standalone log window keeps its own glass.
+- **LibGlass r11.** The glass looks the same; the library is current.
+- **Client build 1.60.1.70532.** Checked against the current Forever client.
+
 ## v0.4.0
 
 Fewer duplicates now that guildmates share what they see, and two more places to get GuildSpy.
