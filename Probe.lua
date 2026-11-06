@@ -118,6 +118,13 @@ local function scalarsOf(t)
     return out
 end
 
+-- An event payload as saved data: a secret can't be stored or read back, so
+-- the timeline records that it was one (#79).
+local function plain(v)
+    if API.IsSecret(v) then return "(secret)" end
+    return v
+end
+
 local function log(entry)
     local db = GuildSpyDB
     if not db then return end
@@ -301,7 +308,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         return
     end
     if event == "CHAT_MSG_SYSTEM" then
-        if GuildSpyDB and GuildSpyDB.probeWatch then log({ e = event, msg = (...) }) end
+        if GuildSpyDB and GuildSpyDB.probeWatch then log({ e = event, msg = plain((...)) }) end
         return
     end
     if event == "GUILD_EVENT_LOG_UPDATE" then
@@ -310,7 +317,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end
     local timed = Probe.loginAt and (GetTime() - Probe.loginAt) <= TIMELINE_SECONDS
     if not timed then return end
-    local entry = { e = event, arg = (...) }
+    local entry = { e = event, arg = plain((...)) }
     if event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         local c = snapshotCounts()
         for k, v in pairs(c) do entry[k] = v end
