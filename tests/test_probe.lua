@@ -68,6 +68,26 @@ eq(last.e, "GUILD_ROSTER_UPDATE", "roster update logged")
 eq(last.total, 7, "...with the total")
 eq(last.withGuid, 7, "...and how many rows had a GUID")
 eq(last.dt, 5, "...and when, from login")
+
+-- A secret payload (#79) is saved as a marker, never as the value: a
+-- newproxy whose every touch throws, reported secret by issecretvalue.
+local secret = newproxy(true)
+do
+    local mt = getmetatable(secret)
+    local function boom() error("touched a secret value", 2) end
+    for _, k in ipairs({ "__index", "__eq", "__lt", "__le", "__concat", "__len", "__tostring", "__call" }) do mt[k] = boom end
+end
+local function withSecret(fn)
+    local real = issecretvalue
+    rawset(_G, "issecretvalue", function(v) return rawequal(v, secret) end)
+    local ok, err = pcall(fn)
+    rawset(_G, "issecretvalue", real)
+    check(ok, "a secret payload doesn't throw: " .. tostring(err))
+end
+withSecret(function() WoW.fire("GUILD_MOTD", secret) end)
+last = GuildSpyDB.probeLog[#GuildSpyDB.probeLog]
+eq(last.e, "GUILD_MOTD", "a secret MOTD is on the login timeline")
+eq(last.arg, "(secret)", "...as a marker, not the secret")
 WoW.now = 1000
 local n = #GuildSpyDB.probeLog
 WoW.fire("GUILD_ROSTER_UPDATE", true)
@@ -79,6 +99,8 @@ eq(#GuildSpyDB.probeLog, n, "system messages ignored by default")
 WoW.slash("/gspy probe watch")
 WoW.fire("CHAT_MSG_SYSTEM", "X has joined the guild.")
 eq(GuildSpyDB.probeLog[#GuildSpyDB.probeLog].msg, "X has joined the guild.", "recorded while watching")
+withSecret(function() WoW.fire("CHAT_MSG_SYSTEM", secret) end)
+eq(GuildSpyDB.probeLog[#GuildSpyDB.probeLog].msg, "(secret)", "a secret system message is saved as a marker")
 
 -- No guild, and a guild still loading: no error, honest zeros.
 loadAddon()

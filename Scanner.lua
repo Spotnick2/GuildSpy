@@ -188,6 +188,9 @@ local function parser()
 end
 
 function Scanner.OnSystemMessage(msg)
+    -- A secret line can't be read (#79). Skipping it only costs the actor:
+    -- the roster diff still records the change itself.
+    if API.IsSecret(msg) then return end
     local p = parser()
     local m = p and p(msg)
     if not m then return end
@@ -492,6 +495,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         -- every change. "" is what it carries before it has loaded: unknown, not
         -- cleared (a guild clearing its MOTD on purpose is the rarer case).
         local text = ...
+        if API.IsSecret(text) then text = nil end   -- unreadable: unknown (#79)
         S.motd = (type(text) == "string" and text ~= "") and text or nil
         S.motdKey = API.GuildKey()
     end

@@ -350,4 +350,26 @@ check(chatHas("Parse Partout-Forever"), "status names the guild")
 WoW.slash("/gspy rebaseline")
 eq(GuildSpyDB.guilds["Parse Partout-Forever"].observedAt, nil, "rebaseline forgets the snapshot")
 
+-- Secret event payloads (#79): skipped, never read. A real secret string
+-- answers type() == "string" (the reported crash got past exactly that
+-- guard), so this proxy does too; any other touch throws.
+do
+    local secret = newproxy(true)
+    local mt = getmetatable(secret)
+    local function boom() error("touched a secret value", 2) end
+    for _, k in ipairs({ "__index", "__eq", "__lt", "__le", "__concat", "__len", "__tostring", "__call" }) do mt[k] = boom end
+    local realType, realIsSecret = type, issecretvalue
+    rawset(_G, "type", function(v) if rawequal(v, secret) then return "string" end return realType(v) end)
+    rawset(_G, "issecretvalue", function(v) return rawequal(v, secret) end)
+    local ok, err = pcall(function()
+        WoW.fire("CHAT_MSG_SYSTEM", secret)
+        WoW.fire("GUILD_MOTD", secret)
+        WoW.fire("CHAT_MSG_ADDON", secret, secret, secret, secret, secret, 0, 0, "", 0)
+        rosterUpdate()   -- a stored secret MOTD would be read here
+    end)
+    rawset(_G, "type", realType)
+    rawset(_G, "issecretvalue", realIsSecret)
+    check(ok, "secret CHAT_MSG_SYSTEM, GUILD_MOTD and CHAT_MSG_ADDON payloads don't throw: " .. tostring(err))
+end
+
 done("test_scanner")

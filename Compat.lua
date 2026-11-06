@@ -138,6 +138,13 @@ function API.RegisterEvent(frame, event)
     return ok and res ~= false
 end
 
+-- Whether an event payload is a secret value (#79). A secret string still
+-- answers type() == "string", but indexing, comparing or truth-testing it
+-- throws, so test this before any other touch.
+function API.IsSecret(v)
+    return issecretvalue ~= nil and issecretvalue(v) == true
+end
+
 local function isGuid(v) return type(v) == "string" and v:find("^Player%-") ~= nil end
 
 -- The guild's key: "<guild name>-<guild realm>". The realm is GetGuildInfo's

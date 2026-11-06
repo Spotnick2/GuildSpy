@@ -502,6 +502,9 @@ frame:RegisterEvent("CHAT_MSG_ADDON")
 frame:SetScript("OnEvent", function(_, event, prefix, text, channel, sender)
     if event == "PLAYER_LOGIN" then
         start()
+    elseif GuildSpy.API.IsSecret(prefix) or GuildSpy.API.IsSecret(text)
+        or GuildSpy.API.IsSecret(channel) or GuildSpy.API.IsSecret(sender) then
+        return   -- unreadable (#79)
     elseif prefix == GSync.PREFIX and channel == "GUILD" and core and GSync.Enabled() then
         core:OnMessage(text, sender)
     end
