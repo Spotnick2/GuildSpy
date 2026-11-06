@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.1
+
+A fix for a Lua error.
+
+- **No more error on some guild messages.** The game sometimes hides a system message's text from
+  addons. GuildSpy used to throw a Lua error when that happened (`Patterns.lua:79 ... a secret
+  string value`). It now leaves that message out. The change itself is still logged, and the
+  guild's event log can still say who made it. A hidden message of the day, or a hidden message
+  from a guildmate's GuildSpy, is skipped the same way.
+
 ## v1.0.0
 
 GuildSpy's guild tabs now match Glass UI's guild skin.
