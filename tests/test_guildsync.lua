@@ -497,6 +497,36 @@ do
     check(not O.Set("reports", "sometimes"), "a value no page offers is refused")
     O.Set("reports", "chat")
     eq(GuildSpyDB.settings.reports, nil, "back to the default: nothing saved")
+
+    -- A finer report of a level-up already reported replaces it in the log:
+    -- not news in chat; in one batch, the change is shown once (#84 Codex review).
+    local function lvl(uid, guid, lo) return { uid = uid, rev = 1, kind = "LEVEL", guid = guid, name = "Member " .. uid,
+                                               from = 30, to = 31, at = now - 600, lo = lo, hi = now - 600 } end
+    local function count(guid)
+        local n = 0
+        for _, e in ipairs(gs.log) do if e.guid == guid then n = n + 1 end end
+        return n
+    end
+    local function reportLines()
+        local n = 0
+        for _, l in ipairs(WoW.chat) do if l:find("reported by Bo Kay", 1, true) then n = n + 1 end end
+        return n
+    end
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", lvl("bo50:1", "Player-1-00000777", now - 3600)))
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 1, "a coarse report of a level-up: news")
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", lvl("bo51:1", "Player-1-00000777", now - 700)))
+    eq(count("Player-1-00000777"), 1, "...a finer one, later, replaces it in the log")
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 0, "...and isn't news in chat")
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", lvl("bo52:1", "Player-1-00000778", now - 3600)))
+    hear(GSync.EntryMessage("x:1", lvl("bo53:1", "Player-1-00000778", now - 700)))
+    eq(count("Player-1-00000778"), 1, "both in one batch: the finer one stays")
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 1, "...and the change is news, once")
     check(O.Set("reportRank", 1), "accept from Officer and up")
     eq(GSync.MinRank(), 1, "...saved")
     eq(GuildSpyDB.settings.reportRanks["Parse Partout-Forever"], 1, "...for this guild only (#43 review)")

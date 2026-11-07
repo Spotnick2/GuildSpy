@@ -912,7 +912,9 @@ end
 
 -- Receiving one entry (#36, SYNC.md §2). via "acct" (proven by LibAccountSync)
 -- or "guild" (sender = the GUILD transport name). Returns the entry and what
--- happened ("added", "updated", "superseded"), or nil and why not.
+-- happened ("added", "updated", "superseded"), or nil and why not; for a new
+-- entry, also the records it made redundant (Log.Sweep's set), which left
+-- the log: a report's chat line needs to know the change was there (#84 review).
 function Log.Receive(db, gs, inc, via, sender, now, batch)
     if type(inc) ~= "table" then return nil, "not an entry" end
     local ns
@@ -983,6 +985,7 @@ function Log.Receive(db, gs, inc, via, sender, now, batch)
     e.seq, db.nextSeq = db.nextSeq, db.nextSeq + 1
     e.chg = Log.NextChg(gs)
     gs.log[#gs.log + 1] = e
+    local dropped
     if batch then
         local list = batch.byUid[e.uid] or {}
         if twin then
@@ -1000,16 +1003,16 @@ function Log.Receive(db, gs, inc, via, sender, now, batch)
         end
         group[#group + 1] = e
         batch.byKey[Log.DupKey(e)] = group
-        Log.Sweep(gs, group, batch)
+        dropped = Log.Sweep(gs, group, batch)
     else
         if twin then
             for i, x in ipairs(group) do if x == twin then table.remove(group, i); break end end
         end
         group[#group + 1] = e
-        Log.Sweep(gs, group)
+        dropped = Log.Sweep(gs, group)
         Log.Prune(gs, now)
     end
-    return e, twin and "superseded" or "added"
+    return e, twin and "superseded" or "added", dropped
 end
 
 -- Each quota keeps its newest in retention order (#36): my accounts' 1500 /

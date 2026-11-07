@@ -111,7 +111,8 @@ Core.__index = Core
 -- o: db, gs(key), key(), me(), now(), send(text, ok) (queued; ok() is asked
 -- again just before it leaves), after(seconds, fn), random(lo, hi),
 -- accepts(name) (a guildmate whose reports I take: roster, rank, setting),
--- onReceived(added, key), onChanged(), onStatus() (a guildmate heard) (all optional).
+-- onReceived(added, key, dropped) (dropped: the records the new one made
+-- redundant, Log.Receive), onChanged(), onStatus() (a guildmate heard) (all optional).
 function GSync.NewCore(o)
     return setmetatable({ o = o, myQ = {}, answers = {}, answered = {}, heard = {},
                           ask = {}, admitted = {}, said = nil, lastQ = nil, lastAnswer = nil, deferred = nil }, Core)
@@ -286,10 +287,10 @@ function Core:onE(key, sender, f, lines)
     e.obs = (e.approx == false and e.at) or e.hi or e.at
     local gs = self.o.gs(key)
     if not gs then return end
-    local got, why = Log.Receive(self.o.db, gs, e, "guild", sender, self.o.now())
+    local got, why, dropped = Log.Receive(self.o.db, gs, e, "guild", sender, self.o.now())
     if not got then return end
     self.admitted[sender] = (self.admitted[sender] or 0) + 1
-    if why ~= "updated" and self.o.onReceived then self.o.onReceived({ got }, key) end
+    if why ~= "updated" and self.o.onReceived then self.o.onReceived({ got }, key, dropped) end
     if self.o.onChanged then self.o.onChanged() end
 end
 
@@ -311,7 +312,7 @@ GSync.REPORT_MODES = { chat = true, log = true, never = true }
 local core, registered
 local queue, inflight, pumping, token = {}, false, false, 0
 GSync.STUCK = 60                     -- a message ChatThrottleLib never reported: let the queue move on
-local pending = nil
+local pending, prior = nil, nil       -- this batch's reports; which replaced an earlier record
 
 local function settings() return GuildSpyDB and GuildSpyDB.settings or {} end
 function GSync.Enabled() return settings().shareGuild ~= false end
@@ -386,7 +387,9 @@ end
 -- The reports in `list` that are news: one per change, and none of a change
 -- the log already had before this batch (mine, or an earlier report). Folded
 -- as the window folds them (Log.Groups, #59); the log keeps every one (#83).
-function GSync.News(gs, list, canView)
+-- `prior[e]`: e replaced a record from before the batch, which has left the
+-- log (a finer level-up report, Log.Sweep: #84 Codex review).
+function GSync.News(gs, list, canView, prior)
     local batch = {}
     for _, e in ipairs(list) do batch[e] = true end
     local _, of = Log.Groups(gs, function(e) return Log.Visible(e, canView) end)
@@ -397,7 +400,7 @@ function GSync.News(gs, list, canView)
             done[g] = true
             local known = false
             for _, x in ipairs(g.members) do
-                if not batch[x] then known = true; break end
+                if not batch[x] or (prior and prior[x]) then known = true; break end
             end
             if not known then out[#out + 1] = e end
         end
@@ -410,12 +413,12 @@ end
 -- to turn them off.
 local function flush()
     if not pending then return end
-    local list = pending
-    pending = nil
+    local list, before = pending, prior
+    pending, prior = nil, nil
     if GSync.ReportsMode() ~= "chat" then return end
     local gs = GuildSpy.Scanner.Current()
     if not gs then return end
-    local shown = GSync.News(gs, list, GuildSpy.API.CanViewOfficerNote() == true)
+    local shown = GSync.News(gs, list, GuildSpy.API.CanViewOfficerNote() == true, before)
     if #shown == 0 then return end
     local now = time()
     for i = 1, math.min(GSync.MAX_LINES, #shown) do
@@ -443,9 +446,18 @@ local function wait()
         flush()
     end)
 end
-local function received(added)
-    pending = pending or {}
-    for _, e in ipairs(added) do pending[#pending + 1] = e end
+local function received(added, _, dropped)
+    pending, prior = pending or {}, prior or {}
+    local inBatch = {}
+    for _, e in ipairs(pending) do inBatch[e] = true end
+    for _, e in ipairs(added) do
+        pending[#pending + 1] = e
+        -- What it made redundant: from before this batch (known), or an earlier
+        -- report of this batch (known if that one was).
+        for x in pairs(dropped or {}) do
+            if x ~= e and (not inBatch[x] or prior[x]) then prior[e] = true end
+        end
+    end
     local waiting = quietUntil ~= nil
     quietUntil = time() + GSync.QUIET
     if not waiting then wait() end
