@@ -287,6 +287,9 @@ function Core:onE(key, sender, f, lines)
     e.obs = (e.approx == false and e.at) or e.hi or e.at
     local gs = self.o.gs(key)
     if not gs then return end
+    -- Its shape first, as Log.Receive checks it: the probe reads its fields,
+    -- and the wire can carry a number or boolean anywhere (#84 Codex review).
+    if not Log.Valid(e, "guild", self.o.now()) then return end
     -- What the log has of this change, before receiving it can sweep or prune
     -- any of that away (#84 Codex reviews). A probe: Receive keeps its own copy.
     local probe = { ns = "g:" .. sender, trust = "guild", seq = math.huge }

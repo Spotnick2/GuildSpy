@@ -418,6 +418,18 @@ do  -- In chat, only what's news: not a change Ann saw herself, nor one reported
     for i = batch + 1, #ann.added do later[#later + 1] = ann.added[i] end
     check(#later > 0, "Di's join report reaches Ann too")
     eq(#GSync.News(ann.gs, later, true), 0, "...not news: an earlier report already had it")
+    -- A malformed entry (the wire carries a number or boolean in any field)
+    -- is refused before anything reads it (#84 Codex review).
+    local before = reports(ann)
+    for i, bad in ipairs({ { kind = true }, { kind = 1 }, { guid = false }, { to = 5 }, { lo = "x" } }) do
+        local e = { uid = "bo9" .. i .. ":1", rev = 1, kind = "NOTE", guid = "Player-1-00000DDD", name = "Odd",
+                    from = "", to = "x", at = clock - 60, lo = clock - 120, hi = clock - 60 }
+        for k, v in pairs(bad) do e[k] = v end
+        local text = Wire.Message("E", { "q:9" }, { Wire.Entry(e, GSync.FIELDS, GSync.ALIAS) })
+        local ok, err = pcall(ann.core.OnMessage, ann.core, text, "Bo Kay")
+        check(ok, "malformed entry " .. i .. ": no error (" .. tostring(err) .. ")")
+    end
+    eq(reports(ann), before, "...and none is kept")
 end
 
 ------------------------------------------------------------
