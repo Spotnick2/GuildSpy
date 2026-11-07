@@ -111,8 +111,8 @@ Core.__index = Core
 -- o: db, gs(key), key(), me(), now(), send(text, ok) (queued; ok() is asked
 -- again just before it leaves), after(seconds, fn), random(lo, hi),
 -- accepts(name) (a guildmate whose reports I take: roster, rank, setting),
--- onReceived(added, key, dropped) (dropped: the records the new one made
--- redundant, Log.Receive), onChanged(), onStatus() (a guildmate heard) (all optional).
+-- onReceived(added, key, matches) (matches: what the log had of its change
+-- just before, Log.FoldsWith), onChanged(), onStatus() (a guildmate heard) (all optional).
 function GSync.NewCore(o)
     return setmetatable({ o = o, myQ = {}, answers = {}, answered = {}, heard = {},
                           ask = {}, admitted = {}, said = nil, lastQ = nil, lastAnswer = nil, deferred = nil }, Core)
@@ -287,10 +287,15 @@ function Core:onE(key, sender, f, lines)
     e.obs = (e.approx == false and e.at) or e.hi or e.at
     local gs = self.o.gs(key)
     if not gs then return end
-    local got, why, dropped = Log.Receive(self.o.db, gs, e, "guild", sender, self.o.now())
+    -- What the log has of this change, before receiving it can sweep or prune
+    -- any of that away (#84 Codex reviews). A probe: Receive keeps its own copy.
+    local probe = { ns = "g:" .. sender, trust = "guild", seq = math.huge }
+    for k, v in pairs(e) do probe[k] = v end
+    local matches = Log.FoldsWith(gs, probe)
+    local got, why = Log.Receive(self.o.db, gs, e, "guild", sender, self.o.now())
     if not got then return end
     self.admitted[sender] = (self.admitted[sender] or 0) + 1
-    if why ~= "updated" and self.o.onReceived then self.o.onReceived({ got }, key, dropped) end
+    if why ~= "updated" and self.o.onReceived then self.o.onReceived({ got }, key, matches) end
     if self.o.onChanged then self.o.onChanged() end
 end
 
@@ -312,7 +317,7 @@ GSync.REPORT_MODES = { chat = true, log = true, never = true }
 local core, registered
 local queue, inflight, pumping, token = {}, false, false, 0
 GSync.STUCK = 60                     -- a message ChatThrottleLib never reported: let the queue move on
-local pending, prior = nil, nil       -- this batch's reports; which replaced an earlier record
+local pending, prior = nil, nil       -- this batch's reports; which were known when received
 
 local function settings() return GuildSpyDB and GuildSpyDB.settings or {} end
 function GSync.Enabled() return settings().shareGuild ~= false end
@@ -387,8 +392,8 @@ end
 -- The reports in `list` that are news: one per change, and none of a change
 -- the log already had before this batch (mine, or an earlier report). Folded
 -- as the window folds them (Log.Groups, #59); the log keeps every one (#83).
--- `prior[e]`: e replaced a record from before the batch, which has left the
--- log (a finer level-up report, Log.Sweep: #84 Codex review).
+-- `prior[e]`: when e was received, the log had its change from before the
+-- batch, which may since have left the log (a sweep, a prune: #84 Codex reviews).
 function GSync.News(gs, list, canView, prior)
     local batch = {}
     for _, e in ipairs(list) do batch[e] = true end
@@ -446,16 +451,16 @@ local function wait()
         flush()
     end)
 end
-local function received(added, _, dropped)
+local function received(added, _, matches)
     pending, prior = pending or {}, prior or {}
     local inBatch = {}
     for _, e in ipairs(pending) do inBatch[e] = true end
     for _, e in ipairs(added) do
         pending[#pending + 1] = e
-        -- What it made redundant: from before this batch (known), or an earlier
-        -- report of this batch (known if that one was).
-        for x in pairs(dropped or {}) do
-            if x ~= e and (not inBatch[x] or prior[x]) then prior[e] = true end
+        -- What the log had of its change: from before this batch (known), or
+        -- an earlier report of this batch (known if that one was).
+        for _, x in ipairs(matches or {}) do
+            if not inBatch[x] or prior[x] then prior[e] = true end
         end
     end
     local waiting = quietUntil ~= nil

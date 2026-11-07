@@ -527,6 +527,28 @@ do
     eq(count("Player-1-00000778"), 1, "both in one batch: the finer one stays")
     WoW.advance(GSync.QUIET + 1)
     eq(reportLines(), 1, "...and the change is news, once")
+
+    -- The guild quota full: a later report of a change evicts the earlier
+    -- report of it (the oldest kept). Still not news (#84 Codex follow-up).
+    local function note(uid, lo, hi) return { uid = uid, rev = 1, kind = "NOTE", guid = "Player-1-00000779", name = "Noted",
+                                              from = "", to = "Gros Heal", at = hi, lo = lo, hi = hi } end
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", note("bo60:1", now - 7200, now - 3000)))
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 1, "an old report of a note change: news")
+    local quota, kept = Log.GUILD_MAX_ENTRIES, 0
+    for _, e in ipairs(gs.log) do if e.trust == "guild" then kept = kept + 1 end end
+    Log.GUILD_MAX_ENTRIES = kept                  -- full
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", note("bo61:1", now - 3500, now - 500)))
+    local old, new = false, false
+    for _, e in ipairs(gs.log) do
+        if e.uid == "bo60:1" then old = true elseif e.uid == "bo61:1" then new = true end
+    end
+    check(new and not old, "...the quota full: a later report of it is kept, the old one evicted")
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 0, "...and it isn't news in chat")
+    Log.GUILD_MAX_ENTRIES = quota
     check(O.Set("reportRank", 1), "accept from Officer and up")
     eq(GSync.MinRank(), 1, "...saved")
     eq(GuildSpyDB.settings.reportRanks["Parse Partout-Forever"], 1, "...for this guild only (#43 review)")
