@@ -7,8 +7,8 @@ Quieter reports from guildmates.
 - **No more old news in chat.** When a guildmate with GuildSpy logged in, chat could fill with
   their reports of joins, note changes and promotions from hours or days before, even ones you
   had seen yourself. Chat now shows a guildmate's report only when it's news to you, once per
-  change, with when it happened ("Yesterday, reported by ..."). The log still keeps every report,
-  under Reports.
+  change, with when it happened ("Yesterday, reported by ..."). A report chat leaves out is still
+  in the log, under Reports, one row per change as before.
 
 ## v1.0.1
 
