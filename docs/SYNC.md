@@ -253,6 +253,10 @@ other accounts (shown "Seen on this account") but are never guild-exported.
 
 - No digest entry for imports. Guild reports may print chat lines per the owner's setting (§10),
   batched on the same quiet-period boundary as the catch-up line, at most 5 lines per batch.
+  **Only news (#83):** a report of a change the log already had before the batch (one of my own
+  records, or an earlier report, folded as the window folds them, #59) is kept but not printed,
+  and a change several guildmates report prints once. Each line carries the report's time
+  ("Yesterday, reported by …"): an answer to an ask is often hours after the change.
 - One catch-up line, batched: counts of newly admitted, display-eligible observations (after
   retention; excluding revision-only updates and officer notes this character can't read), after
   a 10 s quiet period, at most 60 s after the first: "GuildSpy: 12 observations from your other

@@ -391,6 +391,35 @@ do  -- Limits: one ask per 2 minutes; an entry too long for one message isn't se
         "short names on the wire read back to the allowed fields")
 end
 
+do  -- In chat, only what's news: not a change Ann saw herself, nor one reported before; once per change (#83).
+    reset()
+    local ann, bo, cy, di = client("Ann Lee"), client("Bo Kay"), client("Cy Dee"), client("Di Fox")
+    local NOTE = { kind = "NOTE", guid = "Player-1-00000AAA", name = "Kraamer Twotoes", from = "", to = "Gros Heal" }
+    local JOIN = { kind = "JOIN", guid = "Player-1-00000BBB", name = "The Woundedman", to = "Initiate" }
+    local RANK = { kind = "PROMOTE", guid = "Player-1-00000CCC", name = "Sang Rawr", from = "Initiate", to = "Member" }
+    observe(ann, NOTE)
+    observe(bo, NOTE); observe(cy, NOTE)        -- all three saw the note change
+    observe(bo, JOIN).from = nil                -- Ann was away for this one (a join has no from)
+    observe(bo, RANK); observe(cy, RANK)        -- and this one, which two guildmates saw
+    ann.core:Hello()
+    advance(GSync.JITTER_MAX + 5)
+    eq(reports(ann), 5, "Ann keeps every report, the note change she saw too")
+    local news = GSync.News(ann.gs, ann.added, true)
+    local kinds = {}
+    for _, e in ipairs(news) do kinds[e.kind] = (kinds[e.kind] or 0) + 1 end
+    check(#news == 2 and kinds.JOIN == 1 and kinds.PROMOTE == 1,
+        "news: the join and the promotion, once each; not the note change Ann saw herself")
+    observe(di, JOIN).from = nil
+    local batch = #ann.added
+    cy.core:Hello()                              -- Cy asks: Ann hears the answers, Di's too
+    clock = clock + GSync.ANSWER_GAP
+    advance(GSync.JITTER_MAX + 5)
+    local later = {}
+    for i = batch + 1, #ann.added do later[#later + 1] = ann.added[i] end
+    check(#later > 0, "Di's join report reaches Ann too")
+    eq(#GSync.News(ann.gs, later, true), 0, "...not news: an earlier report already had it")
+end
+
 ------------------------------------------------------------
 -- The shell: the prefix, one message at a time, report lines, settings
 ------------------------------------------------------------
@@ -435,7 +464,7 @@ do
     WoW.advance(GSync.QUIET + 1)
     local lines, more, hint = 0, false, 0
     for _, l in ipairs(WoW.chat) do
-        if l:find("(reported by Bo Kay)", 1, true) then lines = lines + 1 end
+        if l:find(", reported by Bo Kay)", 1, true) then lines = lines + 1 end
         if l:find("+1 more from guildmates", 1, true) then more = true end
         if l:find("/gspy options", 1, true) then hint = hint + 1 end
     end

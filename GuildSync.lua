@@ -383,23 +383,45 @@ local function send(text, ok)
     pump()
 end
 
--- Guildmates' reports in chat, by the setting: after a quiet spell, at most
--- MAX_LINES, then "+N more"; the first time, how to turn them off.
+-- The reports in `list` that are news: one per change, and none of a change
+-- the log already had before this batch (mine, or an earlier report). Folded
+-- as the window folds them (Log.Groups, #59); the log keeps every one (#83).
+function GSync.News(gs, list, canView)
+    local batch = {}
+    for _, e in ipairs(list) do batch[e] = true end
+    local _, of = Log.Groups(gs, function(e) return Log.Visible(e, canView) end)
+    local out, done = {}, {}
+    for _, e in ipairs(list) do
+        local g = not e.covered and of[e]               -- not in the log: covered, pruned, another guild
+        if g and not done[g] then
+            done[g] = true
+            local known = false
+            for _, x in ipairs(g.members) do
+                if not batch[x] then known = true; break end
+            end
+            if not known then out[#out + 1] = e end
+        end
+    end
+    return out
+end
+
+-- Guildmates' reports in chat, by the setting: after a quiet spell, what's
+-- news (GSync.News), at most MAX_LINES, then "+N more"; the first time, how
+-- to turn them off.
 local function flush()
     if not pending then return end
     local list = pending
     pending = nil
     if GSync.ReportsMode() ~= "chat" then return end
-    local canView = GuildSpy.API.CanViewOfficerNote() == true
-    local shown = {}
-    for _, e in ipairs(list) do
-        if not e.covered and Log.Visible(e, canView) then shown[#shown + 1] = e end
-    end
+    local gs = GuildSpy.Scanner.Current()
+    if not gs then return end
+    local shown = GSync.News(gs, list, GuildSpy.API.CanViewOfficerNote() == true)
     if #shown == 0 then return end
     local now = time()
     for i = 1, math.min(GSync.MAX_LINES, #shown) do
         local e = shown[i]
-        print("|cff7fd4ffGuildSpy:|r " .. Log.Line(e, now) .. " |cff8f8f8f(reported by "
+        -- Its time too: a report is from an ask, often hours after the change.
+        print("|cff7fd4ffGuildSpy:|r " .. Log.Line(e, now) .. " |cff8f8f8f(" .. Log.When(e, now) .. ", reported by "
             .. Log.Esc(tostring(e.reporter)) .. ")|r")
     end
     if #shown > GSync.MAX_LINES then
