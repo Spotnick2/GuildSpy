@@ -100,8 +100,9 @@ Under **Options > AddOns > GuildSpy > Sharing**:
   guildmates with GuildSpy, and what they saw while you were offline comes to you, marked with who
   reported it. Best effort: only from guildmates online at the time. Never officer notes, the
   message of the day or the rank list.
-- **Guildmates' reports**: in chat and in the log (at most five lines at a time), only in the log,
-  or never. In the log they also have their own **Reports** tab.
+- **Guildmates' reports**: in chat and in the log, only in the log, or never. Chat shows only
+  changes you didn't already have, with when they happened, at most five lines at a time. In the
+  log they also have their own **Reports** tab.
 - **Accept reports from**: every rank, or a rank and up.
 
 The key binding is under **Key Bindings > GuildSpy**, with no key set by default.
