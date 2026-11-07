@@ -431,6 +431,25 @@ function Log.Groups(gs, keep)
     return groups, of
 end
 
+-- The records of the log that `e` (not in it yet) would fold with, as the
+-- window folds them: what the log already has of its change (#83). Taken
+-- before e is received, so a record that receipt then removes (a sweep, a
+-- prune) still counts (#84 Codex reviews).
+function Log.FoldsWith(gs, e)
+    local k, list = foldKey(e), {}
+    for _, x in ipairs(gs and gs.log or {}) do
+        if x ~= e and foldKey(x) == k then list[#list + 1] = x end
+    end
+    if #list == 0 then return list end
+    list[#list + 1] = e
+    local _, of = Log.Groups({ log = list }, function() return true end)
+    local out = {}
+    for _, x in ipairs(of[e] and of[e].members or {}) do
+        if x ~= e then out[#out + 1] = x end
+    end
+    return out
+end
+
 -- The record a row shows for `lead` in its group: a level-up from the group's
 -- lowest level ("leveled from 6 to 10", at the lead's time); else the lead.
 function Log.View(g, lead)

@@ -111,7 +111,8 @@ Core.__index = Core
 -- o: db, gs(key), key(), me(), now(), send(text, ok) (queued; ok() is asked
 -- again just before it leaves), after(seconds, fn), random(lo, hi),
 -- accepts(name) (a guildmate whose reports I take: roster, rank, setting),
--- onReceived(added, key), onChanged(), onStatus() (a guildmate heard) (all optional).
+-- onReceived(added, key, matches) (matches: what the log had of its change
+-- just before, Log.FoldsWith), onChanged(), onStatus() (a guildmate heard) (all optional).
 function GSync.NewCore(o)
     return setmetatable({ o = o, myQ = {}, answers = {}, answered = {}, heard = {},
                           ask = {}, admitted = {}, said = nil, lastQ = nil, lastAnswer = nil, deferred = nil }, Core)
@@ -286,10 +287,18 @@ function Core:onE(key, sender, f, lines)
     e.obs = (e.approx == false and e.at) or e.hi or e.at
     local gs = self.o.gs(key)
     if not gs then return end
+    -- Its shape first, as Log.Receive checks it: the probe reads its fields,
+    -- and the wire can carry a number or boolean anywhere (#84 Codex review).
+    if not Log.Valid(e, "guild", self.o.now()) then return end
+    -- What the log has of this change, before receiving it can sweep or prune
+    -- any of that away (#84 Codex reviews). A probe: Receive keeps its own copy.
+    local probe = { ns = "g:" .. sender, trust = "guild", seq = math.huge }
+    for k, v in pairs(e) do probe[k] = v end
+    local matches = Log.FoldsWith(gs, probe)
     local got, why = Log.Receive(self.o.db, gs, e, "guild", sender, self.o.now())
     if not got then return end
     self.admitted[sender] = (self.admitted[sender] or 0) + 1
-    if why ~= "updated" and self.o.onReceived then self.o.onReceived({ got }, key) end
+    if why ~= "updated" and self.o.onReceived then self.o.onReceived({ got }, key, matches) end
     if self.o.onChanged then self.o.onChanged() end
 end
 
@@ -311,7 +320,7 @@ GSync.REPORT_MODES = { chat = true, log = true, never = true }
 local core, registered
 local queue, inflight, pumping, token = {}, false, false, 0
 GSync.STUCK = 60                     -- a message ChatThrottleLib never reported: let the queue move on
-local pending = nil
+local pending, prior = nil, nil       -- this batch's reports; which were known when received
 
 local function settings() return GuildSpyDB and GuildSpyDB.settings or {} end
 function GSync.Enabled() return settings().shareGuild ~= false end
@@ -383,23 +392,47 @@ local function send(text, ok)
     pump()
 end
 
--- Guildmates' reports in chat, by the setting: after a quiet spell, at most
--- MAX_LINES, then "+N more"; the first time, how to turn them off.
+-- The reports in `list` that are news: one per change, and none of a change
+-- the log already had before this batch (mine, or an earlier report). Folded
+-- as the window folds them (Log.Groups, #59); the log keeps every one (#83).
+-- `prior[e]`: when e was received, the log had its change from before the
+-- batch, which may since have left the log (a sweep, a prune: #84 Codex reviews).
+function GSync.News(gs, list, canView, prior)
+    local batch = {}
+    for _, e in ipairs(list) do batch[e] = true end
+    local _, of = Log.Groups(gs, function(e) return Log.Visible(e, canView) end)
+    local out, done = {}, {}
+    for _, e in ipairs(list) do
+        local g = not e.covered and of[e]               -- not in the log: covered, pruned, another guild
+        if g and not done[g] then
+            done[g] = true
+            local known = false
+            for _, x in ipairs(g.members) do
+                if not batch[x] or (prior and prior[x]) then known = true; break end
+            end
+            if not known then out[#out + 1] = e end
+        end
+    end
+    return out
+end
+
+-- Guildmates' reports in chat, by the setting: after a quiet spell, what's
+-- news (GSync.News), at most MAX_LINES, then "+N more"; the first time, how
+-- to turn them off.
 local function flush()
     if not pending then return end
-    local list = pending
-    pending = nil
+    local list, before = pending, prior
+    pending, prior = nil, nil
     if GSync.ReportsMode() ~= "chat" then return end
-    local canView = GuildSpy.API.CanViewOfficerNote() == true
-    local shown = {}
-    for _, e in ipairs(list) do
-        if not e.covered and Log.Visible(e, canView) then shown[#shown + 1] = e end
-    end
+    local gs = GuildSpy.Scanner.Current()
+    if not gs then return end
+    local shown = GSync.News(gs, list, GuildSpy.API.CanViewOfficerNote() == true, before)
     if #shown == 0 then return end
     local now = time()
     for i = 1, math.min(GSync.MAX_LINES, #shown) do
         local e = shown[i]
-        print("|cff7fd4ffGuildSpy:|r " .. Log.Line(e, now) .. " |cff8f8f8f(reported by "
+        -- Its time too: a report is from an ask, often hours after the change.
+        print("|cff7fd4ffGuildSpy:|r " .. Log.Line(e, now) .. " |cff8f8f8f(" .. Log.When(e, now) .. ", reported by "
             .. Log.Esc(tostring(e.reporter)) .. ")|r")
     end
     if #shown > GSync.MAX_LINES then
@@ -421,9 +454,18 @@ local function wait()
         flush()
     end)
 end
-local function received(added)
-    pending = pending or {}
-    for _, e in ipairs(added) do pending[#pending + 1] = e end
+local function received(added, _, matches)
+    pending, prior = pending or {}, prior or {}
+    local inBatch = {}
+    for _, e in ipairs(pending) do inBatch[e] = true end
+    for _, e in ipairs(added) do
+        pending[#pending + 1] = e
+        -- What the log had of its change: from before this batch (known), or
+        -- an earlier report of this batch (known if that one was).
+        for _, x in ipairs(matches or {}) do
+            if not inBatch[x] or prior[x] then prior[e] = true end
+        end
+    end
     local waiting = quietUntil ~= nil
     quietUntil = time() + GSync.QUIET
     if not waiting then wait() end

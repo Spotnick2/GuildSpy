@@ -391,6 +391,47 @@ do  -- Limits: one ask per 2 minutes; an entry too long for one message isn't se
         "short names on the wire read back to the allowed fields")
 end
 
+do  -- In chat, only what's news: not a change Ann saw herself, nor one reported before; once per change (#83).
+    reset()
+    local ann, bo, cy, di = client("Ann Lee"), client("Bo Kay"), client("Cy Dee"), client("Di Fox")
+    local NOTE = { kind = "NOTE", guid = "Player-1-00000AAA", name = "Kraamer Twotoes", from = "", to = "Gros Heal" }
+    local JOIN = { kind = "JOIN", guid = "Player-1-00000BBB", name = "The Woundedman", to = "Initiate" }
+    local RANK = { kind = "PROMOTE", guid = "Player-1-00000CCC", name = "Sang Rawr", from = "Initiate", to = "Member" }
+    observe(ann, NOTE)
+    observe(bo, NOTE); observe(cy, NOTE)        -- all three saw the note change
+    observe(bo, JOIN).from = nil                -- Ann was away for this one (a join has no from)
+    observe(bo, RANK); observe(cy, RANK)        -- and this one, which two guildmates saw
+    ann.core:Hello()
+    advance(GSync.JITTER_MAX + 5)
+    eq(reports(ann), 5, "Ann keeps every report, the note change she saw too")
+    local news = GSync.News(ann.gs, ann.added, true)
+    local kinds = {}
+    for _, e in ipairs(news) do kinds[e.kind] = (kinds[e.kind] or 0) + 1 end
+    check(#news == 2 and kinds.JOIN == 1 and kinds.PROMOTE == 1,
+        "news: the join and the promotion, once each; not the note change Ann saw herself")
+    observe(di, JOIN).from = nil
+    local batch = #ann.added
+    cy.core:Hello()                              -- Cy asks: Ann hears the answers, Di's too
+    clock = clock + GSync.ANSWER_GAP
+    advance(GSync.JITTER_MAX + 5)
+    local later = {}
+    for i = batch + 1, #ann.added do later[#later + 1] = ann.added[i] end
+    check(#later > 0, "Di's join report reaches Ann too")
+    eq(#GSync.News(ann.gs, later, true), 0, "...not news: an earlier report already had it")
+    -- A malformed entry (the wire carries a number or boolean in any field)
+    -- is refused before anything reads it (#84 Codex review).
+    local before = reports(ann)
+    for i, bad in ipairs({ { kind = true }, { kind = 1 }, { guid = false }, { to = 5 }, { lo = "x" } }) do
+        local e = { uid = "bo9" .. i .. ":1", rev = 1, kind = "NOTE", guid = "Player-1-00000DDD", name = "Odd",
+                    from = "", to = "x", at = clock - 60, lo = clock - 120, hi = clock - 60 }
+        for k, v in pairs(bad) do e[k] = v end
+        local text = Wire.Message("E", { "q:9" }, { Wire.Entry(e, GSync.FIELDS, GSync.ALIAS) })
+        local ok, err = pcall(ann.core.OnMessage, ann.core, text, "Bo Kay")
+        check(ok, "malformed entry " .. i .. ": no error (" .. tostring(err) .. ")")
+    end
+    eq(reports(ann), before, "...and none is kept")
+end
+
 ------------------------------------------------------------
 -- The shell: the prefix, one message at a time, report lines, settings
 ------------------------------------------------------------
@@ -435,7 +476,7 @@ do
     WoW.advance(GSync.QUIET + 1)
     local lines, more, hint = 0, false, 0
     for _, l in ipairs(WoW.chat) do
-        if l:find("(reported by Bo Kay)", 1, true) then lines = lines + 1 end
+        if l:find(", reported by Bo Kay)", 1, true) then lines = lines + 1 end
         if l:find("+1 more from guildmates", 1, true) then more = true end
         if l:find("/gspy options", 1, true) then hint = hint + 1 end
     end
@@ -468,6 +509,58 @@ do
     check(not O.Set("reports", "sometimes"), "a value no page offers is refused")
     O.Set("reports", "chat")
     eq(GuildSpyDB.settings.reports, nil, "back to the default: nothing saved")
+
+    -- A finer report of a level-up already reported replaces it in the log:
+    -- not news in chat; in one batch, the change is shown once (#84 Codex review).
+    local function lvl(uid, guid, lo) return { uid = uid, rev = 1, kind = "LEVEL", guid = guid, name = "Member " .. uid,
+                                               from = 30, to = 31, at = now - 600, lo = lo, hi = now - 600 } end
+    local function count(guid)
+        local n = 0
+        for _, e in ipairs(gs.log) do if e.guid == guid then n = n + 1 end end
+        return n
+    end
+    local function reportLines()
+        local n = 0
+        for _, l in ipairs(WoW.chat) do if l:find("reported by Bo Kay", 1, true) then n = n + 1 end end
+        return n
+    end
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", lvl("bo50:1", "Player-1-00000777", now - 3600)))
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 1, "a coarse report of a level-up: news")
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", lvl("bo51:1", "Player-1-00000777", now - 700)))
+    eq(count("Player-1-00000777"), 1, "...a finer one, later, replaces it in the log")
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 0, "...and isn't news in chat")
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", lvl("bo52:1", "Player-1-00000778", now - 3600)))
+    hear(GSync.EntryMessage("x:1", lvl("bo53:1", "Player-1-00000778", now - 700)))
+    eq(count("Player-1-00000778"), 1, "both in one batch: the finer one stays")
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 1, "...and the change is news, once")
+
+    -- The guild quota full: a later report of a change evicts the earlier
+    -- report of it (the oldest kept). Still not news (#84 Codex follow-up).
+    local function note(uid, lo, hi) return { uid = uid, rev = 1, kind = "NOTE", guid = "Player-1-00000779", name = "Noted",
+                                              from = "", to = "Gros Heal", at = hi, lo = lo, hi = hi } end
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", note("bo60:1", now - 7200, now - 3000)))
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 1, "an old report of a note change: news")
+    local quota, kept = Log.GUILD_MAX_ENTRIES, 0
+    for _, e in ipairs(gs.log) do if e.trust == "guild" then kept = kept + 1 end end
+    Log.GUILD_MAX_ENTRIES = kept                  -- full
+    WoW.chat = {}
+    hear(GSync.EntryMessage("x:1", note("bo61:1", now - 3500, now - 500)))
+    local old, new = false, false
+    for _, e in ipairs(gs.log) do
+        if e.uid == "bo60:1" then old = true elseif e.uid == "bo61:1" then new = true end
+    end
+    check(new and not old, "...the quota full: a later report of it is kept, the old one evicted")
+    WoW.advance(GSync.QUIET + 1)
+    eq(reportLines(), 0, "...and it isn't news in chat")
+    Log.GUILD_MAX_ENTRIES = quota
     check(O.Set("reportRank", 1), "accept from Officer and up")
     eq(GSync.MinRank(), 1, "...saved")
     eq(GuildSpyDB.settings.reportRanks["Parse Partout-Forever"], 1, "...for this guild only (#43 review)")
