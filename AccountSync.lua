@@ -176,7 +176,9 @@ function Core:OnMessage(text, sender)
         gs.peerMark = type(gs.peerMark) == "table" and gs.peerMark or {}
         if cursor ~= (tonumber(gs.peerMark[sender.guid]) or 0) then return end
         local added, changed = {}, false
-        local batch = Log.NewBatch(gs, now)
+        -- The index is a pass over the whole log: not for an empty page, the
+        -- usual answer to the five-minute pull (#87).
+        local batch = #lines > 0 and Log.NewBatch(gs, now) or nil
         for _, line in ipairs(lines) do
             local e = Wire.ReadEntry(line, ALLOWED)
             -- A guildmate's report my other account forwards: only from someone I

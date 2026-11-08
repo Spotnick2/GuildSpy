@@ -485,4 +485,26 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     O.Set("syncAccounts", true)
 end
 
+-- An empty page (the usual answer to the five-minute pull) builds no index of
+-- the whole log: that pass made garbage on every pull (#87).
+do
+    net, clients = {}, {}
+    local A = client("Alt One", "Player-1-0000000A", KEY)
+    local B = client("Alt Two", "Player-1-0000000B", KEY)
+    observe(B, join("Synced Once", 9))
+    meet(A, B)
+    pump()
+    check(find(A, "Synced Once"), "(the first pull brings the entry)")
+    local built, saved = 0, Log.NewBatch
+    Log.NewBatch = function(...) built = built + 1; return saved(...) end
+    clock = clock + AS.POLL
+    A.core:Tick()
+    local pages = 0
+    pump(function(m) if kindOf(m) == "PAGE" then pages = pages + 1 end return false end)
+    Log.NewBatch = saved
+    eq(pages, 1, "(the next pull is answered)")
+    eq(built, 0, "an empty page builds no batch index")
+    eq(A.gs.peerMark[B.guid], B.gs.nextChg, "...and still moves the cursor")
+end
+
 done("test_accountsync")
