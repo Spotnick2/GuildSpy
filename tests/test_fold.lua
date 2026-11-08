@@ -131,6 +131,10 @@ do  -- New: only while every record of the change is new.
     eq(#c, 1, "three new records of one join...")
     eq(c[1].n, 1, "...count as one join")
     check(Log.NewSummary(fresh, 5, false):find("1", 1, true), "...in the summary")
+    -- Counted once by the window, then reworded (#87): the same line either way.
+    eq(Log.NewSummary(fresh, 5, false, nil, false, c), Log.NewSummary(fresh, 5, false), "...given counts, the same line")
+    eq(Log.NewSummary(fresh, 0, false, 1, false, Log.NewCounts(fresh, 0, false, false)),
+        Log.NewSummary(fresh, 0, false, 1), "...and with a limit")
 end
 
 done("test_fold")

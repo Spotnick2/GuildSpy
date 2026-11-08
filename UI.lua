@@ -460,11 +460,14 @@ local function fitSummary(gs)
     if not gs then s:SetText(""); return end
     local width = s:GetWidth() or 0
     local measure = s.GetUnboundedStringWidth and "GetUnboundedStringWidth" or "GetStringWidth"
-    local limit = #Log.NewCounts(gs, newSince, canView(), hideReports())
-    s:SetText(Log.NewSummary(gs, newSince, canView(), nil, hideReports()))
+    -- Counted once, then only reworded until it fits (#87).
+    local view, hide = canView(), hideReports()
+    local counts = Log.NewCounts(gs, newSince, view, hide)
+    local limit = #counts
+    s:SetText(Log.NewSummary(gs, newSince, view, nil, hide, counts))
     while width > 0 and limit > 1 and (s[measure](s) or 0) > width do
         limit = limit - 1
-        s:SetText(Log.NewSummary(gs, newSince, canView(), limit, hideReports()))
+        s:SetText(Log.NewSummary(gs, newSince, view, limit, hide, counts))
     end
 end
 

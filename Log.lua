@@ -345,9 +345,10 @@ local function foldKey(e)
     -- A rejoin's from is the rank it once left, which a join doesn't have
     -- (Roster.Apply): a membership change is who and to (#61 review).
     local from = (kind ~= "JOIN" and kind ~= "LEVEL") and e.from or nil
-    local key = {}
-    for i, v in ipairs({ kind, str0(e.guid), str0(from), str0(e.to) }) do key[i] = #v .. ":" .. v end
-    return table.concat(key)
+    -- One concatenation, no tables: this runs for every record on every pass (#87).
+    local g, f, t = str0(e.guid), str0(from), str0(e.to)
+    kind = str0(kind)
+    return #kind .. ":" .. kind .. #g .. ":" .. g .. #f .. ":" .. f .. #t .. ":" .. t
 end
 -- Its time window, or nil when it has none.
 local function window(e)
@@ -396,6 +397,10 @@ function Log.Groups(gs, keep)
         local list = buckets[k]
         if list[1].kind == "LEVEL" and list[1].guid then
             groups[#groups + 1] = { members = list }
+        elseif #list == 1 then
+            -- Most changes are alone in their bucket: no sort, no open list (#87).
+            local lo, hi = window(list[1])
+            groups[#groups + 1] = { members = list, lo = lo, hi = hi }
         else
             table.sort(list, byStart)
             local open = {}
@@ -437,8 +442,13 @@ end
 -- prune) still counts (#84 Codex reviews).
 function Log.FoldsWith(gs, e)
     local k, list = foldKey(e), {}
+    -- Kind and GUID are part of the key: only records that share them build one (#87).
+    local kind, guid = FOLD_KIND[e.kind] or e.kind, str0(e.guid)
     for _, x in ipairs(gs and gs.log or {}) do
-        if x ~= e and foldKey(x) == k then list[#list + 1] = x end
+        if x ~= e and (FOLD_KIND[x.kind] or x.kind) == kind and str0(x.guid) == guid
+                and foldKey(x) == k then
+            list[#list + 1] = x
+        end
     end
     if #list == 0 then return list end
     list[#list + 1] = e
@@ -483,9 +493,11 @@ end
 -- "New: 2 joined · 1 left · 12 level changes", or "No new activity". With
 -- `limit`, only the first `limit` groups, then "+N more" (N entries), so a
 -- line too long for the panel still counts everything (#22 review).
-function Log.NewSummary(gs, since, canViewOfficer, limit, hideReports)
+-- `counts`: Log.NewCounts' result for the same arguments, when the caller has
+-- it already (each count is a pass over the whole log, #87).
+function Log.NewSummary(gs, since, canViewOfficer, limit, hideReports, counts)
     local parts, more = {}, 0
-    for i, c in ipairs(Log.NewCounts(gs, since, canViewOfficer, hideReports)) do
+    for i, c in ipairs(counts or Log.NewCounts(gs, since, canViewOfficer, hideReports)) do
         if limit and i > limit then
             more = more + c.n
         else
@@ -684,9 +696,13 @@ function Log.NewBatch(gs, now)
             list[#list + 1] = e
             b.byUid[e.uid] = list
         end
-        local k = Log.DupKey(e)
-        b.byKey[k] = b.byKey[k] or {}
-        table.insert(b.byKey[k], e)
+        -- A record never compared ("t:" key) is its own group: Log.Group makes
+        -- it on demand, so the index holds only compared ones (#87).
+        if Log.DEDUPE[e.kind] and e.guid then
+            local k = Log.DupKey(e)
+            b.byKey[k] = b.byKey[k] or {}
+            table.insert(b.byKey[k], e)
+        end
         local _, days = limits(quotaOf(e))
         if now - observed(e) <= days * 86400 then b.count[quotaOf(e)] = b.count[quotaOf(e)] + 1 end
     end
@@ -743,7 +759,10 @@ function Log.Group(gs, key, batch)
     end
     local g = {}
     if key:find("^t:") then return g end
-    for _, x in ipairs(gs.log or {}) do if Log.DupKey(x) == key then g[#g + 1] = x end end
+    -- Only a compared kind can carry an "m:" key: the rest build no key (#87).
+    for _, x in ipairs(gs.log or {}) do
+        if Log.DEDUPE[x.kind] and x.guid and Log.DupKey(x) == key then g[#g + 1] = x end
+    end
     return g
 end
 
