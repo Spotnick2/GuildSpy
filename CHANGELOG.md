@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.3
+
+A fix for high memory use.
+
+- **Much less memory churn.** The game's addon memory list could show GuildSpy at 100 MB or more,
+  still climbing, in a guild with a long log. It wasn't a leak: GuildSpy kept rereading its whole
+  log and threw away the copies faster than the game cleaned them up. Most often when a guildmate's
+  GuildSpy sent its reports, when your other account synced, and while the log window was open.
+  Those passes now make far less waste: a guildmate's report costs a few KB instead of half a MB.
+  Nothing else changes, and your saved log is untouched.
+
 ## v1.0.2
 
 Quieter reports from guildmates.
