@@ -93,6 +93,10 @@ client finds it by name (the package check names it).
   professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
   None of them ship (`.pkgmeta`).
+- `Tools/GuildSpyProbe/` — a ForeverProbe module (`/fp gs`, `References\Docs\PROBES.md`), never
+  shipped: what Guild Roster Manager sends on the guild channel (#8). `GRMClassify.lua` is pure
+  (`tests/test_grmprobe.lua`); `GuildSpyProbe.lua` wires it to the client. The older measurements
+  above (`Probe.lua`, `ProbeProfessions.lua`, `/gspy probe`) aren't migrated.
 
 ## Design rules that a cold reviewer must not override
 
@@ -138,6 +142,8 @@ No build step. The Lua 5.1 toolchain is at `C:\Program Files (x86)\Lua\5.1\` (`l
 
 ```
 pwsh Tools/deploy.ps1
+pwsh Tools/deploy.ps1 -Probe        # ...and GuildSpyProbe (ForeverProbe's checkout first)
+pwsh Tools/deploy.ps1 -ProbeOnly    # just GuildSpyProbe
 pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
 ```
 
