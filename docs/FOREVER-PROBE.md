@@ -158,6 +158,33 @@ All seven events registered (no `refused` entry).
 
 `Interface\Icons\INV_Misc_Spyglass_03` exists (file id 134442).
 
+## Guild Roster Manager on the guild channel (#8)
+
+GRM has published Forever builds since R1.995 (2026-11-05). Before deciding on a listener (#8),
+`Tools/GuildSpyProbe` (a ForeverProbe module, `/fp gs`) records what GRM actually sends. The
+protocol as read from GRM's source is in #8's findings comment; this section is what the client
+shows.
+
+**How to run it:** `pwsh Tools/deploy.ps1 -ProbeOnly`, `/reload`, then `/fp steps gs grm`. That
+reads the state, sends one `GRMUSER` `REQ?` on your click (each GRM user answers with its `REG`
+line), waits 15 s and asks for a `/reload`. Then leave it loaded and play normally for about a
+week. Results: `WTF\Account\<account>\SavedVariables\GuildSpyProbe.lua`, `GuildSpyProbeDB.grm`.
+`/fp gs grm`, `users` and `samples` show them in game.
+
+What it keeps: counts per prefix, channel and tag, and per day; up to 3 samples per tag. Raw
+text is kept only for tags made of names, dates, epochs, ranks and flags; custom notes,
+nicknames, birthdays, bans and unknown tags become field shapes (`s12`, `n8`). Senders are kept
+as shapes (`2w`, `2w+realm`) with their roster match, except in `users` (who runs GRM).
+
+| # | Question | Where | Answer |
+|---|---|---|---|
+| 18 | Does anyone in the guild run GRM, which versions, sync on? | `users`, `counts.GRMUSER` | not run yet |
+| 19 | Which `GRM_SYNC` tags cross the guild channel, how often? | `counts.GRM_SYNC.GUILD`, `days` | not run yet |
+| 20 | Do alt/main links (`GRM_ADDALT`, `GRM_RMVALT`, `GRM_MAIN`, `GRM_RMVMAIN`) arrive? | the same | not run yet |
+| 21 | The shape of a sender, and of a member name inside a message ("First Surname", or with "-Realm")? Does it match a roster name? | `senders`, `senderMatch`, `nameFields` | not run yet |
+| 22 | `C_Secrets.HasSecretRestrictions()` at login | `state.restrictions` | not run yet |
+| 23 | Are any GRM payloads secret? | `secret` | not run yet |
+
 ## Guild professions (an addon opportunity, outside GuildSpy's scope)
 
 Forever ships Retail's guild-recipe UI unchanged. `git diff live forever` in `..\wow-ui-source`
