@@ -22,7 +22,7 @@ local LOG_CAP = 300           -- probeLog entries kept
 local TIMELINE_SECONDS = 180  -- roster completeness is timed for this long after login
 local ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
 
--- The localized system strings GRM parses (GRM_Core.lua:16294-16755), and the
+-- The localized system strings GRM parses (Core/GRM_Core.lua:9378-9840), and the
 -- friend online/offline ones it uses to trigger a roster refresh.
 Probe.GLOBALS = {
     "ERR_GUILD_JOIN_S", "ERR_GUILD_LEAVE_S", "ERR_GUILD_QUIT_S", "ERR_GUILD_REMOVE_SS",

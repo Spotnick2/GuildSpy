@@ -29,10 +29,10 @@ history (a join→leave or a note edited twice between your logins collapses to 
   promo date, alt/main links, birthdays, custom notes) and `GRMUSER` announcements. So GuildSpy
   does its own diffing; GRM listening can only ever be a small extra.
 - GRM's detection recipe, kept: GUILD_ROSTER_UPDATE + periodic `C_GuildInfo.GuildRoster()`; full
-  snapshot matched **by GUID** (`GRM_ScanRoster.lua:938`); `CHAT_MSG_SYSTEM` parsed with patterns
+  snapshot matched **by GUID** (`Modules/GRM_ScanRoster.lua:935`); `CHAT_MSG_SYSTEM` parsed with patterns
   built from `ERR_GUILD_PROMOTE_SSS`/`DEMOTE_SSS`/`JOIN_S`/`LEAVE_S`/`REMOVE_SS`; the **guild event
-  log** (`GetGuildEventInfo`, `GRM_ScanRoster.lua:4264`) to attribute offline changes and tell
-  quit vs kick; rank-index shift handling (`GRM_ScanRoster.lua:1021`).
+  log** (`GetGuildEventInfo`, `Modules/GRM_ScanRoster.lua:4270`) to attribute offline changes and tell
+  quit vs kick; rank-index shift handling (`Modules/GRM_ScanRoster.lua:1019`).
 - Forever: no global `GuildRoster`/`CanViewOfficerNote` → `C_GuildInfo.*`. `GetGuildRosterInfo`
   exists but its **return shape is unmeasured**; `C_Club.GetMemberInfo` (guid, notes, lastOnline*,
   rank) is unverified. Names have a surname ("Kaleid Sumner"); guild realm (4th return of
@@ -200,7 +200,7 @@ is reset to "baseline needed". No per-character SV.
   guild, and the owner asked for both (2026-10-12). The design is **docs/SYNC.md** (three Codex
   rounds), built in phases #36, #37, #38.
 - **GRM listener.** Passive `GRM_SYNC`/GUILD only yields manual join/promo dates and alt links,
-  incomplete (removals, rank-restricted senders: `GRM_GuildSync.lua:8300`) and a protocol to track.
+  incomplete (removals, rank-restricted senders: `Modules/GRM_GuildSync.lua:9127`) and a protocol to track.
   Cheaper variant if wanted: read GRM's "Joined: <date>" text out of public notes.
 
 ## Repo init (mirrors siblings)
