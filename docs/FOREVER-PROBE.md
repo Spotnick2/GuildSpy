@@ -178,12 +178,25 @@ as shapes (`2w`, `2w+realm`) with their roster match, except in `users` (who run
 
 | # | Question | Where | Answer |
 |---|---|---|---|
-| 18 | Does anyone in the guild run GRM, which versions, sync on? | `users`, `counts.GRMUSER` | not run yet |
-| 19 | Which `GRM_SYNC` tags cross the guild channel, how often? | `counts.GRM_SYNC.GUILD`, `days` | not run yet |
-| 20 | Do alt/main links (`GRM_ADDALT`, `GRM_RMVALT`, `GRM_MAIN`, `GRM_RMVMAIN`) arrive? | the same | not run yet |
-| 21 | The shape of a sender, and of a member name inside a message ("First Surname", or with "-Realm")? Does it match a roster name? | `senders`, `senderMatch`, `nameFields` | not run yet |
-| 22 | `C_Secrets.HasSecretRestrictions()` at login | `state.restrictions` | not run yet |
-| 23 | Are any GRM payloads secret? | `secret` | not run yet |
+| 18 | Does anyone in the guild run GRM, which versions, sync on? | `users`, `counts.GRMUSER` | **Nobody but the owner's own two test characters.** The one `REQ?` got one answer, from the other test account (R1.99521, sync on, all ranks) |
+| 19 | Which `GRM_SYNC` tags cross the guild channel, how often? | `counts.GRM_SYNC.GUILD`, `days` | **None seen.** Not even election traffic in the ~30 s both test clients ran GRM together |
+| 20 | Do alt/main links (`GRM_ADDALT`, `GRM_RMVALT`, `GRM_MAIN`, `GRM_RMVMAIN`) arrive? | the same | **None seen** |
+| 21 | The shape of a sender, and of a member name inside a message ("First Surname", or with "-Realm")? Does it match a roster name? | `senders`, `senderMatch`, `nameFields` | Senders: **"First Surname"** (19 of 19), each matching a roster name as is. Member names inside messages: none seen |
+| 22 | `C_Secrets.HasSecretRestrictions()` at login | `state.restrictions` | **true**, on both accounts, at every login |
+| 23 | Are any GRM payloads secret? | `secret` | **No** (0 of 19) |
+
+**Measured on 1.60.1.70888, 2026-11-11 to 12**, in a 302–308-member guild, on two accounts:
+- **Before GRM was installed here** (account `#2`: 32 loads spread over about 6 hours): **0 GRM
+  messages.** GRM sends `GRMVER` as it loads and `REG` 3 s later (`GRM.LoadAddon`,
+  GRM_Config.lua:185 and 224 in R1.99521), so no GRM user logged in while it listened.
+- **With GRM installed on both test accounts** (one session): `GRMVER` at login, `REG` and `REQ`
+  only, all from the other test account. `REG` is unchanged from R1.99423: 8 fields,
+  `REG?R1.99521?1794318178?5?2?false?true?true`.
+- The procedure (`/fp steps gs grm`, run #247): in a guild, roster 308, restrictions on; `REQ?`
+  sent (result 0); 1 answer in 15 s.
+
+**So:** GRM listening has nothing to listen to in this guild. #8 closes with these numbers. Re-run
+`/fp steps gs grm` if the guild changes or GRM becomes common (the probe stays in `Tools/`).
 
 ## Guild professions (an addon opportunity, outside GuildSpy's scope)
 
