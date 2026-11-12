@@ -216,8 +216,8 @@ it). Two namespaces never alias each other.
 - **Cost (stated, not hidden):** usually one answer per Q; two responders can overlap before hearing
   each other (expected about one batch; not a hard bound). Worst case with many simultaneous logins is one answer
   per requester: 40 logins ≈ 40 answers ≈ 1,600 messages (~400 KB), the same order as GRM's.
-- **Accept reports from: rank X and up** (GRM's `syncRank`, GRM_Core.lua:1085, 5621). Default:
-  every rank (GRM's default, GRM_Core.lua:970-973). The sender's rank comes from my roster; a
+- **Accept reports from: rank X and up** (GRM's `syncRank`, Core/GRM_Settings.lua:88, Core/GRM_Core.lua:3075). Default:
+  every rank (GRM's default, Utils/GRM_G_Util.lua:293-296). The sender's rank comes from my roster; a
   sender not in it is refused. At most 200 entries admitted per reporter per session; when the
   cap is hit, that reporter's continuation stops for the session.
 
@@ -270,7 +270,7 @@ with `Settings.RegisterCanvasLayoutSubcategory`, built on first show, Options.Se
 how many guildmates with GuildSpy were heard this session.
 
 Sync with my other accounts (on). Share with guildmates (on, as GRM: `syncEnabled = true`,
-GRM_Core.lua:1084). Guildmates' reports: in chat and in the log / only in the log / never
+Core/GRM_Settings.lua:87). Guildmates' reports: in chat and in the log / only in the log / never
 (default: chat and log). Accept reports from: rank X and up (every rank).
 
 ## 11. Phases (each an issue and PR)

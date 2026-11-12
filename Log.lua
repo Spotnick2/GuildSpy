@@ -21,7 +21,7 @@ Log.DIGEST_LINES = 8
 -- A chat link that opens the log window (UI.lua handles "addon:guildspy").
 Log.OPEN_LINK = "|Haddon:guildspy:log|h|cff7fd4ff[open log]|r|h"
 
--- GRM's palette (GRM_Core.lua:1187).
+-- GRM's palette (Core/GRM_Settings.lua:144).
 Log.COLORS = {
     JOIN = "80ff00", REJOIN = "80ff00", LEAVE = "a0a0a0", PROMOTE = "ffe900", DEMOTE = "e8630c",
     RANK = "ffffff", RANKS = "ffffff", LEVEL = "3d9bff", NOTE = "ff99ff", ONOTE = "ff18ed",
