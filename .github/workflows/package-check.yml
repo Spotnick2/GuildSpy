@@ -121,6 +121,14 @@ jobs:
             grep -qx "GuildSpy/$f" files.txt || { echo "MISSING (listed in the TOC): $f"; fail=1; }
           done
 
+          # The TOC's IconTexture, when it is our own (#97), ships as a .tga.
+          icon=$(tr -d '\r' < GuildSpy.toc | sed -n 's/^## IconTexture: *//p' | tr '\\' '/')
+          case "$icon" in
+            Interface/AddOns/GuildSpy/*)
+              f="GuildSpy/${icon#Interface/AddOns/GuildSpy/}.tga"
+              grep -qx "$f" files.txt || { echo "MISSING (the TOC's IconTexture): $f"; fail=1; } ;;
+          esac
+
           # Development files must not ship.
           for pat in '/tests/' '/Tools/' '/docs/' '/\.github/' '/\.claude/' \
                      'AGENTS\.md$' 'CLAUDE\.md$' 'CHANGELOG\.md$' 'README\.md$' '\.ps1$'; do

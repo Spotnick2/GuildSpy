@@ -93,6 +93,9 @@ client finds it by name (the package check names it).
   professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
   None of them ship (`.pkgmeta`).
+- `Media/Logo.tga` — the icon (#97): the logo's eye, for the TOC's `IconTexture`, the minimap
+  button and the guild window's side tab. Made from the owner's artwork (`docs/logo.png`, not
+  shipped) by `Tools/make-logo.py`; never edit the `.tga` by hand. It ships.
 - `Tools/GuildSpyProbe/` — a ForeverProbe module (`/fp gs`, `References\Docs\PROBES.md`), never
   shipped: what Guild Roster Manager sends on the guild channel (#8). `GRMClassify.lua` is pure
   (`tests/test_grmprobe.lua`); `GuildSpyProbe.lua` wires it to the client. The older measurements
@@ -149,8 +152,9 @@ pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
 
 Deploys LibGlass from its checkout first (its own `Tools\deploy.ps1`), then the addon, with
 `@project-version@` rewritten to `dev` in the deployed copy only. **Never commit a literal version
-over that keyword.** In game: `/console scriptErrors 1`. A new file or a TOC change needs a client
-restart (the script says so); otherwise `/reload`.
+over that keyword.** In game: `/console scriptErrors 1`, then `/reload`. New files, new textures and
+TOC changes all load on a `/reload` (re-measured 2026-11-16, #97); a full client exit is for
+persistence tests only.
 
 ## Releasing
 
