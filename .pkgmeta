@@ -15,10 +15,10 @@ manual-changelog:
 externals:
   Libs/LibGlass-1.0:
     url: https://github.com/Spotnick2/LibGlass
-    tag: r11
+    tag: r12
   Libs/LibAccountSync-1.0:
     url: https://github.com/Spotnick2/LibAccountSync
-    tag: r5
+    tag: r6
 
 # YAML list, not markdown bullets: a `*` here silently ignores nothing, which
 # is how development files end up in a published zip.

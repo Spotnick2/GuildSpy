@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.1.0
+
+The latest changes in the minimap button's tooltip, and a new icon.
+
+- **Recent changes in the tooltip.** Hovering the minimap button now lists the guild's latest
+  changes under the "New" line, newest first, with how long ago each happened: the last 5 by
+  default, or 3, 10 or none (Options > AddOns > GuildSpy). It's the same tooltip in the minimap's
+  addon list and in bar addons such as Titan Panel or ChocolateBar. Thanks to GregoryWW for asking.
+- **Level-ups stay out of that list** unless you tick "Level-ups in the tooltip's list", so in a big
+  guild they don't push out the joins, departures and promotions. Reaching the level cap always
+  shows, and the "New" line still counts every level-up.
+- **A new icon**: GuildSpy's own eye-and-shield logo replaces the spyglass on the minimap button,
+  in the addon list and on the guild window's GuildSpy tab.
+- **Account sync is a little sturdier.** When a lot arrives at once, what your other accounts send
+  gets through first. And your other account's character is no longer ignored when it has the same
+  name as yours on another realm.
+- **Russian, Korean and Chinese clients:** the standalone log window's title (with the guild's
+  name) now uses a font that has their letters.
+
 ## v1.0.3
 
 A fix for high memory use.
