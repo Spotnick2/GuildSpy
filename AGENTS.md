@@ -152,8 +152,9 @@ pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
 
 Deploys LibGlass from its checkout first (its own `Tools\deploy.ps1`), then the addon, with
 `@project-version@` rewritten to `dev` in the deployed copy only. **Never commit a literal version
-over that keyword.** In game: `/console scriptErrors 1`. A new file or a TOC change needs a client
-restart (the script says so); otherwise `/reload`.
+over that keyword.** In game: `/console scriptErrors 1`, then `/reload`. New files, new textures and
+TOC changes all load on a `/reload` (re-measured 2026-11-16, #97); a full client exit is for
+persistence tests only.
 
 ## Releasing
 

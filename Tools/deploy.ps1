@@ -113,14 +113,10 @@ New-Item -ItemType Directory -Force -Path $dest | Out-Null
 
 $files = @("GuildSpy.toc", "LICENSE") + (Get-ChildItem -LiteralPath $RepoRoot -File |
     Where-Object { $_.Extension -in ".lua", ".xml" } | Select-Object -ExpandProperty Name)
-# The client reads the TOC and finds new files (a new .lua) only at start:
-# say so when this deploy brings either.
-$restart = @()
-$tocDest = Join-Path $dest "GuildSpy.toc"
-$tocWas = if (Test-Path -LiteralPath $tocDest) { Get-Content -LiteralPath $tocDest -Raw } else { $null }
+# A /reload picks up new files, new textures and TOC changes
+# (References\Docs\PORTING-TBC-TO-FOREVER.md §5, re-measured 2026-11-16, #97).
 foreach ($f in $files) {
     $src = Join-Path $RepoRoot $f
-    if (-not (Test-Path -LiteralPath (Join-Path $dest $f))) { $restart += $f }
     if ($f -like "*.toc") {
         (Get-Content -LiteralPath $src -Raw) -replace '## Version: @project-version@', '## Version: dev' |
             Set-Content -LiteralPath (Join-Path $dest $f) -NoNewline
@@ -165,16 +161,13 @@ if ($missing) {
 }
 Write-Host "  every TOC file is in place" -ForegroundColor DarkGray
 
-# Media: our own textures (the logo, #97), mirrored exactly. A texture the
-# client hasn't seen yet needs a restart (References\Docs\PORTING-TBC-TO-FOREVER.md
-# leaves that unsettled), so a new one says so.
+# Media: our own textures (the logo, #97), mirrored exactly.
 $mediaSrc = Join-Path $RepoRoot "Media"
 $mediaDest = Join-Path $dest "Media"
 $textures = @(if (Test-Path -LiteralPath $mediaSrc) { Get-ChildItem -LiteralPath $mediaSrc -File -Filter *.tga })
 if ($textures.Count -gt 0) { New-Item -ItemType Directory -Force -Path $mediaDest | Out-Null }
 foreach ($t in $textures) {
     $to = Join-Path $mediaDest $t.Name
-    if (-not (Test-Path -LiteralPath $to)) { $restart += "Media\$($t.Name) (new texture)" }
     Copy-Item -LiteralPath $t.FullName -Destination $to -Force
     Write-Host "  Media\$($t.Name)"
 }
@@ -184,12 +177,6 @@ if (Test-Path -LiteralPath $mediaDest) {
 }
 
 Write-Host ""
-if ($tocWas -ne $null -and $tocWas -ne (Get-Content -LiteralPath $tocDest -Raw)) { $restart += "GuildSpy.toc (changed)" }
-if ($restart.Count -gt 0) {
-    Write-Host "RESTART the client (a /reload won't see these): $($restart -join ', ')" -ForegroundColor Red
-} else {
-    Write-Host "Changed files only: /reload is enough." -ForegroundColor Yellow
-}
-Write-Host "In game:  /console scriptErrors 1   then   /gspy" -ForegroundColor Green
+Write-Host "In game:  /console scriptErrors 1   then   /reload   then   /gspy" -ForegroundColor Green
 
 if ($Probe) { Write-Host ""; Deploy-Probe }
