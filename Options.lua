@@ -18,6 +18,7 @@ local function st() return GuildSpyDB.settings end
 GuildSpy.TAGLINE = "Who joined, left, got promoted, levelled or came back: live, and while you were away."
 
 Options.LEVEL_DEFAULT, Options.RETURN_DEFAULT = 10, 14
+Options.TOOLTIP_DEFAULT, Options.TOOLTIP_MAX = 5, 10       -- recent changes in the minimap tooltip (#95)
 
 Options.ITEMS = {
     { key = "digest", kind = "toggle", label = "Login summary",
@@ -51,6 +52,10 @@ Options.ITEMS = {
       note = "Left-click opens or closes the log, right-click opens these settings. Drag it around the minimap.",
       get = function() return GuildSpy.Minimap.Shown() end,
       set = function(v) GuildSpy.Minimap.SetShown(v) end },
+    { key = "tooltipRecent", kind = "choice", label = "Recent changes in the minimap button's tooltip",
+      choices = { { 0, "None" }, { 3, "The last 3" }, { 5, "The last 5" }, { 10, "The last 10" } },
+      note = "Also in the addon compartment, and in bar addons such as Titan Panel or ChocolateBar.",
+      get = function() return st().tooltipRecent or Options.TOOLTIP_DEFAULT end },
 }
 
 -- Chat lines as changes happen, by type. The login summary and the log window

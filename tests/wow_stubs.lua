@@ -188,6 +188,8 @@ function Methods.SetText(w, t)
     if w._type == "GameTooltip" then w._lines = {} end     -- a new tooltip starts with its title
 end
 function Methods.AddLine(w, text) w._lines = w._lines or {}; w._lines[#w._lines + 1] = text end
+-- GameTooltip:AddDoubleLine is in the 70938 dump. Recorded as one line, the two texts joined by a tab.
+function Methods.AddDoubleLine(w, left, right) w._lines = w._lines or {}; w._lines[#w._lines + 1] = left .. "\t" .. right end
 -- A tooltip's owner; taking one clears what it said, as in the client.
 function Methods.SetOwner(w, owner) w._owner = owner; w._lines = {} end
 function Methods.GetText(w) return w._text end

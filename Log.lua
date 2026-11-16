@@ -472,14 +472,56 @@ function Log.View(g, lead)
     return v
 end
 
+-- The changes (Log.Groups) this character may see: officer notes only when it
+-- can read them, guildmates' reports not when they're set to Never.
+function Log.Seen(gs, canViewOfficer, hideReports)
+    return Log.Groups(gs, function(e)
+        return Log.Visible(e, canViewOfficer) and not (hideReports and e.trust == "guild")
+    end)
+end
+
+-- The `n` most recent of `changes` (Log.Seen's), newest first as the window
+-- orders its rows: { { entry = lead, group }, ... } (#95).
+function Log.Recent(gs, changes, n)
+    local of, out = {}, {}
+    for _, g in ipairs(changes) do of[g.lead] = g end
+    local log = gs and gs.log or {}
+    for i = #log, 1, -1 do
+        if #out >= n then break end
+        local g = of[log[i]]
+        if g then out[#out + 1] = { entry = log[i], group = g } end
+    end
+    return out
+end
+
+-- The entry with its long values (a note, the MOTD, the rank list) cut to
+-- `max` bytes and "...", for a one-line rendering (#95). Cut on a character
+-- boundary: a half UTF-8 sequence would show as garbage.
+function Log.Short(e, max)
+    local view
+    for _, f in ipairs({ "from", "to" }) do
+        local v = e[f]
+        if type(v) == "string" and #v > max then
+            view = view or setmetatable({}, { __index = e })
+            local s = v:sub(1, max)
+            local i = s:find("[\192-\255][\128-\191]*$")
+            if i then
+                local lead = s:byte(i)
+                if #s - i + 1 < ((lead >= 240 and 4) or (lead >= 224 and 3) or 2) then s = s:sub(1, i - 1) end
+            end
+            view[f] = s .. "..."
+        end
+    end
+    return view or e
+end
+
 -- The summary groups with changes past `since` this character may see:
 -- { { n, word, color }, ... } in Log.NEW_GROUPS order. A change counts once,
 -- and only while all its records are new (#59).
-function Log.NewCounts(gs, since, canViewOfficer, hideReports)
+-- `changes`: Log.Seen's result for the same arguments, when the caller has it.
+function Log.NewCounts(gs, since, canViewOfficer, hideReports, changes)
     local out = {}
-    local changes = Log.Groups(gs, function(e)
-        return Log.Visible(e, canViewOfficer) and not (hideReports and e.trust == "guild")
-    end)
+    changes = changes or Log.Seen(gs, canViewOfficer, hideReports)
     for _, g in ipairs(Log.NEW_GROUPS) do
         local n = 0
         for _, c in ipairs(changes) do

@@ -48,8 +48,12 @@ function Minimap_.Click(_, button)
 end
 
 -- The guild, who is online at the last scan, what's new since the log window
--- was last looked at, and what the clicks do.
+-- was last looked at, the most recent changes (#95), and what the clicks do.
+-- LibDataBroker displays (Titan Panel, ChocolateBar...) show this tooltip too.
 local HINT = { 0.75, 0.78, 0.85 }
+-- A note, the MOTD or the rank list is cut to this many bytes in the tooltip:
+-- one long value would stretch it across the screen. The window has the whole text.
+Minimap_.SHORT = 40
 local function tooltip(tip, drag)
     tip:AddLine("|cff7fd4ffGuild|rSpy")
     local gs = GuildSpy.Scanner.Current()
@@ -67,9 +71,27 @@ local function tooltip(tip, drag)
         tip:AddLine(guild, 1, 1, 1)
         tip:AddLine(online .. " of " .. total .. " members online", 0.8, 0.8, 0.8)
         -- Guildmates' reports set to Never stay out of this count too (#43 review).
+        local Log = GuildSpy.Log
         local GSync = GuildSpy.GuildSync
         local hide = GSync ~= nil and GSync.ReportsMode() == "never"
-        tip:AddLine(GuildSpy.Log.NewSummary(gs, gs.viewedSeq or 0, GuildSpy.API.CanViewOfficerNote() == true, nil, hide), 1, 1, 1)
+        local canView = GuildSpy.API.CanViewOfficerNote() == true
+        -- One pass over the log for the summary and the list (#87).
+        local changes = Log.Seen(gs, canView, hide)
+        tip:AddLine(Log.NewSummary(gs, gs.viewedSeq or 0, canView, nil, hide,
+            Log.NewCounts(gs, gs.viewedSeq or 0, canView, hide, changes)), 1, 1, 1)
+        -- The most recent changes, as the window's rows (#95). A later version's
+        -- larger number is held to what fits.
+        local n = math.min(math.floor(tonumber(GuildSpy.Options.Get("tooltipRecent")) or 0), GuildSpy.Options.TOOLTIP_MAX)
+        local recent = n > 0 and Log.Recent(gs, changes, n) or {}
+        if #recent > 0 then
+            tip:AddLine(" ")
+            local now = time()
+            for _, r in ipairs(recent) do
+                tip:AddDoubleLine(Log.Row(Log.Short(Log.View(r.group, r.entry), Minimap_.SHORT), now),
+                    Log.When(r.entry, now), 1, 1, 1, 0.6, 0.6, 0.6)
+            end
+            tip:AddLine(" ")
+        end
     else
         tip:AddLine("No guild seen yet.", 0.6, 0.6, 0.6)
     end
