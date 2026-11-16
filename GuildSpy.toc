@@ -3,7 +3,7 @@
 ## Notes: Who joined, left, got promoted, levelled or came back: live, and while you were away. /gspy
 ## Author: Spotnick
 ## Version: @project-version@
-## IconTexture: Interface\Icons\INV_Misc_Spyglass_03
+## IconTexture: Interface\AddOns\GuildSpy\Media\Logo
 ## SavedVariables: GuildSpyDB
 ## OptionalDeps: GlassUI
 ## X-Curse-Project-ID: 1741939

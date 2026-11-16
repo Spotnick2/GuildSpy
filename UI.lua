@@ -33,7 +33,7 @@ UI.ART = {
     classes = "Interface\\Glues\\CharacterCreate\\UI-CharacterCreate-Classes",
     newDot = "communities-icon-notification",
 }
-UI.ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
+UI.ICON = "Interface\\AddOns\\GuildSpy\\Media\\Logo"            -- the logo's eye, as the TOC (#97)
 UI.WINDOW_NAME = "GuildSpyLogWindow"
 -- Above everything in the guild window's content area. A frame level alone
 -- isn't enough (in game the member list and chat showed through), so the host

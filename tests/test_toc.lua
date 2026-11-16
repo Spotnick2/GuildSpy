@@ -12,6 +12,29 @@ check(toc:find("## OptionalDeps: GlassUI\r?\n"), "Glass UI an optional dependenc
 check(toc:find("## X%-Curse%-Project%-ID: 1741939\r?\n"), "the CurseForge project ID")
 check(toc:find("## X%-Wago%-ID: ANz7YQ64\r?\n"), "the Wago project ID")
 
+-- The icon (#97): the logo's eye, one texture for the AddOns list, the
+-- compartment, the minimap button and the guild window's side tab.
+do
+    local icon = toc:match("## IconTexture: ([^\r\n]+)")
+    eq(icon, "Interface\\AddOns\\GuildSpy\\Media\\Logo", "the TOC's icon is our logo")
+    loadAddon()
+    eq(GuildSpy.Minimap.ICON, icon, "...the minimap button uses it")
+    eq(GuildSpy.UI.ICON, icon, "...and the guild window's side tab")
+    local fh = io.open("Media/Logo.tga", "rb")
+    local head = fh and fh:read(18)
+    local body = fh and fh:read("*a")
+    if fh then fh:close() end
+    check(head ~= nil, "Media/Logo.tga exists")
+    if head then
+        local b = { head:byte(1, 18) }
+        eq(b[3], 2, "...an uncompressed true-colour TGA")
+        eq(b[13] + b[14] * 256, 256, "...256 wide")
+        eq(b[15] + b[16] * 256, 256, "...256 high (a power of two)")
+        eq(b[17], 32, "...32 bits a pixel")
+        eq(#body >= 256 * 256 * 4, true, "...and every pixel is there")
+    end
+end
+
 -- The packager substitutes keywords in EVERY file it ships, Lua included (Priestly #83,
 -- Gnomesweeper #75): no shipped Lua file may hold one whole, not even in a comment.
 do

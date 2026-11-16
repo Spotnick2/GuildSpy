@@ -93,6 +93,9 @@ client finds it by name (the package check names it).
   professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
   None of them ship (`.pkgmeta`).
+- `Media/Logo.tga` — the icon (#97): the logo's eye, for the TOC's `IconTexture`, the minimap
+  button and the guild window's side tab. Made from the owner's artwork (`docs/logo.png`, not
+  shipped) by `Tools/make-logo.py`; never edit the `.tga` by hand. It ships.
 - `Tools/GuildSpyProbe/` — a ForeverProbe module (`/fp gs`, `References\Docs\PROBES.md`), never
   shipped: what Guild Roster Manager sends on the guild channel (#8). `GRMClassify.lua` is pure
   (`tests/test_grmprobe.lua`); `GuildSpyProbe.lua` wires it to the client. The older measurements

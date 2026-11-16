@@ -18,7 +18,8 @@ local Minimap_ = {}          -- not "Minimap": that is the client's minimap fram
 GuildSpy.Minimap = Minimap_
 
 local NAME = "GuildSpy"
-Minimap_.ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"      -- the TOC's IconTexture
+-- The logo's eye (#97), the TOC's IconTexture: Media\Logo.tga, made by Tools\make-logo.py.
+Minimap_.ICON = "Interface\\AddOns\\GuildSpy\\Media\\Logo"
 local registered = false
 
 -- LibDBIcon's table. Made (or repaired) once, at ADDON_LOADED (GuildSpy.lua),

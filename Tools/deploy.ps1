@@ -165,6 +165,24 @@ if ($missing) {
 }
 Write-Host "  every TOC file is in place" -ForegroundColor DarkGray
 
+# Media: our own textures (the logo, #97), mirrored exactly. A texture the
+# client hasn't seen yet needs a restart (References\Docs\PORTING-TBC-TO-FOREVER.md
+# leaves that unsettled), so a new one says so.
+$mediaSrc = Join-Path $RepoRoot "Media"
+$mediaDest = Join-Path $dest "Media"
+$textures = @(if (Test-Path -LiteralPath $mediaSrc) { Get-ChildItem -LiteralPath $mediaSrc -File -Filter *.tga })
+if ($textures.Count -gt 0) { New-Item -ItemType Directory -Force -Path $mediaDest | Out-Null }
+foreach ($t in $textures) {
+    $to = Join-Path $mediaDest $t.Name
+    if (-not (Test-Path -LiteralPath $to)) { $restart += "Media\$($t.Name) (new texture)" }
+    Copy-Item -LiteralPath $t.FullName -Destination $to -Force
+    Write-Host "  Media\$($t.Name)"
+}
+if (Test-Path -LiteralPath $mediaDest) {
+    Get-ChildItem -LiteralPath $mediaDest -File | Where-Object { ($textures | ForEach-Object Name) -notcontains $_.Name } |
+        ForEach-Object { Write-Host "  removing stale Media\$($_.Name)" -ForegroundColor DarkYellow; Remove-Item -LiteralPath $_.FullName -Force }
+}
+
 Write-Host ""
 if ($tocWas -ne $null -and $tocWas -ne (Get-Content -LiteralPath $tocDest -Raw)) { $restart += "GuildSpy.toc (changed)" }
 if ($restart.Count -gt 0) {

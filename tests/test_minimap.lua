@@ -47,7 +47,7 @@ do
     eq(WoW.ldbi.registered.GuildSpy, GuildSpyDB.minimap, "...with LibDBIcon, keeping its place in GuildSpyDB.minimap")
     local obj = WoW.ldb.objects.GuildSpy
     eq(obj.type, "launcher", "...as a LibDataBroker launcher")
-    eq(obj.icon, "Interface\\Icons\\INV_Misc_Spyglass_03", "...with the spyglass")
+    eq(obj.icon, "Interface\\AddOns\\GuildSpy\\Media\\Logo", "...with the logo (#97)")
     WoW.fire("PLAYER_LOGIN")
     eq(WoW.ldbi.registrations, 1, "a second login event registers nothing twice")
 
