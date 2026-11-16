@@ -67,6 +67,17 @@ its own glass.
 - **Class icons and colours**, and how long ago each change happened. Hover a row for the exact
   time, where GuildSpy learned it, and the member's notes (the officer note only if you can read it).
 
+## The minimap button
+
+Hover it for your guild at a glance: how many members are online, what's new since you last looked
+at the log, and the **latest changes**, newest first, with how long ago each happened. Level-ups
+stay out of that list unless you ask for them (reaching the level cap always shows), so in a big
+guild the joins, departures and promotions aren't buried under level-ups. The same tooltip shows in
+the minimap's addon list and in bar addons such as Titan Panel or ChocolateBar.
+
+Left-click opens or closes the log, right-click opens the settings, and you can drag it around the
+minimap.
+
 ## Guild professions
 
 A **Professions** tab in the guild window (J), under the GuildSpy tab, lists who in the guild has
@@ -87,6 +98,8 @@ In the game's **Options > AddOns > GuildSpy**, or with `/gspy options`:
 - **Sound at the level cap**, on or off.
 - **Guild professions tab**, shown or hidden (shown by default).
 - **Minimap button**, shown or hidden. It's also in the minimap's addon list.
+- **Recent changes in the minimap button's tooltip:** none, or the last 3, 5 (the default) or 10.
+- **Level-ups in the tooltip's list**, off by default. Reaching the level cap shows either way.
 - **Chat lines:** on or off for each type of change. The login summary and the log window always
   keep everything.
 
