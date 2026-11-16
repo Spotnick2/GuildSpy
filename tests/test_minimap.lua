@@ -155,6 +155,7 @@ do  -- the most recent changes in the tooltip (#95)
     local Log, O = GuildSpy.Log, GuildSpy.Options
     local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
     local now = time()
+    GuildSpyDB.settings.tooltipLevels = true              -- these lists are made of level-ups
     local function show()
         local tip = newTip()
         WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
@@ -254,6 +255,7 @@ do  -- by when it happened, not by place in the log (#96 Codex review)
     local Log = GuildSpy.Log
     local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
     local now = time()
+    GuildSpyDB.settings.tooltipLevels = true
     local function rows()
         local tip = newTip()
         WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
@@ -288,6 +290,56 @@ do  -- by when it happened, not by place in the log (#96 Codex review)
     local b = { at = 100, hi = 90, seq = 2 }
     check(Log.Later(a, b) and not Log.Later(b, a), "the same second: the later window end is newer")
     check(Log.Later({ at = 100, seq = 3 }, { at = 100, seq = 2 }), "...then the later seq")
+end
+
+do  -- level-ups stay out of the list unless asked for (#96)
+    inGuild()
+    local Log, O = GuildSpy.Log, GuildSpy.Options
+    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local now = time()
+    local function rows()
+        local tip = newTip()
+        WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+        local out = {}
+        for _, l in ipairs(tip.lines) do
+            local text = Log.Plain(l):match("^(.-)\t")
+            if text then out[#out + 1] = text end
+        end
+        return out, tip.lines
+    end
+    Log.Add(GuildSpyDB, gs, { kind = "JOIN", name = "Cy New", guid = "Player-1-00000009" }, now - 3600)
+    for i = 1, 6 do
+        Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 30 + i, to = 31 + i }, now - 600 + i)
+    end
+    Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Ann Lee", guid = "Player-1-00000002", from = 59, to = 60 }, now - 300)
+    eq(O.Get("tooltipLevels"), false, "level-ups are off by default")
+    local r, lines = rows()
+    eq(#r, 2, "off: only the join and the level cap")
+    eq(r[1], "Ann Lee reached level 60, the level cap!", "...reaching the cap still shows")
+    eq(r[2], "Cy New joined the guild", "...and the join, behind six newer level-ups")
+    check(Log.Plain(lines[4]):find("7 level changes", 1, true) ~= nil, "...while the New line still counts them")
+    eq(O.Set("tooltipLevels", true), true, "switched on")
+    r = rows()
+    eq(#r, 5, "on: five rows")
+    eq(r[2], "Bo Kay reached level 37", "...the level-ups are in it")
+    O.Set("tooltipLevels", false)
+    -- Only level-ups, switched off: no list and no gaps.
+    gs.log = {}
+    Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 40, to = 41 }, now)
+    r, lines = rows()
+    eq(#r, 0, "nothing but level-ups: no list")
+    eq(lines[5], "Left-click: open or close the log", "...and no gaps")
+
+    -- The settings page has the check box, and a bad saved value goes.
+    local page = O._test.page
+    page:Show()
+    local cb = page.controls.tooltipLevels.check
+    eq(cb:GetChecked(), false, "the settings page: unticked by default")
+    cb:SetChecked(true); cb._scripts.OnClick(cb)
+    eq(GuildSpyDB.settings.tooltipLevels, true, "...ticking it saves it")
+    local bad = { tooltipLevels = "yes", chat = {} }
+    O.Validate(bad)
+    eq(bad.tooltipLevels, nil, "a saved value that isn't true or false goes back to the default")
 end
 
 do  -- hidden in the saved file: it stays hidden

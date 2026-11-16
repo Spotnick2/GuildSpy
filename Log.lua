@@ -495,13 +495,14 @@ end
 -- { { entry = lead, group }, ... } (#95). By when they happened (Log.Later),
 -- not by place in the log: sync appends older history after newer changes,
 -- and the event log's hour can move an entry back (#96 Codex review). The n
--- newest are kept as they come, so a hover sorts no whole log.
-function Log.Recent(changes, n)
+-- newest are kept as they come, so a hover sorts no whole log. `keep(lead)`,
+-- when given, leaves out the changes it says no to.
+function Log.Recent(changes, n, keep)
     local out = {}
     if n <= 0 then return out end
     for _, g in ipairs(changes) do
         local e = g.lead
-        if #out < n or Log.Later(e, out[#out].entry) then
+        if (not keep or keep(e)) and (#out < n or Log.Later(e, out[#out].entry)) then
             local i = math.min(#out, n - 1) + 1
             while i > 1 and Log.Later(e, out[i - 1].entry) do
                 out[i] = out[i - 1]

@@ -82,7 +82,12 @@ local function tooltip(tip, drag)
         -- The most recent changes, as the window's rows (#95). A later version's
         -- larger number is held to what fits.
         local n = math.min(math.floor(tonumber(GuildSpy.Options.Get("tooltipRecent")) or 0), GuildSpy.Options.TOOLTIP_MAX)
-        local recent = n > 0 and Log.Recent(changes, n) or {}
+        -- Level-ups only when asked for: in a big guild they'd fill the list (#96).
+        -- Reaching the level cap stays: it's the one level-up worth a fanfare (#34).
+        local levels = GuildSpy.Options.Get("tooltipLevels") == true
+        local recent = n > 0 and Log.Recent(changes, n, not levels and function(e)
+            return e.kind ~= "LEVEL" or Log.IsCap(e)
+        end or nil) or {}
         if #recent > 0 then
             tip:AddLine(" ")
             local now = time()

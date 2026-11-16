@@ -56,6 +56,9 @@ Options.ITEMS = {
       choices = { { 0, "None" }, { 3, "The last 3" }, { 5, "The last 5" }, { 10, "The last 10" } },
       note = "Also in the addon compartment, and in bar addons such as Titan Panel or ChocolateBar.",
       get = function() return st().tooltipRecent or Options.TOOLTIP_DEFAULT end },
+    { key = "tooltipLevels", kind = "toggle", label = "Level-ups in the tooltip's list",
+      note = "Off, the list skips level-ups (a guildmate reaching the level cap still shows). The New line counts them either way.",
+      get = function() return st().tooltipLevels == true end },
 }
 
 -- Chat lines as changes happen, by type. The login summary and the log window
