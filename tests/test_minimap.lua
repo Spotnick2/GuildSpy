@@ -249,6 +249,47 @@ do  -- the most recent changes in the tooltip (#95)
     eq(bad.tooltipRecent, nil, "a saved value no page could set goes back to the default")
 end
 
+do  -- by when it happened, not by place in the log (#96 Codex review)
+    inGuild()
+    local Log = GuildSpy.Log
+    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local now = time()
+    local function rows()
+        local tip = newTip()
+        WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+        local out = {}
+        for _, l in ipairs(tip.lines) do
+            local text = Log.Plain(l):match("^(.-)\t")
+            if text then out[#out + 1] = text end
+        end
+        return out
+    end
+    -- Five changes from today, then sync catching up appends five from yesterday.
+    for i = 1, 5 do
+        Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 30 + i, to = 31 + i }, now - 600 + i)
+    end
+    for i = 1, 5 do
+        Log.Receive(GuildSpyDB, gs, { uid = "bo2:" .. i, rev = 1, kind = "JOIN", guid = "Player-1-000000B" .. i, name = "Old Join" .. i,
+            at = now - 86400 + i, lo = now - 86460 + i, hi = now - 86400 + i, obs = now - 86400 + i, origin = "Ann Lee" },
+            "guild", "Ann Lee", now)
+    end
+    check(gs.log[#gs.log].name == "Old Join5", "(yesterday's joins are last in the log)")
+    local r = rows()
+    eq(#r, 5, "five rows")
+    eq(r[1], "Bo Kay reached level 36", "the newest by time first, though older history was appended after it")
+    eq(r[5], "Bo Kay reached level 32", "...today's five, none of yesterday's")
+    -- An entry the event log dates back (Log.Enrich moving `at`) sorts by that time.
+    gs.log[5].at = now - 2 * 86400
+    r = rows()
+    eq(r[1], "Bo Kay reached level 35", "an entry moved back in time drops from the top")
+    eq(r[5], "Old Join5 joined the guild  (reported)", "...and the newest older change takes its place")
+    -- Same second: the window's tie-breakers (hi, then seq) decide, as in the window.
+    local a = { at = 100, hi = 100, seq = 1 }
+    local b = { at = 100, hi = 90, seq = 2 }
+    check(Log.Later(a, b) and not Log.Later(b, a), "the same second: the later window end is newer")
+    check(Log.Later({ at = 100, seq = 3 }, { at = 100, seq = 2 }), "...then the later seq")
+end
+
 do  -- hidden in the saved file: it stays hidden
     loadAddon({ db = { minimap = { hide = true, minimapPos = 123 } } })
     WoW.fire("PLAYER_LOGIN")

@@ -82,7 +82,7 @@ local function tooltip(tip, drag)
         -- The most recent changes, as the window's rows (#95). A later version's
         -- larger number is held to what fits.
         local n = math.min(math.floor(tonumber(GuildSpy.Options.Get("tooltipRecent")) or 0), GuildSpy.Options.TOOLTIP_MAX)
-        local recent = n > 0 and Log.Recent(gs, changes, n) or {}
+        local recent = n > 0 and Log.Recent(changes, n) or {}
         if #recent > 0 then
             tip:AddLine(" ")
             local now = time()

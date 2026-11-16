@@ -480,16 +480,35 @@ function Log.Seen(gs, canViewOfficer, hideReports)
     end)
 end
 
--- The `n` most recent of `changes` (Log.Seen's), newest first as the window
--- orders its rows: { { entry = lead, group }, ... } (#95).
-function Log.Recent(gs, changes, n)
-    local of, out = {}, {}
-    for _, g in ipairs(changes) do of[g.lead] = g end
-    local log = gs and gs.log or {}
-    for i = #log, 1, -1 do
-        if #out >= n then break end
-        local g = of[log[i]]
-        if g then out[#out + 1] = { entry = log[i], group = g } end
+-- Whether `a` happened after `b`: the window's row order, newest first.
+-- One scan dates what it noticed to the same second; their windows still
+-- order them (#59): a departure the next scan confirmed ended before a
+-- join it saw, as a recreated character's old self leaves the name free.
+function Log.Later(a, b)
+    if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+    local ha, hb = tonumber(a.hi) or a.at or 0, tonumber(b.hi) or b.at or 0
+    if ha ~= hb then return ha > hb end
+    return a.seq > b.seq
+end
+
+-- The `n` most recent of `changes` (Log.Seen's), newest first:
+-- { { entry = lead, group }, ... } (#95). By when they happened (Log.Later),
+-- not by place in the log: sync appends older history after newer changes,
+-- and the event log's hour can move an entry back (#96 Codex review). The n
+-- newest are kept as they come, so a hover sorts no whole log.
+function Log.Recent(changes, n)
+    local out = {}
+    if n <= 0 then return out end
+    for _, g in ipairs(changes) do
+        local e = g.lead
+        if #out < n or Log.Later(e, out[#out].entry) then
+            local i = math.min(#out, n - 1) + 1
+            while i > 1 and Log.Later(e, out[i - 1].entry) do
+                out[i] = out[i - 1]
+                i = i - 1
+            end
+            out[i] = { entry = e, group = g }
+        end
     end
     return out
 end
