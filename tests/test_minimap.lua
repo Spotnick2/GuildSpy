@@ -34,6 +34,13 @@ local function inGuild(db)
     WoW.advance(25)
     return G
 end
+-- A tooltip that records its lines; a double line is its two texts joined by a tab.
+local function newTip()
+    local tip = { lines = {} }
+    function tip:AddLine(text) self.lines[#self.lines + 1] = text end
+    function tip:AddDoubleLine(l, r) self.lines[#self.lines + 1] = l .. "\t" .. r end
+    return tip
+end
 local function win() return GuildSpy._test.UI.window() end
 local function isOpen() return win() ~= nil and win():IsShown() end
 
@@ -62,8 +69,7 @@ do
     eq(WoW.settings.opened, "cat:GuildSpy", "right-click opens the settings")
 
     -- Out of a guild: the tooltip says so, and what the clicks do.
-    local tip = { lines = {} }
-    function tip:AddLine(text) self.lines[#self.lines + 1] = text end
+    local tip = newTip()
     obj.OnTooltipShow(tip)
     eq(tip.lines[1], "|cff7fd4ffGuild|rSpy", "the tooltip names it")
     eq(tip.lines[2], "No guild seen yet.", "...no guild yet")
@@ -107,8 +113,7 @@ do  -- in a guild: the tooltip has the guild, who's online, and what's new
     local now = time()
     GuildSpy.Log.Add(GuildSpyDB, gs, { kind = "JOIN", name = "Cy New", guid = "Player-1-00000009" }, now)
     GuildSpy.Log.Add(GuildSpyDB, gs, { kind = "ONOTE", name = "Ann Lee", guid = "Player-1-00000002", from = "", to = "tank" }, now)
-    local tip = { lines = {} }
-    function tip:AddLine(text) self.lines[#self.lines + 1] = text end
+    local tip = newTip()
     WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
     eq(tip.lines[2], "Parse Partout", "the guild's name")
     eq(tip.lines[3], "2 of 3 members online", "...who's online at the last scan")
@@ -143,6 +148,198 @@ do  -- in a guild: the tooltip has the guild, who's online, and what's new
     tip.lines = {}
     WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
     eq(tip.lines[3], "1 of 2 members online", "a member pending departure isn't counted")
+end
+
+do  -- the most recent changes in the tooltip (#95)
+    inGuild()
+    local Log, O = GuildSpy.Log, GuildSpy.Options
+    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local now = time()
+    GuildSpyDB.settings.tooltipLevels = true              -- these lists are made of level-ups
+    local function show()
+        local tip = newTip()
+        WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+        for i, l in ipairs(tip.lines) do tip.lines[i] = Log.Plain(l) end
+        return tip.lines
+    end
+    Log.Add(GuildSpyDB, gs, { kind = "JOIN", name = "Cy New", guid = "Player-1-00000009" }, now - 7200)
+    Log.Add(GuildSpyDB, gs, { kind = "ONOTE", name = "Ann Lee", guid = "Player-1-00000002", from = "", to = "tank" }, now - 60)
+    eq(O.Get("tooltipRecent"), 5, "the last 5 by default")
+    local lines = show()
+    eq(lines[5], " ", "a gap after the summary")
+    eq(lines[6], "Cy New joined the guild\t2h ago", "a change as the window's row, its time on the right")
+    eq(lines[7], " ", "...one change only: no officer note for a non-officer")
+    eq(lines[8], "Left-click: open or close the log", "...then a gap and the hints")
+    WoW.guild.canViewOfficerNote = true
+    lines = show()
+    eq(lines[6], "Ann Lee officer note: \"tank\"\t1m ago", "an officer sees the officer note, newest first")
+    eq(lines[7], "Cy New joined the guild\t2h ago", "...then the older change")
+    WoW.guild.canViewOfficerNote = false
+
+    -- More than fit: the newest five, newest first.
+    for i = 1, 6 do
+        Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 30 + i, to = 31 + i }, now - 600 + i)
+    end
+    lines = show()
+    eq(lines[6], "Bo Kay reached level 37\t9m ago", "the newest first")
+    eq(lines[10], "Bo Kay reached level 33\t9m ago", "...five of them")
+    eq(lines[11], " ", "...and no more")
+    O.Set("tooltipRecent", 3)
+    lines = show()
+    eq(lines[8], "Bo Kay reached level 35\t9m ago", "the last 3: three")
+    eq(lines[9], " ", "...and no more")
+    O.Set("tooltipRecent", 0)
+    lines = show()
+    eq(lines[5], "Left-click: open or close the log", "None: no list, no gaps")
+    eq(O.Set("tooltipRecent", 4), false, "a number that isn't a choice is refused")
+    for i = 1, 5 do
+        Log.Add(GuildSpyDB, gs, { kind = "NOTE", name = "Bo Kay", guid = "Player-1-00000003", from = "n" .. (i - 1), to = "n" .. i }, now - 300 + i)
+    end
+    GuildSpyDB.settings.tooltipRecent = 50                -- a later version's larger number (12 changes now)
+    lines = show()
+    local rows = 0
+    for _, l in ipairs(lines) do if l:find("\t", 1, true) then rows = rows + 1 end end
+    eq(rows, 10, "a larger saved number is held to 10")
+    eq(lines[15], "Bo Kay reached level 33\t9m ago", "...the newest ten")
+    GuildSpyDB.settings.tooltipRecent = nil
+
+    -- A long value is cut, on a character boundary; the window keeps it whole.
+    local motd = ("\226\130\172"):rep(20)                 -- 20 euro signs, 3 bytes each
+    Log.Add(GuildSpyDB, gs, { kind = "MOTD", to = motd }, now)
+    lines = show()
+    local shown = lines[6]:match('^New MOTD: "(.-)"\t')
+    eq(shown, ("\226\130\172"):rep(13) .. "...", "a long MOTD: cut to 40 bytes, not halfway through a character")
+    eq(Log.Short({ to = ("\195\169"):rep(30) }, 40).to, ("\195\169"):rep(20) .. "...", "...a cut between two characters keeps them all")
+    eq(gs.log[#gs.log].to, motd, "...the log keeps it whole")
+    eq(Log.Short({ kind = "NOTE", to = "short" }, 40).to, "short", "a short value is left alone")
+    local pipes = Log.Short({ kind = "NOTE", to = ("|"):rep(50) }, 40)
+    eq(Log.Plain(Log.Row(pipes, now)), "? note: \"" .. ("|"):rep(40) .. "...\"", "a cut value is escaped after the cut")
+
+    -- Guildmates' reports: listed, marked, unless they're set to Never.
+    Log.Receive(GuildSpyDB, gs, { uid = "bo1:1", rev = 1, kind = "JOIN", guid = "Player-1-0000000A", name = "Di Fox",
+        at = now - 30, lo = now - 90, hi = now - 30, obs = now - 30, origin = "Bo Kay" }, "guild", "Bo Kay", now)
+    local function listed(text)
+        for _, l in ipairs(show()) do if l:find(text, 1, true) then return true end end
+        return false
+    end
+    check(listed("Di Fox joined the guild  (reported)"), "a guildmate's report is listed, marked")
+    GuildSpyDB.settings.reports = "never"
+    check(not listed("Di Fox"), "...not with reports set to Never")
+    GuildSpyDB.settings.reports = nil
+
+    -- The compartment's tooltip (GameTooltip) has the list too.
+    GuildSpy_OnAddonCompartmentEnter(nil, CreateFrame("Frame"))
+    local found = false
+    for _, l in ipairs(GameTooltip._lines or {}) do
+        if Log.Plain(l):find("^New MOTD: ") then found = true end
+    end
+    check(found, "the addon compartment's tooltip lists them")
+
+    -- The settings page has the choice.
+    local page = O._test.page
+    page:Show()
+    local radios = page.controls.tooltipRecent.radios
+    eq(#radios, 4, "the settings page: None, 3, 5, 10")
+    local sel
+    for _, rb in ipairs(radios) do if rb:GetChecked() then sel = rb.value end end
+    eq(sel, 5, "...5 selected by default")
+    radios[1]._scripts.OnClick(radios[1])
+    eq(GuildSpyDB.settings.tooltipRecent, 0, "...None: saved")
+    local bad = { tooltipRecent = "x", chat = {} }
+    O.Validate(bad)
+    eq(bad.tooltipRecent, nil, "a saved value no page could set goes back to the default")
+end
+
+do  -- by when it happened, not by place in the log (#96 Codex review)
+    inGuild()
+    local Log = GuildSpy.Log
+    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local now = time()
+    GuildSpyDB.settings.tooltipLevels = true
+    local function rows()
+        local tip = newTip()
+        WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+        local out = {}
+        for _, l in ipairs(tip.lines) do
+            local text = Log.Plain(l):match("^(.-)\t")
+            if text then out[#out + 1] = text end
+        end
+        return out
+    end
+    -- Five changes from today, then sync catching up appends five from yesterday.
+    for i = 1, 5 do
+        Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 30 + i, to = 31 + i }, now - 600 + i)
+    end
+    for i = 1, 5 do
+        Log.Receive(GuildSpyDB, gs, { uid = "bo2:" .. i, rev = 1, kind = "JOIN", guid = "Player-1-000000B" .. i, name = "Old Join" .. i,
+            at = now - 86400 + i, lo = now - 86460 + i, hi = now - 86400 + i, obs = now - 86400 + i, origin = "Ann Lee" },
+            "guild", "Ann Lee", now)
+    end
+    check(gs.log[#gs.log].name == "Old Join5", "(yesterday's joins are last in the log)")
+    local r = rows()
+    eq(#r, 5, "five rows")
+    eq(r[1], "Bo Kay reached level 36", "the newest by time first, though older history was appended after it")
+    eq(r[5], "Bo Kay reached level 32", "...today's five, none of yesterday's")
+    -- An entry the event log dates back (Log.Enrich moving `at`) sorts by that time.
+    gs.log[5].at = now - 2 * 86400
+    r = rows()
+    eq(r[1], "Bo Kay reached level 35", "an entry moved back in time drops from the top")
+    eq(r[5], "Old Join5 joined the guild  (reported)", "...and the newest older change takes its place")
+    -- Same second: the window's tie-breakers (hi, then seq) decide, as in the window.
+    local a = { at = 100, hi = 100, seq = 1 }
+    local b = { at = 100, hi = 90, seq = 2 }
+    check(Log.Later(a, b) and not Log.Later(b, a), "the same second: the later window end is newer")
+    check(Log.Later({ at = 100, seq = 3 }, { at = 100, seq = 2 }), "...then the later seq")
+end
+
+do  -- level-ups stay out of the list unless asked for (#96)
+    inGuild()
+    local Log, O = GuildSpy.Log, GuildSpy.Options
+    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local now = time()
+    local function rows()
+        local tip = newTip()
+        WoW.ldb.objects.GuildSpy.OnTooltipShow(tip)
+        local out = {}
+        for _, l in ipairs(tip.lines) do
+            local text = Log.Plain(l):match("^(.-)\t")
+            if text then out[#out + 1] = text end
+        end
+        return out, tip.lines
+    end
+    Log.Add(GuildSpyDB, gs, { kind = "JOIN", name = "Cy New", guid = "Player-1-00000009" }, now - 3600)
+    for i = 1, 6 do
+        Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 30 + i, to = 31 + i }, now - 600 + i)
+    end
+    Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Ann Lee", guid = "Player-1-00000002", from = 59, to = 60 }, now - 300)
+    eq(O.Get("tooltipLevels"), false, "level-ups are off by default")
+    local r, lines = rows()
+    eq(#r, 2, "off: only the join and the level cap")
+    eq(r[1], "Ann Lee reached level 60, the level cap!", "...reaching the cap still shows")
+    eq(r[2], "Cy New joined the guild", "...and the join, behind six newer level-ups")
+    check(Log.Plain(lines[4]):find("7 level changes", 1, true) ~= nil, "...while the New line still counts them")
+    eq(O.Set("tooltipLevels", true), true, "switched on")
+    r = rows()
+    eq(#r, 5, "on: five rows")
+    eq(r[2], "Bo Kay reached level 37", "...the level-ups are in it")
+    O.Set("tooltipLevels", false)
+    -- Only level-ups, switched off: no list and no gaps.
+    gs.log = {}
+    Log.Add(GuildSpyDB, gs, { kind = "LEVEL", name = "Bo Kay", guid = "Player-1-00000003", from = 40, to = 41 }, now)
+    r, lines = rows()
+    eq(#r, 0, "nothing but level-ups: no list")
+    eq(lines[5], "Left-click: open or close the log", "...and no gaps")
+
+    -- The settings page has the check box, and a bad saved value goes.
+    local page = O._test.page
+    page:Show()
+    local cb = page.controls.tooltipLevels.check
+    eq(cb:GetChecked(), false, "the settings page: unticked by default")
+    cb:SetChecked(true); cb._scripts.OnClick(cb)
+    eq(GuildSpyDB.settings.tooltipLevels, true, "...ticking it saves it")
+    local bad = { tooltipLevels = "yes", chat = {} }
+    O.Validate(bad)
+    eq(bad.tooltipLevels, nil, "a saved value that isn't true or false goes back to the default")
 end
 
 do  -- hidden in the saved file: it stays hidden

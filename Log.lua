@@ -472,14 +472,76 @@ function Log.View(g, lead)
     return v
 end
 
+-- The changes (Log.Groups) this character may see: officer notes only when it
+-- can read them, guildmates' reports not when they're set to Never.
+function Log.Seen(gs, canViewOfficer, hideReports)
+    return Log.Groups(gs, function(e)
+        return Log.Visible(e, canViewOfficer) and not (hideReports and e.trust == "guild")
+    end)
+end
+
+-- Whether `a` happened after `b`: the window's row order, newest first.
+-- One scan dates what it noticed to the same second; their windows still
+-- order them (#59): a departure the next scan confirmed ended before a
+-- join it saw, as a recreated character's old self leaves the name free.
+function Log.Later(a, b)
+    if (a.at or 0) ~= (b.at or 0) then return (a.at or 0) > (b.at or 0) end
+    local ha, hb = tonumber(a.hi) or a.at or 0, tonumber(b.hi) or b.at or 0
+    if ha ~= hb then return ha > hb end
+    return a.seq > b.seq
+end
+
+-- The `n` most recent of `changes` (Log.Seen's), newest first:
+-- { { entry = lead, group }, ... } (#95). By when they happened (Log.Later),
+-- not by place in the log: sync appends older history after newer changes,
+-- and the event log's hour can move an entry back (#96 Codex review). The n
+-- newest are kept as they come, so a hover sorts no whole log. `keep(lead)`,
+-- when given, leaves out the changes it says no to.
+function Log.Recent(changes, n, keep)
+    local out = {}
+    if n <= 0 then return out end
+    for _, g in ipairs(changes) do
+        local e = g.lead
+        if (not keep or keep(e)) and (#out < n or Log.Later(e, out[#out].entry)) then
+            local i = math.min(#out, n - 1) + 1
+            while i > 1 and Log.Later(e, out[i - 1].entry) do
+                out[i] = out[i - 1]
+                i = i - 1
+            end
+            out[i] = { entry = e, group = g }
+        end
+    end
+    return out
+end
+
+-- The entry with its long values (a note, the MOTD, the rank list) cut to
+-- `max` bytes and "...", for a one-line rendering (#95). Cut on a character
+-- boundary: a half UTF-8 sequence would show as garbage.
+function Log.Short(e, max)
+    local view
+    for _, f in ipairs({ "from", "to" }) do
+        local v = e[f]
+        if type(v) == "string" and #v > max then
+            view = view or setmetatable({}, { __index = e })
+            local s = v:sub(1, max)
+            local i = s:find("[\192-\255][\128-\191]*$")
+            if i then
+                local lead = s:byte(i)
+                if #s - i + 1 < ((lead >= 240 and 4) or (lead >= 224 and 3) or 2) then s = s:sub(1, i - 1) end
+            end
+            view[f] = s .. "..."
+        end
+    end
+    return view or e
+end
+
 -- The summary groups with changes past `since` this character may see:
 -- { { n, word, color }, ... } in Log.NEW_GROUPS order. A change counts once,
 -- and only while all its records are new (#59).
-function Log.NewCounts(gs, since, canViewOfficer, hideReports)
+-- `changes`: Log.Seen's result for the same arguments, when the caller has it.
+function Log.NewCounts(gs, since, canViewOfficer, hideReports, changes)
     local out = {}
-    local changes = Log.Groups(gs, function(e)
-        return Log.Visible(e, canViewOfficer) and not (hideReports and e.trust == "guild")
-    end)
+    changes = changes or Log.Seen(gs, canViewOfficer, hideReports)
     for _, g in ipairs(Log.NEW_GROUPS) do
         local n = 0
         for _, c in ipairs(changes) do
