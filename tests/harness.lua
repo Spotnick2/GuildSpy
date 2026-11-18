@@ -1,42 +1,22 @@
--- harness.lua: assertions and the addon loader. dofile it after wow_stubs.lua.
+-- harness.lua: the addon loader. dofile it after wow_stubs.lua. The
+-- assertions (check, eq, done) are WowTestKit's, global.
 
-local passed, failed = 0, 0
+-- A pure test loads no stub (newPureEnv below); it still takes the kit's
+-- assertions, so its done() is the same as every other file's.
+if not rawget(_G, "Kit") then dofile("tests/kit.lua") end
 
-function check(cond, msg)
-    if cond then passed = passed + 1 else
-        failed = failed + 1
-        io.write("  FAIL: " .. tostring(msg) .. "\n")
-    end
-end
-
-function eq(actual, expected, msg)
-    check(actual == expected, string.format("%s: expected %s, got %s", msg, tostring(expected), tostring(actual)))
-end
-
-function done(name)
-    io.write(string.format("%s: %d passed, %d failed\n", name, passed, failed))
-    os.exit(failed == 0 and 0 or 1)
-end
+TOC = "GuildSpy.toc"
 
 -- Every file line of the TOC, in load order, as written (backslashes).
-function tocLines()
-    local lines = {}
-    for line in io.lines("GuildSpy.toc") do
-        line = line:gsub("\r", "")
-        if line ~= "" and not line:match("^#") then lines[#lines + 1] = line end
-    end
-    return lines
-end
+function tocLines() return Kit.tocLines(TOC) end
 
 -- Lua files listed in the TOC, in load order, as paths from the repo root.
--- `all` includes Libs\ (vendored libraries; none yet), which the tests never
+-- `all` includes Libs\ (the vendored libraries), which the tests never
 -- load. The embedded LibGlass-1.0 is the TOC's .xml line, never in this list: libGlassScripts() has its files.
 function tocFiles(all)
     local files = {}
-    for _, line in ipairs(tocLines()) do
-        if line:match("%.lua$") and (all or not line:match("^Libs\\")) then
-            files[#files + 1] = (line:gsub("\\", "/"))
-        end
+    for _, file in ipairs(Kit.tocFiles(TOC)) do
+        if all or not file:match("^Libs/") then files[#files + 1] = file end
     end
     return files
 end

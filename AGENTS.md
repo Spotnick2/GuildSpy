@@ -126,18 +126,27 @@ No build step. The Lua 5.1 toolchain is at `C:\Program Files (x86)\Lua\5.1\` (`l
 
 - `pwsh tests/run.ps1` — `luac -p` on every TOC file, then every `tests/test_*.lua`. Must be green
   before every commit. It needs a **LibGlass checkout** (`$env:LIBGLASS`, else `..\LibGlass`) and
-  warns when it's not at the `.pkgmeta` pin.
+  warns when it's not at the `.pkgmeta` pin. `-KitDev` runs against `..\WowTestKit` (below).
 
 ## Testing
 
+- The test scaffolding is WowTestKit (`C:\Projects\WoW\WowTestKit`; its README is the reference)
+  at the commit and client build `tests\kit.pin` names. `tests\run.ps1` puts that commit in
+  `%LOCALAPPDATA%\WowTestKit\<sha>` and hands off to the kit's runner; CI fetches it with
+  `tests\fetch_kit.sh`. `tests\kit.lua`, `kit.ps1` and `fetch_kit.sh` are the kit's bootstrap
+  copies: never edit them here. A kit need is an issue on the kit, worked around in
+  `tests\wow_stubs.lua` with a `-- WowTestKit #N:` comment meanwhile. `tests\run.ps1 -KitDev`
+  runs against the `..\WowTestKit` working copy instead of the pin.
 - `tests/wow_stubs.lua` is an **allowlist model of the Forever client**, driven through the global
-  `WoW` table: globals are strict (reading an unstubbed one errors), and `RegisterEvent` throws on an
-  event missing from `tests/events-1.60.1.70532.txt` (checked against the dump by `test_toc`).
+  `WoW` table: the kit's core (strict globals, widgets that record every method called, events
+  checked against the build, timers, `print`'s stray-`|` check), plus GuildSpy's own client APIs
+  and the libraries' fakes. `tests/test_methods.lua` checks every widget method called, and every
+  client function the stub defines, against the build.
 - **The stubs must model Forever, not Classic or Retail.** Before stubbing a global, confirm it's in
   the API dump. The guild tuple shapes in the stub are **measured on 70338**
   (`docs/FOREVER-PROBE.md`); keep them matched to it on every new measurement or build.
-- `tests/harness.lua`: `check`, `eq`, `done`, `tocFiles`, `loadAddon({ db, setup })`, `newPureEnv`.
-  Internals are reached through `GuildSpy._test`.
+- `tests/harness.lua`: `tocFiles`, `loadAddon({ db, setup })`, `newPureEnv`; `check`, `eq`, `done`
+  are the kit's. Internals are reached through `GuildSpy._test`.
 - Add a test as `tests/test_<area>.lua`; `run.ps1` picks it up. Prove a new test bites: break the
   behaviour and watch it go red.
 

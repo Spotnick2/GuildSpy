@@ -1,200 +1,94 @@
--- wow_stubs.lua: a model of the Forever client, driven through WoW.
+-- wow_stubs.lua: GuildSpy's part of the WoW: Forever mock for Lua 5.1 unit
+-- tests. dofile("tests/wow_stubs.lua") FIRST in every test; drive it via the
+-- WoW table.
 --
--- AN ALLOWLIST, like the siblings' (..\GlassRaidFrames\tests\wow_stubs.lua):
---   * Globals are STRICT: reading one that isn't defined here is an error.
---     Before stubbing a global, confirm it is in
---     C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70532.md and copy its signature;
---     defining something Forever lacks lets a broken call pass.
---   * RegisterEvent throws on an event the client doesn't have (the list is
---     tests/events-1.60.1.70532.txt, generated from the dump by
---     Tools/make_events_fixture.py; test_toc checks they agree).
---   * Widgets answer ANY method as a recorded no-op, so a call to a method
---     Forever lacks would pass silently: tests/test_methods.lua checks every
---     "Type:Method" in WoW.methodsCalled against the dump's widget methods.
+-- The mechanics are WowTestKit's core (tests/kit.lua loads it at the commit
+-- and build tests/kit.pin names; its README is the reference): strict
+-- globals, secrets, CreateFrame and the widget method recorder
+-- (WoW.methodsCalled, checked by Kit.checkMethods in tests/test_methods.lua),
+-- events checked against the build, OnShow / OnHide, timers and the clock
+-- (WoW.now, WoW.advance), hooksecurefunc, print with its stray-"|" check,
+-- WoW.fire. This file adds only what GuildSpy and its tests use beyond them:
+-- the templates' children, the tooltip, Blizzard's list and menu mixins, the
+-- recording fakes of the libraries, and the client APIs the addon reads.
 --
--- Fields that tests drive: WoW.now (GetTime), WoW.screen (UIParent's size),
--- frame._left / frame._top (what GetLeft / GetTop answer), frame._mouseOver,
--- and the guild: WoW.guild (see "The guild" below).
-
-local EVENTS_FIXTURE = "tests/events-1.60.1.70532.txt"
-
-WoW = { frames = {}, chat = {}, methodsCalled = {}, now = 0, screen = { w = 1366, h = 768 } }
-
-WoW.KNOWN_EVENTS = {}
-do
-    local f = assert(io.open(EVENTS_FIXTURE, "r"), EVENTS_FIXTURE .. " missing (python Tools/make_events_fixture.py)")
-    for line in f:lines() do
-        local name = line:match("^([A-Z][A-Z0-9_]+)%s*$")
-        if name then WoW.KNOWN_EVENTS[name] = true end
-    end
-    f:close()
-end
+-- AN ALLOWLIST: before stubbing a global, confirm it is in the API dump
+-- (C:\Projects\WoW\References\Forever\api\, the build tests/kit.pin names)
+-- and copy its signature; defining something Forever lacks lets a broken call
+-- pass.
+--
+-- Fields that tests drive: WoW.now (GetTime), WoW.epoch (time()), frame._left /
+-- frame._top (what GetLeft / GetTop answer), frame._mouseOver, and the guild:
+-- WoW.guild (see "The guild" below).
+dofile("tests/kit.lua")
+local Methods = WoW.Methods
 
 --------------------------------------------------------------------------------
--- Widgets
+-- Frames
 --------------------------------------------------------------------------------
 
-local Methods = {}   -- the methods that do something; every other one is a recorded no-op
-
-local widgetMT = {
-    __index = function(w, k)
-        if type(k) ~= "string" or not k:match("^%u") then return nil end   -- fields read as nil
-        return function(self, ...)
-            WoW.methodsCalled[self._type .. ":" .. k] = true
-            local impl = Methods[k]
-            if impl then return impl(self, ...) end
-            return nil
-        end
-    end,
-}
-
-local function newWidget(wtype, parent, name)
-    local w = setmetatable({
-        _type = wtype, _parent = parent, _name = name, _shown = true, _points = {},
-        _scripts = {}, _events = {}, _width = 0, _height = 0, _scale = 1,
-        _level = parent and parent._level and (parent._level + 1) or 1,
-        _strata = "MEDIUM", _text = "",
-    }, widgetMT)
-    if WoW.widgets then WoW.widgets[#WoW.widgets + 1] = w end   -- every widget made (the locale guard walks them)
-    if parent then
-        parent._children = parent._children or {}
-        table.insert(parent._children, w)
-    end
-    return w
-end
-
+-- WowTestKit #85: an XML intrinsic is a widget of its base type with a mixin
+-- (wow-ui-source forever 70959: Blizzard_SharedXML/Shared/Frame/EventFrame.xml:3
+-- is a <Frame ... intrinsic="true">, Blizzard_Menu/DropdownButton.xml:3 a
+-- <Button ... intrinsic="true">). The core would make a widget of a type the
+-- build lacks; made as its base type here, the name asked for in _intrinsic.
+local INTRINSIC = { EventFrame = "Frame", DropdownButton = "Button" }
+local kitCreateFrame = CreateFrame
 function CreateFrame(ftype, name, parent, template)
-    assert(ftype == "Frame" or ftype == "Button" or ftype == "StatusBar" or ftype == "CheckButton" or ftype == "EditBox" or ftype == "ScrollFrame"
-        or ftype == "EventFrame" or ftype == "DropdownButton",
-        "CreateFrame: unexpected frame type " .. tostring(ftype))
-    local w = newWidget(ftype, parent or UIParent, name)
-    w._template = template
-    -- What the client's templates make (the field each is proved by, as API.SafeFrame checks),
-    -- unless the test says the template is missing (it then returns a bare frame, as the client does).
-    if template and not WoW.missingTemplates[template] then
-        if template == "UICheckButtonTemplate" or template == "UIRadioButtonTemplate" then
-            w.text = newWidget("FontString", w)
-        elseif template == "UIPanelButtonTemplate" then
-            w.Text = newWidget("FontString", w)
-        elseif template == "UIPanelScrollFrameTemplate" then
-            w.ScrollBar = newWidget("Slider", w)
-        elseif template == "RightSideTabTemplate" then
-            w.Icon = newWidget("Texture", w)          -- RightSideTab.xml's parentKey="Icon"
-        end
-    end
-    table.insert(WoW.frames, w)
-    if name then rawset(_G, name, w) end
+    local base = INTRINSIC[ftype]
+    local w = kitCreateFrame(base or ftype, name, parent, template)
+    if base then w._intrinsic = ftype end
     return w
 end
 
-function Methods.CreateTexture(w, name) return newWidget("Texture", w, name) end
--- Animations: a group records its animations and whether it plays; an
--- animation records its type, so test_methods can check each call against the
--- dump's SimpleAnim<Type>API.
-function Methods.CreateAnimationGroup(w)
-    local ag = newWidget("AnimationGroup", w)
-    ag._anims, ag._playing = {}, false
-    return ag
+-- What the client's templates make that the addon reaches (the field each is
+-- proved by, as API.SafeFrame checks), unless the test says the template is
+-- missing (WoW.missingTemplates: CreateFrame then returns a bare frame, as the
+-- client does). A template font string has its font (wow-ui-source forever
+-- 70959): CheckButtonTemplates.xml:8 and :54 (GameFontNormalSmall),
+-- SecureUIPanelTemplates.xml:81-82 (UIPanelButtonNoTooltipTemplate's
+-- ButtonText, NormalFont GameFontNormal).
+local function templateFontString(w, font)
+    local fs = WoW.newWidget("FontString", w)
+    fs._fontTemplate = font
+    return fs
 end
-function Methods.CreateAnimation(ag, atype)
-    local a = newWidget(atype or "Animation", ag)
-    a._animType = atype
-    table.insert(ag._anims, a)
-    return a
+local function unlessMissing(build)
+    return function(w, t) if not WoW.missingTemplates[t] then build(w, t) end end
 end
-function Methods.Play(ag) ag._playing = true; ag._plays = (ag._plays or 0) + 1 end
-function Methods.Stop(ag) ag._playing = false end
-function Methods.IsPlaying(ag) return ag._playing == true end
-function Methods.SetLooping(ag, l) ag._looping = l end
-function Methods.SetDegrees(a, d) a._degrees = d end
-function Methods.SetStartDelay(a, d) a._delay = d end
-function Methods.SetEndDelay(a, d) a._endDelay = d end
-function Methods.SetDuration(a, d) a._duration = d end
-function Methods.CreateMaskTexture(w, name) return newWidget("MaskTexture", w, name) end
-function Methods.CreateFontString(w, name) return newWidget("FontString", w, name) end
+WoW.templates.UICheckButtonTemplate = unlessMissing(function(w) w.text = templateFontString(w, "GameFontNormalSmall") end)
+WoW.templates.UIRadioButtonTemplate = unlessMissing(function(w) w.text = templateFontString(w, "GameFontNormalSmall") end)
+WoW.templates.UIPanelButtonTemplate = unlessMissing(function(w) w.Text = templateFontString(w, "GameFontNormal") end)
+WoW.templates.RightSideTabTemplate = unlessMissing(function(w) w.Icon = WoW.newWidget("Texture", w) end)   -- RightSideTab.xml's parentKey="Icon"
+WoW.templates.UIPanelScrollFrameTemplate = unlessMissing(WoW.templates.UIPanelScrollFrameTemplate)        -- the core's
 
-function Methods.SetJustifyH(w, j) w._justifyH = j end
+--------------------------------------------------------------------------------
+-- Widget methods the core doesn't have, or that differ from the core's (each
+-- because a test relies on it)
+--------------------------------------------------------------------------------
 
-function Methods.Show(w)
-    local was = w._shown
-    w._shown = true
-    if not was and w._scripts.OnShow then w._scripts.OnShow(w) end    -- only on a hidden > shown change
-end
-function Methods.Hide(w)
-    local was = w._shown
-    w._shown = false
-    if was and w._scripts.OnHide then w._scripts.OnHide(w) end        -- only on a shown > hidden change
-end
-function Methods.SetShown(w, v) if v then Methods.Show(w) else Methods.Hide(w) end end
-function Methods.IsShown(w) return w._shown end
-function Methods.IsVisible(w)
-    local p = w
-    while p do
-        if not p._shown then return false end
-        p = p._parent
-    end
-    return true
-end
-
-function Methods.SetPoint(w, ...) table.insert(w._points, { ... }) end
-function Methods.SetAllPoints(w, rel) w._points = { { "ALL", rel } } end
-function Methods.ClearAllPoints(w) w._points = {} end
-function Methods.GetNumPoints(w) return #w._points end
-function Methods.GetPoint(w, i)
-    local p = w._points[i or 1]
-    if not p then return nil end
-    return p[1], p[2], p[3], p[4], p[5]
-end
-
-function Methods.SetSize(w, x, y) w._width, w._height = x, y end
-function Methods.SetWidth(w, x) w._width = x end
-function Methods.SetHeight(w, y) w._height = y end
-function Methods.GetWidth(w) return w._width end
-function Methods.GetHeight(w) return w._height end
-
--- The scale chain, so a test can catch the "compared in the wrong space" class
--- of mistake (porting guide: GetCenter is in the frame's OWN space).
-function Methods.SetScale(w, s) w._scale = s end
-function Methods.GetScale(w) return w._scale end
-function Methods.GetEffectiveScale(w)
-    local s, p = 1, w
-    while p do s = s * (p._scale or 1); p = p._parent end
-    return s
-end
-
-function Methods.SetFrameLevel(w, l) w._level = l end
-function Methods.GetFrameLevel(w) return w._level end
-function Methods.SetFrameStrata(w, s) w._strata = s end
-function Methods.GetFrameStrata(w) return w._strata end
-function Methods.SetParent(w, p) w._parent = p end
-function Methods.GetParent(w) return w._parent end
-function Methods.GetName(w) return w._name end
-
-function Methods.SetScript(w, name, fn) w._scripts[name] = fn end
-function Methods.GetScript(w, name) return w._scripts[name] end
-function Methods.HookScript(w, name, fn)
-    local old = w._scripts[name]
-    w._scripts[name] = function(...) if old then old(...) end; fn(...) end
-end
-function Methods.RegisterEvent(w, e)
-    if not WoW.KNOWN_EVENTS[e] then error("Attempt to register unknown event \"" .. tostring(e) .. "\"", 2) end
-    w._events[e] = true
-    return true
-end
-function Methods.UnregisterEvent(w, e) w._events[e] = nil end
-
+-- The tooltip: what it says, as lines (test_ui, test_minimap read _lines and
+-- _owner). SetText starts a new tooltip with its title; the core's SetText
+-- does the rest.
+local kitSetText = Methods.SetText
 function Methods.SetText(w, t)
-    w._text = t
-    if w._type == "GameTooltip" then w._lines = {} end     -- a new tooltip starts with its title
+    if w._type == "GameTooltip" then w._lines = {} end
+    return kitSetText(w, t)
 end
 function Methods.AddLine(w, text) w._lines = w._lines or {}; w._lines[#w._lines + 1] = text end
 -- GameTooltip:AddDoubleLine is in the 70938 dump. Recorded as one line, the two texts joined by a tab.
 function Methods.AddDoubleLine(w, left, right) w._lines = w._lines or {}; w._lines[#w._lines + 1] = left .. "\t" .. right end
 -- A tooltip's owner; taking one clears what it said, as in the client.
 function Methods.SetOwner(w, owner) w._owner = owner; w._lines = {} end
-function Methods.GetText(w) return w._text end
-function Methods.SetTexture(w, t) w._texture = t end
-function Methods.SetChecked(w, v) w._checked = v and true or false end
+-- A texture's coordinates (test_ui reads the class icon's).
+function Methods.SetTexCoord(w, ...) w._texCoord = { ... } end
+-- A FontString's text width: 7 px a visible character (colour codes take none).
+function Methods.GetUnboundedStringWidth(w)
+    local plain = (w._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return #plain * 7
+end
+-- Blizzard's mixins, which the dump's widget walk can't see (test_methods
+-- allows each pair, citing the file):
 -- A WowScrollBoxList's data: the list it was given (ScrollBoxListMixin:SetDataProvider).
 function Methods.SetDataProvider(w, dp) w._dataProvider = dp end
 -- Its scroll position in pixels (ScrollBoxBaseMixin), clamped to the content.
@@ -204,56 +98,40 @@ function Methods.ScrollToOffset(w, o)
     local extent = w._extent or 20
     w._offset = math.max(0, math.min(o, n * extent))
 end
--- A WowStyle1DropdownTemplate's menu: the generator, run by a test with a fake root.
+-- A WowStyle1DropdownTemplate's menu (DropdownButtonMixin:SetupMenu): the
+-- generator, run by a test with a fake root.
 function Methods.SetupMenu(w, fn) w._menu = fn end
--- A FontString's text width: 7 px a visible character (colour codes take none).
-function Methods.GetUnboundedStringWidth(w)
-    local plain = (w._text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
-    return #plain * 7
-end
-function Methods.SetEnabled(w, v) w._enabled = v and true or false end
-function Methods.IsEnabled(w) return w._enabled ~= false end
--- An edit box's selection: HighlightText() selects all, (0, 0) none.
-function Methods.HighlightText(w, a, b) w._selected = not (a == 0 and b == 0) end
-function Methods.GetChecked(w) return w._checked or false end
--- A button's state textures: Set* makes one, Get* returns it (so its tex coords can be set).
-for _, part in ipairs({ "Normal", "Pushed", "Highlight", "Checked" }) do
-    Methods["Set" .. part .. "Texture"] = function(w, t)
-        local tex = newWidget("Texture", w)
-        tex._texture = t
-        w["_" .. part] = tex
-    end
-    Methods["Get" .. part .. "Texture"] = function(w) return w["_" .. part] end
-end
-function Methods.SetColorTexture(w, ...) w._texture = nil; w._color = { ... } end
-function Methods.SetAlpha(w, a) w._alpha = a end
-function Methods.SetTextureSliceMargins(w, ...) w._slice = { ... } end
-function Methods.SetTexCoord(w, ...) w._texCoord = { ... } end
-function Methods.SetBlendMode(w, m) w._blend = m end
-function Methods.SetDesaturated(w, v) w._desaturated = v end
-function Methods.GetAlpha(w) return w._alpha or 1 end
-function Methods.SetVertexColor(w, ...) w._vertex = { ... } end
-function Methods.SetTextColor(w, ...) w._textColor = { ... } end
-function Methods.SetMovable(w, v) w._movable = v end
-function Methods.SetClampedToScreen(w, v) w._clamped = v end
-function Methods.EnableMouse(w, v) w._mouse = v end
-function Methods.IsMovable(w) return w._movable == true end
-function Methods.StartMoving(w) w._moving = true end
-function Methods.StopMovingOrSizing(w) w._moving = false end
-function Methods.GetLeft(w) return w._left end
-function Methods.GetTop(w) return w._top end
-function Methods.IsMouseOver(w) return w._mouseOver == true end
-
 
 --------------------------------------------------------------------------------
--- Globals
+-- The clock and the drivers
 --------------------------------------------------------------------------------
 
-function WoW.fire(event, ...)
-    for _, f in ipairs(WoW.frames) do
-        local fn = f._events[event] and f._scripts.OnEvent
-        if fn then fn(f, event, ...) end
+-- WowTestKit #86: each timer runs with the clock at its own due time, as on
+-- the client. The core's WoW.advance(dt) moves WoW.now to the end first, so
+-- a timer due at 2 s of a 4 s advance reads 4: the scan it runs then stamps
+-- the wrong time, and a system message at 4 s falls outside the scan's
+-- interval and loses its officer (test_scanner). So the clock goes from one
+-- due time to the next, the core's WoW.advance(0) running what is due at
+-- each; a timer made inside one counts from its due time. The calendar clock
+-- (time(), WoW.epoch) moves with WoW.now.
+local kitAdvance = WoW.advance
+local function moveTo(at)
+    WoW.epoch = WoW.epoch + (at - WoW.now)
+    WoW.now = at
+    kitAdvance(0)
+end
+function WoW.advance(dt)
+    local target = WoW.now + dt
+    while true do
+        local due
+        for _, t in ipairs(WoW.timers) do
+            local at = t.at or t.s or 0
+            if not t.cancelled and at <= target and (not due or at < due) then due = at end
+        end
+        if not due then break end
+        moveTo(math.max(due, WoW.now))
     end
+    moveTo(target)
 end
 
 -- Runs a slash command as the chat box would, matching SLASH_<KEY><n> aliases.
@@ -269,9 +147,9 @@ function WoW.slash(line)
     error("unknown slash command " .. cmd)
 end
 
-function WoW.reset()
-    WoW.frames, WoW.chat, WoW.widgets = {}, {}, {}
-    WoW.now, WoW.epoch, WoW.timers = 0, 1790000000, {}
+-- This client's state, reset with the core's by WoW.reset() (loadAddon calls it).
+table.insert(WoW.onReset, function()
+    WoW.now, WoW.epoch = 0, 1790000000
     WoW.fileIDs = {}
     WoW.missingTemplates = {}
     -- The level cap (#34): both functions answer it on Forever (Vanilla content: 60);
@@ -298,21 +176,24 @@ function WoW.reset()
             for _, c in ipairs(WoW.callbacks[event] or {}) do c.fn(c.owner, ...) end
         end,
     }
-    UIParent = newWidget("Frame", nil, "UIParent")
     UIParent._width, UIParent._height = 1366, 768
-    GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
+    GameTooltip = WoW.newWidget("GameTooltip", UIParent, "GameTooltip")
     -- Retail's Settings framework: Options > AddOns. Recorded in WoW.settings.
     WoW.settings = { canvas = {}, addons = {}, subs = {} }
-    WoW.ldb, WoW.ldbi = nil, nil                -- made on first use (LibStub, above)
+    WoW.ldb, WoW.ldbi = nil, nil                -- made on first use (LibStub, below)
     WoW.las, WoW.lasSent, WoW.lasPeers, WoW.lasSnapshots, WoW.noAccountSync = nil, {}, {}, nil, nil
     WoW.lasNotReady, WoW.lasStoredOff = {}, nil
     WoW.prefixes, WoW.addonSent, WoW.addonResult, WoW.ctlHeld = {}, {}, nil, {}
     ChatThrottleLib = WoW.newCTL and WoW.newCTL() or nil
     -- Blizzard's Settings window (HIGH strata), hidden until opened.
-    SettingsPanel = newWidget("Frame", UIParent, "SettingsPanel")
+    SettingsPanel = WoW.newWidget("Frame", UIParent, "SettingsPanel")
     SettingsPanel._strata = "HIGH"
-    SettingsPanel._shown = false
-end
+    SettingsPanel._shown, SettingsPanel._vis = false, false
+end)
+
+--------------------------------------------------------------------------------
+-- Libraries
+--------------------------------------------------------------------------------
 
 -- Fake LibDataBroker-1.1 and LibDBIcon-1.0 (the vendored Libs\ are not loaded
 -- in tests; Gnomesweeper's way). The fakes record what they are given:
@@ -338,10 +219,10 @@ function WoW.newLDBI()
     local lib = { registered = {}, buttons = {}, registrations = 0 }
     function lib:Register(name, obj, db)
         self.registrations = self.registrations + 1
-        local b = newWidget("Button", UIParent, "LibDBIcon10_" .. name)
+        local b = WoW.newWidget("Button", UIParent, "LibDBIcon10_" .. name)
         b._scripts.OnClick = function(self, mouse) obj.OnClick(self, mouse) end
         b.dataObject, b.db = obj, db
-        if db.hide then b._shown = false end
+        if db.hide then b._shown, b._vis = false, false end
         self.registered[name], self.buttons[name] = db, b
     end
     -- As the real one (LibDBIcon-1.0 MINOR 56): Show/Hide only show or hide the
@@ -383,6 +264,10 @@ function WoW.lasDeliver(payload, sender)
     if inst and inst.handler then inst.handler(payload, sender, 1) end
 end
 
+--------------------------------------------------------------------------------
+-- Globals
+--------------------------------------------------------------------------------
+
 Settings = {
     RegisterCanvasLayoutCategory = function(frame, name)
         local cat = { frame = frame, name = name, GetID = function() return "cat:" .. name end }
@@ -398,13 +283,7 @@ Settings = {
     end,
 }
 
-function print(...)
-    local parts = {}
-    for i = 1, select("#", ...) do parts[#parts + 1] = tostring((select(i, ...))) end
-    WoW.chat[#WoW.chat + 1] = table.concat(parts, " ")
-end
-
-function GetTime() return WoW.now end
+-- The calendar clock: WoW.epoch, moved by WoW.advance (above).
 function time(t) if t then return os.time(t) end return WoW.epoch end
 function GetMaxLevelForPlayerExpansion()
     if not WoW.capFns.expansion then error("not on this client") end
@@ -420,7 +299,6 @@ function PlaySound(kit, channel) WoW.sounds[#WoW.sounds + 1] = { kit = kit, chan
 -- Whether the client has a template (the test can say it's missing).
 function DoesTemplateExist(name) return not WoW.missingTemplates[name] end
 function date(fmt, t) return os.date(fmt, t) end
-function GetLocale() return "enUS" end
 -- The player, on 70009+: the surname comes back in the second return.
 function UnitName(unit) if unit == "player" then return WoW.playerName, WoW.playerSurname end return nil end
 function GetRealmName() return WoW.realm end
@@ -445,49 +323,6 @@ function CreateDataProvider(list)
     local dp = { list = list or {} }
     function dp:GetSize() return #self.list end
     return dp
-end
--- hooksecurefunc([table,] name, fn): runs fn after the original, which it
--- replaces in the table (rawset: the client's own write, never the addon's).
-function hooksecurefunc(t, name, fn)
-    if type(t) == "string" then t, name, fn = _G, t, name end
-    local orig = rawget(t, name) or t[name]
-    rawset(t, name, function(...) local r = { orig(...) }; fn(...); return unpack(r) end)
-end
-
--- Timers run when WoW.advance moves the clock past them, in order. The
--- calendar clock (time()) moves with it.
-C_Timer = {
-    After = function(seconds, fn)
-        WoW.timers[#WoW.timers + 1] = { at = WoW.now + seconds, fn = fn, seq = #WoW.timers }
-    end,
-}
--- In the 1.60.1.70338 dump; repeats until cancelled.
-function C_Timer.NewTicker(seconds, fn)
-    local t = { cancelled = false }
-    local function step()
-        if t.cancelled then return end
-        fn()
-        C_Timer.After(seconds, step)
-    end
-    C_Timer.After(seconds, step)
-    function t:Cancel() self.cancelled = true end
-    return t
-end
-function WoW.advance(seconds)
-    local target = WoW.now + seconds
-    while true do
-        local best, bi
-        for i, t in ipairs(WoW.timers) do
-            if t.at <= target and (not best or t.at < best.at or (t.at == best.at and t.seq < best.seq)) then best, bi = t, i end
-        end
-        if not best then break end
-        table.remove(WoW.timers, bi)
-        WoW.epoch = WoW.epoch + (math.max(WoW.now, best.at) - WoW.now)
-        WoW.now = math.max(WoW.now, best.at)
-        best.fn()
-    end
-    WoW.epoch = WoW.epoch + (target - WoW.now)
-    WoW.now = target
 end
 
 --------------------------------------------------------------------------------
@@ -580,11 +415,8 @@ ERR_GUILD_LEADER_CHANGED_SS = "%s has made %s the new Guild Master."
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
 Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 },
          ClubMemberPresence = { Unknown = 0, Online = 1, OnlineMobile = 2, Offline = 3, Away = 4, Busy = 5 } }
-function issecretvalue(v) return false end
 function table.wipe(t) for k in pairs(t) do t[k] = nil end return t end
 wipe = table.wipe
--- Client string alias (in the dump's _G walk); LibStub's version check uses it.
-strmatch = string.match
 
 -- Addon messages (#38), as Gnomesweeper's stubs model them: a GUILD message is
 -- recorded in WoW.addonSent and, as the server does, echoed to its sender as
@@ -638,8 +470,4 @@ WoW.reset()
 -- the addon's own, which are legitimately nil before their first assignment.
 -- LibStub: read by its own loader before it exists (the harness clears it for
 -- each load, so the embedded LibGlass-1.0 starts fresh).
-local allowNil = { GuildSpy = true, GuildSpyDB = true, LibStub = true }
-setmetatable(_G, { __index = function(_, k)
-    if allowNil[k] then return nil end
-    error("read of undefined global '" .. tostring(k) .. "' (not stubbed: is it in the API dump?)", 2)
-end })
+Kit.strict({ GuildSpy = true, GuildSpyDB = true, LibStub = true })

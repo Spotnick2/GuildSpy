@@ -169,8 +169,8 @@ WoW.fire("PLAYER_LOGIN")
 local fp = GuildSpy.Options._test.page
 fp:Show()
 local rb = fp.controls.levelMin.radios[1]
-eq(rb:GetNormalTexture()._texture, "Interface\\Buttons\\UI-RadioButton", "no radio template: drawn from the art")
-eq(fp.controls.digest.check:GetCheckedTexture()._texture, "Interface\\Buttons\\UI-CheckBox-Check", "no check template: the same")
+eq(rb:GetNormalTexture()._file, "Interface\\Buttons\\UI-RadioButton", "no radio template: drawn from the art")
+eq(fp.controls.digest.check:GetCheckedTexture()._file, "Interface\\Buttons\\UI-CheckBox-Check", "no check template: the same")
 rb._scripts.OnClick(rb)
 eq(GuildSpyDB.settings.levelMin, 1, "...and they still work")
 

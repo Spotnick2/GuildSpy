@@ -65,8 +65,13 @@ jobs:
           echo "checking $count files"
           find . -name '*.lua' -not -path './.git/*' -print0 | xargs -0 luac5.1 -p
 
-      # Without the API dump (not on CI), test_toc skips the events fixture check
-      # and test_methods skips itself, loudly; everything else runs.
+      # The test scaffolding, at the commit and client build tests/kit.pin
+      # names: the same as a local tests/run.ps1.
+      - name: Fetch WowTestKit at its pin
+        run: |
+          bash tests/fetch_kit.sh "$RUNNER_TEMP/WowTestKit"
+          echo "WOWTESTKIT=$RUNNER_TEMP/WowTestKit" >> "$GITHUB_ENV"
+
       - name: Unit tests
         run: |
           for f in tests/test_*.lua; do
