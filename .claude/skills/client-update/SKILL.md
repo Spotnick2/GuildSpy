@@ -36,11 +36,10 @@ Branch `build-<build>` from `main`:
 
 1. `Compat.lua` — `GuildSpy.MEASURED_ON_BUILD = "<version>.<build>"`.
 2. `AGENTS.md`, `.claude/skills/codex-consult/SKILL.md` — the dump file name they cite.
-3. `tests/wow_stubs.lua` — the dump file name in the header, and `GetBuildInfo` if it is stubbed.
-4. The event list the stub validates against: regenerate `tests/events-<build>.txt` from the new
-   dump with `python ..\Gnomesweeper\Tools\make_events_fixture.py <dump.md>` (run from this repo).
-   Point `EVENTS_FIXTURE` (`tests/wow_stubs.lua`) and the default dump path (`tests/test_toc.lua`)
-   at the new build, and delete the old fixture.
+3. `tests/wow_stubs.lua` — `WoW.build` (what `GetBuildInfo` answers).
+4. The build the tests check against: `build=` in `tests/kit.pin` (and its comment). The kit needs
+   that build's `data/forever-<build>/` (the forever-api-dump skill's step 4); bump `sha=` to a kit
+   commit that has it if the pinned one doesn't.
 
 Then `pwsh tests\run.ps1` green, `pwsh Tools\deploy.ps1`, a `/reload` in game, and `/gspy probe`.
 Commit, push and open the PR (`Closes #N`) **only when the owner asks** — the owner runs every review.

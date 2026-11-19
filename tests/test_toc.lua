@@ -2,9 +2,12 @@
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
 
-local toc = io.open("GuildSpy.toc"):read("*a")
-check(toc:find("## Interface: 16001", 1, true), "interface 16001 (1.60.1; 11601 is the transposed-digit bug)")
-check(toc:find("## Version: @project-version@", 1, true), "packager version token kept")
+-- WowTestKit's: interface 16001, the version token, every listed .lua file
+-- exists, every line is listed once. The XML lines are the .pkgmeta externals
+-- (gitignored): libGlassScripts() fails on a LibGlass checkout without its XML.
+Kit.checkToc(TOC)
+
+local toc = io.open(TOC):read("*a")
 check(toc:find("## SavedVariables: GuildSpyDB", 1, true), "saved variables declared")
 -- Glass UI first when it's installed, so its tenant API is there when the guild window attaches (#63).
 check(toc:find("## OptionalDeps: GlassUI\r?\n"), "Glass UI an optional dependency")
@@ -50,12 +53,7 @@ do
     check(#shipped >= 5, "(every shipped Lua file was read: " .. #shipped .. ")")
 end
 
-local files, seen = tocFiles(), {}
-for _, f in ipairs(files) do
-    check(io.open(f, "r") ~= nil, "TOC file exists: " .. f)
-    check(not seen[f], "TOC lists each file once: " .. f)
-    seen[f] = true
-end
+local files = tocFiles()
 -- Glass.lua calls LibStub("LibGlass-1.0") at file scope: the library loads first.
 eq(tocLines()[1], LIBGLASS_XML, "LibGlass-1.0 loads first")
 eq(files[1], "Compat.lua", "Compat loads first (after the libraries)")
@@ -83,32 +81,6 @@ eq(#WoW.chat, 0, "no build warning on the measured build")
 loadAddon({ setup = function() WoW.build = { "1.60.1", "70999", "", 16001 } end })
 WoW.fire("PLAYER_LOGIN")
 check(WoW.chat[1] and WoW.chat[1]:find("70999", 1, true), "a different build is named at login")
-
--- The event list the stub validates against is checked in; it must be the dump's.
-do
-    local DUMP = os.getenv("GUILDSPY_API_DUMP") or "C:/Projects/WoW/References/Forever/api/forever-api-1.60.1.70532.md"
-    local f = io.open(DUMP, "r")
-    if f then
-        local inEvents, dumpEvents, n = false, {}, 0
-        for line in f:lines() do
-            if line:match("^## ") then
-                inEvents = line:match("^## Documented events") ~= nil
-            elseif inEvents then
-                local name = line:match("^([A-Z][A-Z0-9_]+)%s+%(")
-                if name then dumpEvents[name] = true; n = n + 1 end
-            end
-        end
-        f:close()
-        local missing, extra = {}, {}
-        for e in pairs(dumpEvents) do if not WoW.KNOWN_EVENTS[e] then missing[#missing + 1] = e end end
-        for e in pairs(WoW.KNOWN_EVENTS) do if not dumpEvents[e] then extra[#extra + 1] = e end end
-        eq(#missing, 0, "every dump event is in the fixture: " .. table.concat(missing, ","))
-        eq(#extra, 0, "no fixture event is missing from the dump: " .. table.concat(extra, ","))
-        check(n > 1000, "the dump's event list was read (" .. n .. ")")
-    else
-        io.write("  (events fixture check skipped: no API dump at " .. DUMP .. ")\n")
-    end
-end
 
 -- Glass.MEDIA points into the embedded copy, where the packager puts it.
 eq(GuildSpy.Glass.MEDIA, "Interface\\AddOns\\GuildSpy\\Libs\\LibGlass-1.0\\Media\\", "MEDIA is the embedded copy's")
