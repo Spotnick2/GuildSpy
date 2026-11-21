@@ -26,10 +26,10 @@ eq(Wire.ReadEntry("approx=b2", ALLOWED), nil, "a bad boolean refuses it")
 eq(Wire.ReadEntry("no equals sign", ALLOWED), nil, "a field without key=value refuses it")
 
 -- A message: kind, header fields (escaped), entry lines.
-local msg = Wire.Message("PAGE", { "7", "Parse Partout-Forever", 0, 12, 1 }, { line, line })
+local msg = Wire.Message("PAGE", { "7", "Parse Partout", 0, 12, 1 }, { line, line })
 local kind, f, lines = Wire.Read(msg)
 eq(kind, "PAGE", "the kind")
-eq(f[2], "Parse Partout-Forever", "a header field")
+eq(f[2], "Parse Partout", "a header field")
 eq(f[4], "12", "header fields come back as strings")
 eq(#lines, 2, "two entry lines")
 eq(Wire.ReadEntry(lines[2], ALLOWED).to, e.to, "an entry line reads back")

@@ -163,7 +163,8 @@ GuildSpyDB = { version=1, minimap={},
              professionsTab=false|nil,                             -- (#9) nil: the Professions tab shown
              chat={ [kind]=false } },                               -- a kind's chat line off (#4)
   nextSeq=1, window={ x, y },
-  guilds = { [guildKey] = { observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,
+  guilds = { [guildKey] = {   -- guildKey: the guild's name (#104; was "<name>-<realm>")
+    observedAt=epoch, shownSeq=n, onoteBaselineAt=epoch|nil,
     viewedSeq=n,   -- the log window's "new" marker (#3): the last seq seen there
     ranks = { "Guild Master", ... }, motd = "...",
     members = { [guid] = { name, rank, level, class, note, onote, online, lastSeenAt, missingSince, missingAfter } },
@@ -258,7 +259,12 @@ Two were declined, deliberately:
 - **The guild key falls back to the player's realm when `GetGuildInfo` gives no guild realm.** On
   Retail that return is empty for a guild on the player's own realm, so refusing would never track
   such guilds. The measured guild (connected realms) returns its realm. If a same-realm guild ever
-  shows both keys, revisit.
+  shows both keys, revisit. **Superseded by #104:** since the 2026-11-20 server hotfix,
+  `GetRealmName()` is `""`, so that fallback gave a same-realm guild no key at all. The key is now
+  the guild's name alone (`API.GuildKey`), with no realm from either source, so alts on two
+  connected realms can't split one guild. The price: two guilds with the same name on two realms
+  share one state if the owner has characters in both. State saved under `"<name>-<realm>"` moves to
+  the name once, the first time the guild is seen (`Scanner.lua`, `migrate`).
 
 ## Other ideas (not v1)
 

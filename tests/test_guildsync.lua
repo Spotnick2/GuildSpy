@@ -7,7 +7,7 @@ dofile("tests/harness.lua")
 
 loadAddon()
 local GSync, Log, Wire = GuildSpy.GuildSync, GuildSpy.Log, GuildSpy.Wire
-local KEY = "Parse Partout-Forever"
+local KEY = "Parse Partout"
 local clock = time()
 local timers = {}
 local clients, order = {}, {}
@@ -300,7 +300,7 @@ do  -- A guild change: an answer in progress stops; what's queued never leaves.
     clock = clock + 3
     timers[1].fn(); table.remove(timers, 1)            -- Bo's answer queues, nothing delivered yet
     check(#bo.out >= 6, "(Bo's answer is queued)")
-    bo.key = "Other Guild-Forever"
+    bo.key = "Other Guild"
     bo.core:GuildChanged()
     deliver()
     eq(sent("Bo Kay"), 0, "Bo changed guild: nothing of the queued answer leaves")
@@ -362,7 +362,7 @@ do  -- A guild change within two minutes of an ask: the new guild's ask still go
     ann.core:Hello()
     deliver()
     eq(sent("Ann Lee", "Q"), 1, "(the ask in the first guild)")
-    ann.key = "Other Guild-Forever"
+    ann.key = "Other Guild"
     ann.core:GuildChanged()
     ann.core:Hello()
     deliver()
@@ -563,9 +563,9 @@ do
     Log.GUILD_MAX_ENTRIES = quota
     check(O.Set("reportRank", 1), "accept from Officer and up")
     eq(GSync.MinRank(), 1, "...saved")
-    eq(GuildSpyDB.settings.reportRanks["Parse Partout-Forever"], 1, "...for this guild only (#43 review)")
+    eq(GuildSpyDB.settings.reportRanks["Parse Partout"], 1, "...for this guild only (#43 review)")
     local realCurrent = GuildSpy.Scanner.Current
-    GuildSpy.Scanner.Current = function() return realCurrent(), "Other Guild-Forever" end
+    GuildSpy.Scanner.Current = function() return realCurrent(), "Other Guild" end
     eq(GSync.MinRank(), nil, "...another guild: every rank")
     GuildSpy.Scanner.Current = realCurrent
     check(not O.Set("reportRank", 5), "...a rank this guild doesn't have: refused")
@@ -575,10 +575,10 @@ do
     O.Set("reportRank", -1)
     eq(GuildSpyDB.settings.reportRanks, nil, "every rank again: nothing saved")
     GuildSpyDB.settings.reports, GuildSpyDB.settings.shareGuild = "loud", "yes"
-    GuildSpyDB.settings.reportRanks = { ["Parse Partout-Forever"] = 42, ["Other-Forever"] = 2, [7] = 1 }
+    GuildSpyDB.settings.reportRanks = { ["Parse Partout"] = 42, ["Other-Forever"] = 2, [7] = 1 }
     O.Validate(GuildSpyDB.settings)
     check(GuildSpyDB.settings.reports == nil and GuildSpyDB.settings.shareGuild == nil
-          and GuildSpyDB.settings.reportRanks["Parse Partout-Forever"] == nil and GuildSpyDB.settings.reportRanks["Other-Forever"] == 2
+          and GuildSpyDB.settings.reportRanks["Parse Partout"] == nil and GuildSpyDB.settings.reportRanks["Other-Forever"] == 2
           and GuildSpyDB.settings.reportRanks[7] == nil,
         "saved values no page could set are dropped")
     GuildSpyDB.settings.reportRanks = nil
@@ -602,7 +602,7 @@ do
     WoW.advance(GSync.JITTER_MAX + 1)
     check(#WoW.ctlHeld == 1 and #T.queue() >= 4, "my answer: one handed over, the rest queued")
     local real = GuildSpy.Scanner.Current
-    GuildSpy.Scanner.Current = function() return real(), "Other Guild-Forever" end
+    GuildSpy.Scanner.Current = function() return real(), "Other Guild" end
     -- Before our tick notices: the in-flight message leaves, and the next is checked as it would go.
     WoW.ctlDeliver()
     eq(#WoW.ctlHeld, 0, "the scanner switched guilds: nothing more is handed over, even before our tick")

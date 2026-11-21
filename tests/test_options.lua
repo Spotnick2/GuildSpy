@@ -76,7 +76,7 @@ G.members[#G.members + 1] = member("Cy New", 4, "Player-1-00000009")
 WoW.chat = {}
 rosterUpdate()
 check(not chatHas("Cy New"), "...no chat line for a join")
-local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+local gs = GuildSpyDB.guilds["Parse Partout"]
 check(gs.log[#gs.log].kind == "JOIN" and gs.log[#gs.log].name == "Cy New", "...though the log has it")
 joins:SetChecked(true)
 joins._scripts.OnClick(joins)

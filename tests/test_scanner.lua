@@ -41,8 +41,8 @@ login(nil, G)
 WoW.advance(4)
 check(chatHas("now watching Parse Partout (4 members)"), "the baseline is announced")
 local db = GuildSpyDB
-local gs = db.guilds["Parse Partout-Forever"]
-check(gs and gs.observedAt, "the guild's state is saved under name-realm")
+local gs = db.guilds["Parse Partout"]
+check(gs and gs.observedAt, "the guild's state is saved under its name alone (#104)")
 eq(#gs.log, 0, "nothing logged for a baseline")
 
 -- Live: a promotion message, then the roster: one line, with the officer.
@@ -104,7 +104,7 @@ check(chatHas("Enzo Matrix promoted Ann Lee from Veteran to Officer") == nil, "(
 check(chatHas("Enzo Matrix promoted Ann Lee from Member to Veteran"), "the offline promotion names its officer, from the log")
 check(chatHas("Bo Kay rejoined the guild"), "a rejoin")
 local promo
-for _, e in ipairs(GuildSpyDB.guilds["Parse Partout-Forever"].log) do if e.kind == "PROMOTE" and e.name == "Ann Lee" then promo = e end end
+for _, e in ipairs(GuildSpyDB.guilds["Parse Partout"].log) do if e.kind == "PROMOTE" and e.name == "Ann Lee" then promo = e end end
 eq(promo.approx, true, "an offline promotion's time is approximate")
 -- No per-event spam for catch-up: the digest is the summary plus details.
 local promotedLines = 0
@@ -170,10 +170,10 @@ WoW.fire("GUILD_ROSTER_UPDATE", false)
 for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
 WoW.advance(10)
 check(chatHas("now watching Other Guild"), "another guild: a fresh baseline")
-check(GuildSpyDB.guilds["Parse Partout-Forever"] ~= nil, "...and the first guild's state is kept")
+check(GuildSpyDB.guilds["Parse Partout"] ~= nil, "...and the first guild's state is kept")
 
 -- A damaged saved file: an unreadable record means a fresh baseline, never a Lua error.
-local broken = { version = 1, guilds = { ["Other Guild-Forever"] = {
+local broken = { version = 1, guilds = { ["Other Guild"] = {
     observedAt = 1, members = { ["Player-1-00000002"] = { name = "Ann Lee", rank = 2, lastSeenAt = "soon" } },   -- a text time
     log = { { seq = 1, at = 1790000000, kind = "JOIN", name = "x" }, "garbage", { kind = 5 } },
     formers = { G = "garbage" } } } }
@@ -185,7 +185,7 @@ for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
 local ok = pcall(WoW.advance, 10)
 check(ok, "a damaged snapshot doesn't error")
 check(chatHas("now watching Other Guild"), "...it is rebuilt as a baseline")
-eq(#GuildSpyDB.guilds["Other Guild-Forever"].log, 1, "...unreadable log entries dropped, the good one kept")
+eq(#GuildSpyDB.guilds["Other Guild"].log, 1, "...unreadable log entries dropped, the good one kept")
 
 -- At login, a promotion made during a rank restructure is confirmed from the
 -- server log: the first scan waits for the log instead of suppressing it.
@@ -244,14 +244,14 @@ eq(WoW.motdReads, 0, "...and the protected GetMOTD was never called")
 
 -- A rank index the rank table doesn't have yet: the roster is incomplete.
 WoW.chat = {}
-local n0 = #GuildSpyDB.guilds["Parse Partout-Forever"].log
+local n0 = #GuildSpyDB.guilds["Parse Partout"].log
 R2.members[3].rank = 9
 WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)
-eq(#GuildSpyDB.guilds["Parse Partout-Forever"].log, n0, "no entry from a roster ahead of its rank table")
+eq(#GuildSpyDB.guilds["Parse Partout"].log, n0, "no entry from a roster ahead of its rank table")
 R2.members[3].rank = 5
 
 -- Officer notes keep their own digest boundary across alts.
-local gs2 = GuildSpyDB.guilds["Parse Partout-Forever"]
+local gs2 = GuildSpyDB.guilds["Parse Partout"]
 R2.canViewOfficerNote = true
 WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(3)          -- seed
 local saved3 = GuildSpyDB
@@ -272,7 +272,7 @@ for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
 WoW.advance(5)
 check(chatHas("officer note"), "the officer gets the officer-note change")
 -- A recorded officer-note entry shown to nobody yet: a non-officer digest passes it, the officer still gets it.
-local gs3 = GuildSpyDB.guilds["Parse Partout-Forever"]
+local gs3 = GuildSpyDB.guilds["Parse Partout"]
 local entry = { seq = GuildSpyDB.nextSeq, at = WoW.epoch, kind = "ONOTE", name = "Ann Lee", from = "a", to = "b" }
 GuildSpyDB.nextSeq = GuildSpyDB.nextSeq + 1
 table.insert(gs3.log, entry)
@@ -285,14 +285,14 @@ check(#lines > 0 and lines[2]:find("officer note", 1, true), "the officer's next
 
 -- "Show offline members" off: GuildSpy pauses and says so; nobody is declared gone.
 WoW.chat = {}
-local n1 = #GuildSpyDB.guilds["Parse Partout-Forever"].log
+local n1 = #GuildSpyDB.guilds["Parse Partout"].log
 R2.hideOffline = true
 for _ = 1, 3 do WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(40) end
 check(chatHas("Show Offline Members"), "show offline off: paused, and said so")
 local warned = 0
 for _, l in ipairs(WoW.chat) do if l:find("Show Offline Members", 1, true) then warned = warned + 1 end end
 eq(warned, 1, "...once")
-eq(#GuildSpyDB.guilds["Parse Partout-Forever"].log, n1, "...and nothing recorded")
+eq(#GuildSpyDB.guilds["Parse Partout"].log, n1, "...and nothing recorded")
 R2.hideOffline = nil
 
 -- Two members share a name and both change: one message credits neither.
@@ -332,7 +332,7 @@ third.name, third.motd = "Third Guild", "third's own motd"
 WoW.guild = third
 WoW.fire("PLAYER_GUILD_UPDATE")
 WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(25)
-local tg = GuildSpyDB.guilds["Third Guild-Forever"]
+local tg = GuildSpyDB.guilds["Third Guild"]
 check(tg and tg.observedAt, "the new guild is baselined")
 eq(tg and tg.motd, nil, "...without the old guild's MOTD")
 WoW.fire("GUILD_MOTD", third.motd)
@@ -346,9 +346,9 @@ WoW.fire("GUILD_ROSTER_UPDATE", false); WoW.advance(25)
 -- Status and rebaseline answer.
 WoW.chat = {}
 WoW.slash("/gspy status")
-check(chatHas("Parse Partout-Forever"), "status names the guild")
+check(chatHas("Parse Partout"), "status names the guild")
 WoW.slash("/gspy rebaseline")
-eq(GuildSpyDB.guilds["Parse Partout-Forever"].observedAt, nil, "rebaseline forgets the snapshot")
+eq(GuildSpyDB.guilds["Parse Partout"].observedAt, nil, "rebaseline forgets the snapshot")
 
 -- Secret event payloads (#79): skipped, never read. A real secret string
 -- answers type() == "string" (the reported crash got past exactly that
@@ -370,6 +370,91 @@ do
     rawset(_G, "type", realType)
     rawset(_G, "issecretvalue", realIsSecret)
     check(ok, "secret CHAT_MSG_SYSTEM, GUILD_MOTD and CHAT_MSG_ADDON payloads don't throw: " .. tostring(err))
+end
+
+-- The realm is hidden (#104): GetRealmName() is "" and a guild on the player's
+-- own realm gets no 4th return from GetGuildInfo. It still gets a key, and a
+-- scan, under its name alone.
+do
+    local H = newGuild()
+    H.realm = nil
+    WoW.chat = {}
+    login(nil, H)
+    WoW.advance(4)
+    eq(GetRealmName(), "", "the stub models the hotfix")
+    check(chatHas("now watching Parse Partout (4 members)"), "a same-realm guild is watched with no realm anywhere")
+    check(GuildSpyDB.guilds["Parse Partout"] and GuildSpyDB.guilds["Parse Partout"].observedAt, "...and its scan saved")
+    local _, k = GuildSpy.Scanner.Current()
+    eq(k, "Parse Partout", "...under its name")
+end
+
+-- A guild on another connected realm keeps the same key: alts on either realm
+-- share one state.
+do
+    local X = newGuild()
+    X.realm = "CAMWOW US2 Realm 7 PvE"
+    loadAddon({ setup = function() WoW.guild = X end })
+    WoW.fire("PLAYER_LOGIN")
+    eq((GuildSpy.API.GuildKey()), "Parse Partout", "a guild realm from GetGuildInfo isn't part of the key")
+end
+
+-- The state an older version saved under "<name>-<realm>" moves once to the
+-- new key, with its "accept reports from" rank; another guild's is untouched.
+do
+    local old = newGuild()
+    local seeded = { version = 1, nextSeq = 3, settings = { reportRanks = { ["Parse Partout-CAMWOWUS2Realm7PvE"] = 2 } },
+        guilds = {
+            ["Parse Partout-CAMWOWUS2Realm7PvE"] = { observedAt = 1790000000, shownSeq = 2, viewedSeq = 1,
+                ranks = old.ranks,
+                members = {
+                    ["Player-1-00000001"] = { name = "Fizzle Sprocketwhistle", rank = 3, level = 30, class = "MAGE", note = "", online = true, lastSeenAt = 1790000000 },
+                    ["Player-1-00000002"] = { name = "Ann Lee", rank = 3, level = 30, class = "MAGE", note = "", online = true, lastSeenAt = 1790000000 },
+                    ["Player-1-00000003"] = { name = "Bo Kay", rank = 4, level = 30, class = "MAGE", note = "", online = true, lastSeenAt = 1790000000 },
+                    ["Player-1-00000004"] = { name = "Enzo Matrix", rank = 0, level = 30, class = "MAGE", note = "", online = true, lastSeenAt = 1790000000 },
+                },
+                log = { { seq = 1, at = 1789990000, kind = "JOIN", guid = "Player-1-00000003", name = "Bo Kay" },
+                        { seq = 2, at = 1789995000, kind = "LEVEL", guid = "Player-1-00000002", name = "Ann Lee", from = 29, to = 30 } },
+                formers = {} },
+            ["Parse Partout-Old-Realm"] = { observedAt = 1790000001, members = {}, log = {}, formers = {} },   -- not this guild's spelling
+            ["Parse Partouts-Forever"] = { observedAt = 1790000002, members = {}, log = {}, formers = {} },   -- another guild
+        } }
+    old.realm = nil
+    WoW.chat = {}
+    login(seeded, old)
+    WoW.advance(4)
+    local g = GuildSpyDB.guilds
+    check(g["Parse Partout"] and g["Parse Partout"].observedAt and g["Parse Partout"].observedAt > 1790000000,
+        "the old state moved to the name and was scanned")
+    eq(g["Parse Partout-CAMWOWUS2Realm7PvE"], nil, "...and the old key is gone")
+    eq(#g["Parse Partout"].log, 2, "...with its log, no fresh baseline and no change")
+    check(not chatHas("now watching"), "...so no baseline line")
+    eq(GuildSpyDB.settings.reportRanks and GuildSpyDB.settings.reportRanks["Parse Partout"], 2, "the rank setting moved with it")
+    eq(GuildSpyDB.settings.reportRanks["Parse Partout-CAMWOWUS2Realm7PvE"], nil, "...from the old key")
+    check(g["Parse Partout-Old-Realm"] ~= nil and g["Parse Partouts-Forever"] ~= nil, "keys that aren't this guild's old spelling stay")
+
+    local legacy = GuildSpy.Scanner._test.legacyKey
+    check(legacy("Parse Partout-ClassicBetaPvE2", "Parse Partout"), "legacy: name, a hyphen, a realm")
+    check(not legacy("Parse Partout", "Parse Partout"), "legacy: not the new key itself")
+    check(not legacy("Parse Partout-", "Parse Partout"), "legacy: not an empty realm")
+    check(not legacy("Parse Partouts-Forever", "Parse Partout"), "legacy: not a longer name")
+    check(not legacy("Parse Partout-A-B", "Parse Partout"), "legacy: not a realm with a hyphen (the old key had none)")
+end
+
+-- Two old keys of one name (the same name on two realms): the most recently
+-- observed one moves, the other stays to age out.
+do
+    local two = { version = 1, guilds = {
+        ["Parse Partout-RealmA"] = { observedAt = 1790000000, members = {}, log = {}, formers = {}, shownSeq = 0 },
+        ["Parse Partout-RealmB"] = { observedAt = 1790005000, members = {}, log = { { seq = 7, at = 1790004000, kind = "JOIN", name = "Bo Kay" } }, formers = {}, shownSeq = 7 },
+    } }
+    local T = newGuild()
+    T.realm = nil
+    login(two, T)
+    WoW.advance(4)
+    local g = GuildSpyDB.guilds
+    eq(g["Parse Partout-RealmB"], nil, "the most recent old key moved")
+    check(g["Parse Partout-RealmA"] ~= nil, "...the older one stayed")
+    eq(g["Parse Partout"] and g["Parse Partout"].log and g["Parse Partout"].log[1] and g["Parse Partout"].log[1].seq, 7, "...and the moved one is RealmB's")
 end
 
 done("test_scanner")

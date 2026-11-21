@@ -109,7 +109,7 @@ end
 
 do  -- in a guild: the tooltip has the guild, who's online, and what's new
     inGuild()
-    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local gs = GuildSpyDB.guilds["Parse Partout"]
     local now = time()
     GuildSpy.Log.Add(GuildSpyDB, gs, { kind = "JOIN", name = "Cy New", guid = "Player-1-00000009" }, now)
     GuildSpy.Log.Add(GuildSpyDB, gs, { kind = "ONOTE", name = "Ann Lee", guid = "Player-1-00000002", from = "", to = "tank" }, now)
@@ -153,7 +153,7 @@ end
 do  -- the most recent changes in the tooltip (#95)
     inGuild()
     local Log, O = GuildSpy.Log, GuildSpy.Options
-    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local gs = GuildSpyDB.guilds["Parse Partout"]
     local now = time()
     GuildSpyDB.settings.tooltipLevels = true              -- these lists are made of level-ups
     local function show()
@@ -253,7 +253,7 @@ end
 do  -- by when it happened, not by place in the log (#96 Codex review)
     inGuild()
     local Log = GuildSpy.Log
-    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local gs = GuildSpyDB.guilds["Parse Partout"]
     local now = time()
     GuildSpyDB.settings.tooltipLevels = true
     local function rows()
@@ -295,7 +295,7 @@ end
 do  -- level-ups stay out of the list unless asked for (#96)
     inGuild()
     local Log, O = GuildSpy.Log, GuildSpy.Options
-    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local gs = GuildSpyDB.guilds["Parse Partout"]
     local now = time()
     local function rows()
         local tip = newTip()

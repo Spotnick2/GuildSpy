@@ -318,7 +318,7 @@ end
 
 do  -- A guild report with a damaged identity is dropped at load, never migrated as mine.
     local now = time()
-    local saved = { guilds = { ["Parse Partout-Forever"] = { log = {
+    local saved = { guilds = { ["Parse Partout"] = { log = {
         { seq = 1, at = now - 60, kind = "JOIN", guid = "Player-1-00000009", name = "Fake",
           trust = "guild", ns = "g:Bo Kay", uid = 12345, reporter = "Bo Kay", origin = "Bo Kay" },
         { seq = 2, at = now - 50, kind = "JOIN", guid = "Player-1-00000008", name = "Real",
@@ -334,7 +334,7 @@ do  -- A guild report with a damaged identity is dropped at load, never migrated
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("GUILD_ROSTER_UPDATE", false)
     WoW.advance(25)
-    local gs = saved.guilds["Parse Partout-Forever"]
+    local gs = saved.guilds["Parse Partout"]
     local names = {}
     for _, x in ipairs(gs.log) do names[#names + 1] = x.name .. ":" .. tostring(x.trust) end
     eq(table.concat(names, ","), "Real:guild,Mine:self", "the damaged report is dropped; the good one and mine stay")

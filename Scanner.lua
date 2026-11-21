@@ -117,8 +117,39 @@ end
 
 -- The saved state of one guild, made if new; at most MAX_GUILDS are kept,
 -- the least recently observed dropped first.
+-- Whether a saved key is the one an older version gave this guild:
+-- "<name>-<realm>", the realm without spaces, hyphens or apostrophes (#104).
+local function legacyKey(k, name)
+    local prefix = name .. "-"
+    return type(k) == "string" and #k > #prefix and k:sub(1, #prefix) == prefix
+        and k:find("-", #prefix + 1, true) == nil
+end
+
+-- A guild first seen under its new key takes the state an older version saved
+-- under "<name>-<realm>", once: the most recently observed if there are
+-- several (the same name on two realms, now one guild: Compat's GuildKey).
+-- Its "accept reports from" rank moves with it.
+local function migrate(guilds, key)
+    local from, at
+    for k, g in pairs(guilds) do
+        if type(g) == "table" and legacyKey(k, key) then
+            local t = type(g.observedAt) == "number" and g.observedAt or 0
+            if not from or t > at then from, at = k, t end
+        end
+    end
+    if not from then return end
+    guilds[key], guilds[from] = guilds[from], nil
+    local ranks = db().settings and db().settings.reportRanks
+    if type(ranks) == "table" and ranks[from] ~= nil then
+        if ranks[key] == nil then ranks[key] = ranks[from] end
+        ranks[from] = nil
+    end
+end
+Scanner._test = { legacyKey = legacyKey }
+
 local function guildState(key)
     local guilds = db().guilds
+    if type(guilds[key]) ~= "table" then migrate(guilds, key) end
     if type(guilds[key]) ~= "table" then guilds[key] = {} end
     local gs = validGuild(guilds[key])
     local keys = {}

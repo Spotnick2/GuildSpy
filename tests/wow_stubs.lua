@@ -158,7 +158,8 @@ table.insert(WoW.onReset, function()
     WoW.sounds = {}
     WoW.metadata = { Version = "@project-version@" }
     WoW.build = { "1.60.1", "70532", "Oct 20 2026", 16001 }
-    WoW.playerName, WoW.playerSurname, WoW.realm = "Fizzle", "Sprocketwhistle", "Forever"
+    -- The realm is hidden since the 2026-11-20 server hotfix: GetRealmName() is "" (porting guide).
+    WoW.playerName, WoW.playerSurname, WoW.realm = "Fizzle", "Sprocketwhistle", ""
     WoW.guild = nil
     WoW.rosterRequests, WoW.eventLogQueries = 0, 0
     SlashCmdList = {}

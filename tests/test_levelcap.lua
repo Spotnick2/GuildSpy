@@ -68,7 +68,7 @@ eq(GuildSpy.Log.Plain(GuildSpy.Log.Line(cap, 0)), "Ann Lee reached level 60", "n
 -- The summary: a cap level-up before the other level-ups, and one fanfare however many.
 local G = newGuild()
 login(nil, G)
-local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+local gs = GuildSpyDB.guilds["Parse Partout"]
 local db = GuildSpyDB
 -- While away: Cy levels, then Ann and Bo hit the cap.
 find("Cy Dee").level = 41
@@ -144,7 +144,7 @@ eq(#WoW.sounds, 0, "the summary off: no sound either")
 G = newGuild()
 login(nil, G)
 db = GuildSpyDB
-local gsr = db.guilds["Parse Partout-Forever"]
+local gsr = db.guilds["Parse Partout"]
 local t = time()
 check(GuildSpy.Log.Receive(db, gsr, { uid = "rep:1", rev = 1, kind = "LEVEL", guid = "Player-1-0000000F",
     name = "Far Away", from = 59, to = 60, at = t - 60, obs = t - 60, lo = t - 120, hi = t - 60,

@@ -105,7 +105,8 @@ Take its bug-catching seriously; be skeptical when it wants more rigor.
 - **The plan (4 rounds):** 6 real P1s in round 1 (completeness, identity, rank shifts, officer-note
   privacy, dedupe, attribution).
 - **Phase 1's code:** 11 findings. 9 were fixed. 2 were declined with reasons in `docs/PLAN.md`:
-  a server leave message is proof by itself, and a same-realm guild has no guild realm.
+  a server leave message is proof by itself, and a same-realm guild has no guild realm (the second
+  one was superseded by #104: the key has no realm now).
 
 ## Fallback
 
