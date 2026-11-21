@@ -119,13 +119,15 @@ end
 -- GuildSpyProbe (Tools/GuildSpyProbe) the way the client loads it: a fresh
 -- session and a fresh ForeverProbe, then every .lua line of the probe's TOC
 -- with ("GuildSpyProbe", ns), then its ADDON_LOADED. opts.db seeds
--- GuildSpyProbeDB; opts.setup() runs after the reset (a test's client state).
+-- GuildSpyProbeDB and opts.fpdb ForeverProbeDB (both, for a /reload: a
+-- running procedure resumes from ForeverProbeDB); opts.setup() runs after the
+-- reset (a test's client state).
 -- GuildSpy itself isn't loaded: the probe reads the client, not the addon.
 -- Returns the probe's namespace.
 PROBE_TOC = "Tools/GuildSpyProbe/GuildSpyProbe.toc"
 function loadProbe(opts)
     opts = opts or {}
-    ForeverProbe, ForeverProbeDB, GuildSpyProbeDB = nil, nil, opts.db
+    ForeverProbe, ForeverProbeDB, GuildSpyProbeDB = nil, opts.fpdb, opts.db
     WoW.reset()
     if opts.setup then opts.setup() end
     loadForeverProbe()

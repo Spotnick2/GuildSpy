@@ -9,10 +9,13 @@
 -- WTF\Account\<acct>\SavedVariables\GuildSpyProbe.lua, to be read from disk.
 --
 -- While the probe is loaded (cheap, capped): a timeline of the guild events
--- from login, with how complete the roster was at each GUILD_ROSTER_UPDATE
--- (GuildSpyProbeDB.timeline). `/fp gs watch` also records every
--- CHAT_MSG_SYSTEM line, to catch the real text of joins, leaves, kicks and
--- promotions when they happen.
+-- in the first minutes after each login or /reload, with how complete the
+-- roster was at each GUILD_ROSTER_UPDATE (GuildSpyProbeDB.timeline). It isn't
+-- cleared at login: every entry carries its load number, so a /reload (the
+-- procedure's own included) keeps the sessions before it. `/fp gs watch`
+-- records every CHAT_MSG_SYSTEM line in a list of its own
+-- (GuildSpyProbeDB.watched), to catch the real text of joins, leaves, kicks
+-- and promotions when they happen, without pushing the login samples out.
 --
 -- /fp steps gs guild : the whole measurement, then a /reload.
 
@@ -25,7 +28,7 @@ local G = {}
 NS.Guild = G
 
 local MAX_POSITIONS = 24      -- tuple positions examined (Retail's roster tuple has 17)
-local LOG_CAP = 300           -- timeline entries kept
+local LOG_CAP = 300           -- timeline entries kept, and watched messages kept
 local TIMELINE_SECONDS = 180  -- roster completeness is timed for this long after login
 local EVENT_LOG_SETTLE = 3    -- seconds of quiet before the event log's burst is read
 local ICON = "Interface\\Icons\\INV_Misc_Spyglass_03"
@@ -142,12 +145,14 @@ local function snapshotCounts()
     }
 end
 
-local function record(entry)
+local function record(entry, list)
     if not DB then return end
+    list = list or DB.timeline
     entry.t = time()
     entry.dt = G.loginAt and (GetTime() - G.loginAt) or nil
-    table.insert(DB.timeline, entry)
-    while #DB.timeline > LOG_CAP do table.remove(DB.timeline, 1) end
+    entry.load = DB.loads
+    table.insert(list, entry)
+    while #list > LOG_CAP do table.remove(list, 1) end
 end
 
 -- GuildSpy's own version, when it's loaded next to the probe.
@@ -334,15 +339,18 @@ end
 function G.Bind(db)
     DB = db
     if type(DB.timeline) ~= "table" then DB.timeline = {} end
+    if type(DB.watched) ~= "table" then DB.watched = {} end
     if type(DB.dump) ~= "table" then DB.dump = nil end
     if DB.watch ~= true then DB.watch = nil end
 end
 
--- `/fp gs clear`: the dump, the timeline and the watch switch.
+-- `/fp gs clear`: the dump, the timeline, the watched messages and the switch.
 function G.Clear()
     if not DB then return end
     DB.dump, DB.watch = nil, nil
-    for i = #DB.timeline, 1, -1 do DB.timeline[i] = nil end
+    for _, list in ipairs({ DB.timeline, DB.watched }) do
+        for i = #list, 1, -1 do list[i] = nil end
+    end
 end
 
 Probe:Command("dump", function() G.Run() end, "dump the guild API's shapes into GuildSpyProbeDB.dump")
@@ -358,32 +366,36 @@ Probe:Command("watch", function(args)
 end, "record every system message from now on: on, off, or toggle")
 Probe:Command("timeline", function()
     if not DB then return end
-    for _, e in ipairs(DB.timeline) do
-        local parts = {}
-        for k, v in pairs(e) do
-            if k ~= "e" and k ~= "t" then parts[#parts + 1] = k .. "=" .. show(v, true) end
+    for _, list in ipairs({ DB.timeline, DB.watched }) do
+        for _, e in ipairs(list) do
+            local parts = {}
+            for k, v in pairs(e) do
+                if k ~= "e" and k ~= "t" then parts[#parts + 1] = k .. "=" .. show(v, true) end
+            end
+            table.sort(parts)
+            say(("  %s %s"):format(e.e, table.concat(parts, " ")))
         end
-        table.sort(parts)
-        say(("  %s %s"):format(e.e, table.concat(parts, " ")))
     end
-    say(#DB.timeline .. " timeline entries, watch " .. (DB.watch and "on" or "off"))
+    say(("%d timeline entries, %d watched messages, watch %s")
+        :format(#DB.timeline, #DB.watched, DB.watch and "on" or "off"))
 end, "the login timeline (roster completeness, guild events) and the watched system messages")
 
--- Events. The timeline is timed for TIMELINE_SECONDS after login; the system
--- messages are recorded only while watching.
+-- Events. The timeline is timed for TIMELINE_SECONDS after each login or
+-- /reload; the system messages are recorded only while watching.
+-- PLAYER_ENTERING_WORLD's two flags (initial login, reloading the UI) are in
+-- the API dump but not measured on Forever: recorded here, not relied on.
 local frame = CreateFrame("Frame")
-Probe:RegisterEvents(frame, { "PLAYER_LOGIN", "GUILD_ROSTER_UPDATE", "PLAYER_GUILD_UPDATE", "GUILD_RANKS_UPDATE",
+Probe:RegisterEvents(frame, { "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "GUILD_ROSTER_UPDATE", "PLAYER_GUILD_UPDATE", "GUILD_RANKS_UPDATE",
                               "GUILD_MOTD", "GUILD_EVENT_LOG_UPDATE", "CHAT_MSG_SYSTEM" })
 frame:SetScript("OnEvent", function(_, event, ...)
     if not DB then return end
     if event == "PLAYER_LOGIN" then
         G.loginAt = GetTime()
-        for i = #DB.timeline, 1, -1 do DB.timeline[i] = nil end   -- one session's timeline
-        record({ e = event })
+        record({ e = event })             -- a new session starts; the older ones stay
         return
     end
     if event == "CHAT_MSG_SYSTEM" then
-        if DB.watch then record({ e = event, msg = plain((...)) }) end
+        if DB.watch then record({ e = event, msg = plain((...)) }, DB.watched) end
         return
     end
     if event == "GUILD_EVENT_LOG_UPDATE" then
@@ -393,6 +405,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     local timed = G.loginAt and (GetTime() - G.loginAt) <= TIMELINE_SECONDS
     if not timed then return end
     local entry = { e = event, arg = plain((...)) }
+    if event == "PLAYER_ENTERING_WORLD" then entry.arg2 = plain((select(2, ...))) end
     if event == "GUILD_ROSTER_UPDATE" or event == "PLAYER_GUILD_UPDATE" then
         local c = snapshotCounts()
         for k, v in pairs(c) do entry[k] = v end
@@ -440,14 +453,20 @@ Probe:Steps("guild", {
           if mr.done then return true, mr.inconclusive or mr.learned end
           return false, "read a few seconds after the request"
       end },
+    -- Yes and No both set it, so a saved "on" from an earlier run is never
+    -- left on by an answer that meant off; Skip keeps it as it is.
     { text = "Record every system message from now on, to catch the real text of a promotion, a "
-          .. "demotion, a leave or a kick (#10)? Watch turns it on, Skip leaves it off.",
-      button = "Watch", run = function() G.SetWatch(true); return true end },
+          .. "demotion, a leave or a kick (#10)? Yes turns watching on, No turns it off, Skip "
+          .. "keeps it as it is (the step after the /reload says which).",
+      ask = true,
+      leave = function(outcome)
+          if outcome == "yes" then G.SetWatch(true) elseif outcome == "no" then G.SetWatch(false) end
+      end },
     { text = "Type /reload (or press Reload now) to write the dump to disk.", reload = true },
     { text = "After the reload.", auto = true,
       run = function()
           local d = G.Dump()
-          return d ~= nil, d and d.build, DB and #DB.timeline
+          return d ~= nil, d and d.build, DB and #DB.timeline, DB and (DB.watch and "watch on" or "watch off")
       end,
       check = function() return G.Dump() ~= nil, "the dump is still there after the /reload" end },
     { text = "Done. With watch on, play normally: /fp gs timeline shows what was recorded, and a "

@@ -97,8 +97,9 @@ client finds it by name (the package check names it).
   - **The guild API's shapes** (phase 0's measurements; `/gspy probe` inside the addon until #67).
     `Guild.lua`: `/fp gs dump` saves the roster tuple (finding the GUID by looking), last-online,
     ranks, `C_Club`, the event log and the `ERR_GUILD_*` strings into `GuildSpyProbeDB.dump`; a
-    login timeline of roster completeness is kept in `GuildSpyProbeDB.timeline`, and
-    `/fp gs watch` adds every system message. `GuildProfessions.lua`: whether the server serves
+    login timeline of roster completeness is kept in `GuildSpyProbeDB.timeline` (never cleared at
+    login, each entry tagged with its load, so a `/reload` keeps the earlier sessions), and
+    `/fp gs watch` records every system message in `GuildSpyProbeDB.watched`. `GuildProfessions.lua`: whether the server serves
     guild professions and recipes (it serves names only). `/fp steps gs guild` runs it all.
     `tests/test_probe.lua`, `tests/test_probe_professions.lua`.
   - **What Guild Roster Manager sends** on the guild channel (#8): `GRMClassify.lua` is pure

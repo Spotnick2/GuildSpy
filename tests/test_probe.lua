@@ -107,17 +107,24 @@ local n = #TL
 WoW.fire("GUILD_ROSTER_UPDATE", true)
 eq(#TL, n, "the timeline stops after its window")
 
--- System messages only while watching.
+-- System messages only while watching, in a list of their own: they can't
+-- push the login samples out of the timeline.
+local W = GuildSpyProbeDB.watched
 WoW.fire("CHAT_MSG_SYSTEM", "X has joined the guild.")
-eq(#TL, n, "system messages ignored by default")
+eq(#W, 0, "system messages ignored by default")
 fp("watch")
 eq(GuildSpyProbeDB.watch, true, "/fp gs watch turns it on")
 WoW.fire("CHAT_MSG_SYSTEM", "X has joined the guild.")
-eq(TL[#TL].msg, "X has joined the guild.", "recorded while watching")
+eq(W[#W].msg, "X has joined the guild.", "recorded while watching")
+eq(W[#W].load, 1, "...with its load number")
 WoW.fire("CHAT_MSG_SYSTEM", WoW.Secret("system"))
-eq(TL[#TL].msg, "(secret)", "a secret system message is saved as a marker")
+eq(W[#W].msg, "(secret)", "a secret system message is saved as a marker")
 fp("timeline")
-check(logHas("msg=X has joined the guild."),"/fp gs timeline shows it in the console")
+check(logHas("msg=X has joined the guild."), "/fp gs timeline shows it in the console")
+for _ = 1, 400 do WoW.fire("CHAT_MSG_SYSTEM", "Y has come online.") end
+check(#W <= 300, "the watched messages are capped")
+eq(#TL, n, "...and the timeline keeps its login samples")
+eq(TL[2].e, "GUILD_ROSTER_UPDATE", "...the first one included")
 fp("watch off")
 eq(GuildSpyProbeDB.watch, nil, "/fp gs watch off turns it off")
 
@@ -128,12 +135,19 @@ loadProbe({ db = db, setup = function() WoW.guild = guild(2) end })
 check(GuildSpyProbeDB.dump ~= nil and GuildSpyProbeDB.dump.survey.rows == 7, "the dump is kept across a reload")
 eq(GuildSpyProbeDB.watch, true, "...and the watch switch")
 WoW.fire("PLAYER_LOGIN")
-eq(#GuildSpyProbeDB.timeline, 1, "a new login starts a new timeline")
+WoW.fire("PLAYER_ENTERING_WORLD", false, true)
+TL = GuildSpyProbeDB.timeline
+eq(TL[2].e, "GUILD_ROSTER_UPDATE", "a /reload keeps the earlier session's login samples")
+eq(TL[2].load, 1, "...marked with their load")
+eq(TL[#TL - 1].e .. " " .. tostring(TL[#TL - 1].load), "PLAYER_LOGIN 2", "the new session is marked with its load")
+eq(TL[#TL].arg, false, "PLAYER_ENTERING_WORLD's flags are recorded: initial login")
+eq(TL[#TL].arg2, true, "...and reloading the UI")
 
--- /fp gs clear forgets the dump, the timeline and the watch switch too.
+-- /fp gs clear forgets the dump, the timeline, the watched messages and the switch too.
 fp("clear")
 eq(GuildSpyProbeDB.dump, nil, "clear: no dump")
 eq(#GuildSpyProbeDB.timeline, 0, "clear: no timeline")
+eq(#GuildSpyProbeDB.watched, 0, "clear: no watched messages")
 eq(GuildSpyProbeDB.watch, nil, "clear: watch off")
 fp("dump")
 check(logHas("dump: build"), "a line written after the clear is in the saved log")
@@ -165,10 +179,12 @@ rawset(_G, "GetGuildRosterLastOnline", saved)
 check(ok, "a missing function doesn't break the dump: " .. tostring(err))
 eq(GuildSpyProbeDB.dump.rows[1].lastOnline.missing, true, "...and is recorded as missing")
 
--- The procedure: /fp steps gs guild dumps, waits for the answers, asks for a reload.
+-- The procedure: /fp steps gs guild dumps, waits for the answers, asks for a
+-- reload, and resumes after it with the first session's samples still there.
 loadProbe({ setup = function() WoW.guild = guild(4) end })
 FP = ForeverProbe
 WoW.fire("PLAYER_LOGIN")
+WoW.fire("GUILD_ROSTER_UPDATE", true)
 check(FP.procedures["GuildSpyProbe/guild"], "procedure guild is defined")
 check(FP.procedures["GuildSpyProbe/grm"], "...next to grm")
 SlashCmdList.FOREVERPROBE("steps gs guild")
@@ -186,8 +202,43 @@ eq(rec.results[3].check, "PASS", "...and checks it was read")
 FP.Steps.Skip()                                         -- 4: the recipe book (no club here)
 FP.Steps.Poll()                                         -- 5: nothing asked
 eq(rec.results[5] and rec.results[5].status, "done", "step 5 doesn't wait when no book was asked for")
-FP.Steps.Run()                                          -- 6: watch
-eq(GuildSpyProbeDB.watch, true, "step 6 turns watching on")
+FP.Steps.Answer(true)                                   -- 6: watch? yes
+eq(GuildSpyProbeDB.watch, true, "step 6: Yes turns watching on")
+WoW.fire("CHAT_MSG_SYSTEM", "X has joined the guild.")
+eq(#WoW.chat, 0, "nothing the probe learned went to chat")
+-- 7: the /reload. Both saved tables survive it, as on disk.
+local probeDB, fpDB = GuildSpyProbeDB, ForeverProbeDB
+loadProbe({ db = probeDB, fpdb = fpDB, setup = function() WoW.guild = guild(4) end })
+FP = ForeverProbe
+WoW.fire("PLAYER_LOGIN")
+rec = ForeverProbeDB.steps.records["GuildSpyProbe/guild"]
+eq(rec.results[8] and rec.results[8].status, "done", "the procedure resumes after the reload, at step 8")
+eq(rec.results[8].check, "PASS", "...the dump is still there")
+local firstSession
+for _, e in ipairs(GuildSpyProbeDB.timeline) do
+    if e.e == "GUILD_ROSTER_UPDATE" and e.load == 1 then firstSession = e end
+end
+check(firstSession ~= nil, "the first session's roster sample survives the procedure's own /reload")
+eq(GuildSpyProbeDB.watched[1] and GuildSpyProbeDB.watched[1].msg, "X has joined the guild.", "...and the watched message")
+SlashCmdList.FOREVERPROBE("gs timeline")
+check(logHas("load=1"), "/fp gs timeline shows it after the reload")
+SlashCmdList.FOREVERPROBE("steps stop")
+
+-- A rerun with watching already on: No turns it off, Skip keeps it.
+SlashCmdList.FOREVERPROBE("steps gs guild")
+FP.Steps.Next(); FP.Steps.Run()
+WoW.fire("GUILD_EVENT_LOG_UPDATE"); WoW.advance(4); FP.Steps.Poll()
+FP.Steps.Skip(); FP.Steps.Poll()
+eq(GuildSpyProbeDB.watch, true, "on from the earlier run")
+FP.Steps.Answer(false)
+eq(GuildSpyProbeDB.watch, nil, "step 6: No turns watching off, even when it was on")
+SlashCmdList.FOREVERPROBE("steps gs guild")
+FP.Steps.Next(); FP.Steps.Run()
+WoW.fire("GUILD_EVENT_LOG_UPDATE"); WoW.advance(4); FP.Steps.Poll()
+FP.Steps.Skip(); FP.Steps.Poll()
+GuildSpyProbeDB.watch = true
+FP.Steps.Skip()
+eq(GuildSpyProbeDB.watch, true, "step 6: Skip keeps it as it is")
 SlashCmdList.FOREVERPROBE("steps stop")
 eq(#WoW.chat, 0, "nothing the probe learned went to chat")
 

@@ -44,15 +44,17 @@ never shipped. Until #67 it was `/gspy probe` inside the addon, saving into `Gui
 2. Log in on a character **in a guild**.
 3. `/fp steps gs guild`. The panel asks you to wait ~30 s for the roster, dumps the guild API,
    waits for the event log and the professions answers, asks for a guildmate's recipe book (it opens the
-   Professions window), offers to record every system message from then on (#10), and asks for a
-   `/reload`. One-offs: `/fp gs dump`, `eventlog` (re-reads the event log), `recipes`,
+   Professions window), asks whether to record every system message from then on (#10: Yes on,
+   No off, Skip keeps the saved setting), and asks for a `/reload`. One-offs: `/fp gs dump`, `eventlog` (re-reads the event log), `recipes`,
    `watch on|off`, `timeline`.
 4. With watch on, play normally. Ideally get a promotion or demotion, a note edit, a join or a
    leave to happen (an officer alt helps).
 5. `/reload` (writes the file), then read
    `WTF\Account\<account>\SavedVariables\GuildSpyProbe.lua`: `GuildSpyProbeDB.dump` (the dump),
-   `GuildSpyProbeDB.timeline` (the login timeline and the watched system messages) and
-   `GuildSpyProbeDB.log` (the console's lines). In the answers below, `probe.X` is now
+   `GuildSpyProbeDB.timeline` (the first 3 minutes after each login or `/reload`, every entry
+   tagged with its `load`, kept across reloads up to 300 entries), `GuildSpyProbeDB.watched` (the
+   system messages, a list of their own, also capped at 300) and `GuildSpyProbeDB.log` (the
+   console's lines). In the answers below, `probe.X` is now
    `GuildSpyProbeDB.dump.X`.
 
 ## Answers
