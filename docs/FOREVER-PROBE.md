@@ -29,6 +29,28 @@ hid the realm. One run by Drucida Komakino, rank Member, no officer rights, in a
   realm) is **nil**. Since `GetRealmName()` is `""` too, GuildSpy keys a guild by its name alone
   (#104).
 
+**Re-run through GuildSpyProbe on 1.60.1.71037 (2026-11-20, 22:35 EST, #67).** It was the
+first run of `/fp steps gs guild`, with the same character and guild. All 9 steps completed, and
+the 3 checks passed. The dump survived the procedure's own `/reload`. Every shape above is
+unchanged:
+- 369 rows, a GUID at position 17 in all 369, all unique.
+- `GetNumGuildMembers` = `369, 94`; 6 ranks.
+- 100 event log entries, all with their names.
+- `C_Club` has the same fields, and none of the 13 `ERR_GUILD_*` / friend strings is missing.
+
+What this run added:
+- **The event log answered in one `GUILD_EVENT_LOG_UPDATE`**, not a burst: the dump counted 1
+  update before its 3 s of quiet, with all 100 entries named. On 70338 it was about 55. Keep the
+  debounce, since one run doesn't show the burst is gone.
+- **The roster was complete at every `GUILD_ROSTER_UPDATE`** after two `/reload`s (3 minutes
+  after the first, 20 s after the second): 369 of 369 rows with name and GUID, from the first
+  update, 1.7–2.2 s in. The update fires every few seconds: 51 in the first 3 minutes, 12 of the
+  57 in the same frame as the one before. A fresh login, where the roster may still be loading,
+  isn't measured.
+- **`PLAYER_ENTERING_WORLD` on a `/reload`** passed `isInitialLogin = false`,
+  `isReloadingUi = true`, on both reloads. A fresh login isn't measured.
+- **Professions:** rows 15–17 of the professions table re-run with the corrected probe.
+
 Still open:
 - #7: a run on a character that can view officer notes.
 - #10: the real text of a promotion, a demotion, a leave and a kick.
@@ -247,20 +269,22 @@ Its one gate is `C_TradeSkillUI.IsGuildTradeSkillsEnabled()`. The probe's `Guild
 |---|---|---|---|
 | 13 | `IsGuildTradeSkillsEnabled()`, and `CanViewGuildRecipes(id)` per profession | `probe.professions.enabled`, `.canView` | **false**, and false for all 9 professions |
 | 14 | Do members' `professionNRank` values carry real skill levels? | `probe.professions.survey` | **Not through this API.** 144 of 153 members have professions, with **real names** (Skinning 50, Mining 47, Leatherworking 39, Herbalism 34, Blacksmithing 27, Tailoring 24, Alchemy 22, Enchanting 22, Engineering 8), but `C_Club` reports **rank 1 for every one** |
-| 15 | `QueryGuildRecipes` → `GUILD_TRADESKILL_UPDATE` → `GetGuildTradeSkillInfo` | `probe.professions.guildTradeSkill` | **Answers.** 10 header rows, all collapsed: skill line, collapsed, icon, name, online, visible, players. The 9 professions above with matching counts, plus "Test Profession [DNT]" (2933, 0 players). Member rows weren't read, because the headers were collapsed. The probe now expands them, reads the rows, and collapses them again: **re-run to see whether member rows carry a skill** |
-| 16 | `QueryGuildMembersForRecipe` → `GUILD_RECIPE_KNOWN_BY_MEMBERS` | `probe.professions.recipeQueries` | Only 1 of 7 queries answered: Minor Healing Potion with **0 members**, although the guild has 22 alchemists. The other 6 got no answer within 4 s. Answers weren't matched to their query then (now they are). **No recipe knowledge was obtained in these attempts** |
-| 17 | `/gspy probe recipes` (now `/fp gs recipes`): does a guildmate's recipe book open? | `probe.memberRecipes` | **Not in one attempt.** `QueryGuildMemberRecipes(guid, 171)` for Gal Orey (Alchemy, presence offline) returned nothing. No `TRADE_SKILL_SHOW` and no window; 4 s later `IsTradeSkillReady` was false, with 0 recipe ids. The probe now prefers an online crafter in either slot |
+| 15 | `QueryGuildRecipes` → `GUILD_TRADESKILL_UPDATE` → `GetGuildTradeSkillInfo` | `probe.professions.guildTradeSkill` | **Answers.** 10 header rows, all collapsed: skill line, collapsed, icon, name, online, visible, players. The 9 professions above with matching counts, plus "Test Profession [DNT]" (2933, 0 players). Member rows weren't read, because the headers were collapsed. The probe now expands them, reads the rows, and collapses them again: **re-run to see whether member rows carry a skill**. **Re-run on 71037 (#67): the member rows carry no skill.** 10 headers expanded to 197 rows, 187 of them member rows (skill line, then name, full name, class, online, zone, a number, class file, a flag, a number). The number at position 13 is **1 in all 187**, the same rank 1 as `C_Club`; position 16 is 0 or 1. The headers were collapsed again |
+| 16 | `QueryGuildMembersForRecipe` → `GUILD_RECIPE_KNOWN_BY_MEMBERS` | `probe.professions.recipeQueries` | Only 1 of 7 queries answered: Minor Healing Potion with **0 members**, although the guild has 22 alchemists. The other 6 got no answer within 4 s. Answers weren't matched to their query then (now they are). **No recipe knowledge was obtained in these attempts**. **Re-run on 71037 (#67): the same.** Of 7 queries, only Minor Healing Potion was answered, again with **0 members**. The other 6 got no answer within 4 s, and no stray answer came late |
+| 17 | `/gspy probe recipes` (now `/fp gs recipes`): does a guildmate's recipe book open? | `probe.memberRecipes` | **Not in one attempt.** `QueryGuildMemberRecipes(guid, 171)` for Gal Orey (Alchemy, presence offline) returned nothing. No `TRADE_SKILL_SHOW` and no window; 4 s later `IsTradeSkillReady` was false, with 0 recipe ids. The probe now prefers an online crafter in either slot. **Re-run on 71037 (#67), with an online crafter: still not.** `QueryGuildMemberRecipes(guid, 333)` for an Enchanting guildmate shown as Away returned nothing. No trade skill event came; 4 s later the view was neither a guildmate's nor ready, and the base profession read as id 0. Inconclusive by the probe's own rule, and nothing was closed |
 
 **So far:**
 - **Established:** the server serves **who has which profession**, with names and counts, and
   the client's switch is off.
-- **Not obtained in these attempts:** skill levels (`C_Club` reports 1) and recipe knowledge
-  (one answer, 0 members; one recipe book that didn't open).
-- **Unsettled:** whether skill or recipe data exists elsewhere. A re-run with the corrected probe
-  (expanded headers, matched answers, an online crafter) is the next measurement.
+- **Not obtained, now on two builds:** skill levels and recipe knowledge.
+  - Skill levels: `C_Club` reports 1, and so do the crafter list's member rows (re-run, 71037).
+  - Recipe knowledge: one answer with 0 members on both runs, and no recipe book opened, for an
+    offline crafter (70338) or an Away one (71037).
+- **Unsettled:** whether that data exists anywhere else the client can reach. The corrected probe
+  (expanded headers, matched answers, an online crafter) found none of it.
 
-A "who's a tailor" directory is possible from what is established. "Who can craft X" looks like it
-needs addon-to-addon sharing, unless the re-run shows otherwise (#9).
+A "who's a tailor" directory is possible from what is established. "Who can craft X" needs
+addon-to-addon sharing (#9): the re-run found no server source for it.
 
 ## What this changes in the plan
 
