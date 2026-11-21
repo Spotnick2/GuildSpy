@@ -457,4 +457,34 @@ do
     eq(g["Parse Partout"] and g["Parse Partout"].log and g["Parse Partout"].log[1] and g["Parse Partout"].log[1].seq, 7, "...and the moved one is RealmB's")
 end
 
+-- MAX_GUILDS dropped the guild's state but kept its "accept reports from"
+-- rank (#105 review): the rank still moves, so reports stay filtered.
+do
+    local evicted = { version = 1, settings = { reportRanks = {
+        ["Parse Partout-RealmA"] = 3, ["Parse Partout-RealmB"] = 1, ["Other Guild-Forever"] = 2 } },
+        guilds = { ["Other Guild-Forever"] = { observedAt = 1790000000, members = {}, log = {}, formers = {} } } }
+    local E = newGuild()
+    E.realm = nil
+    login(evicted, E)
+    WoW.advance(4)
+    local ranks = GuildSpyDB.settings.reportRanks
+    eq(ranks and ranks["Parse Partout"], 1, "a rank with no state left moves (the strictest of two)")
+    eq(GuildSpy.GuildSync.MinRank(), 1, "...and the filter reads it")
+    check(ranks["Parse Partout-RealmA"] == nil and ranks["Parse Partout-RealmB"] == nil, "...the old keys go")
+    eq(ranks["Other Guild-Forever"], 2, "...another guild's stays")
+    check(chatHas("now watching Parse Partout"), "...and the guild itself starts with a baseline")
+end
+
+-- A moved state's own rank wins over another old key's stricter one.
+do
+    local both = { version = 1, settings = { reportRanks = { ["Parse Partout-RealmA"] = 0, ["Parse Partout-RealmB"] = 3 } },
+        guilds = { ["Parse Partout-RealmB"] = { observedAt = 1790005000, members = {}, log = {}, formers = {}, shownSeq = 0 } } }
+    local B2 = newGuild()
+    B2.realm = nil
+    login(both, B2)
+    WoW.advance(4)
+    eq(GuildSpyDB.settings.reportRanks and GuildSpyDB.settings.reportRanks["Parse Partout"], 3, "the moved state's rank is kept")
+    eq(GuildSpyDB.settings.reportRanks["Parse Partout-RealmA"], nil, "...and the other old key goes")
+end
+
 done("test_scanner")
