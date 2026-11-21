@@ -42,11 +42,14 @@ What this run added:
 - **The event log answered in one `GUILD_EVENT_LOG_UPDATE`**, not a burst: the dump counted 1
   update before its 3 s of quiet, with all 100 entries named. On 70338 it was about 55. Keep the
   debounce, since one run doesn't show the burst is gone.
-- **The roster was complete at every `GUILD_ROSTER_UPDATE`** after two `/reload`s (3 minutes
-  after the first, 20 s after the second): 369 of 369 rows with name and GUID, from the first
-  update, 1.7–2.2 s in. The update fires every few seconds: 51 in the first 3 minutes, 12 of the
-  57 in the same frame as the one before. A fresh login, where the roster may still be loading,
-  isn't measured.
+- **Every `GUILD_ROSTER_UPDATE` sampled had a name and a GUID in every row.** The samples cover two
+  `/reload`s (3 minutes after the first, 20 s after the second): 369 of 369 rows, 369 unique
+  GUIDs, from the first update, 1.7–2.2 s in. The timeline samples names and GUIDs only. GuildSpy's
+  completeness gate (`API.ReadRoster`) also needs the rank table loaded and a valid rank index in
+  every row. The 6 ranks in the dump show the ranks were there when it ran, so when the full gate
+  first passes is still unmeasured. The update fires every few seconds: 51 in the first 3 minutes,
+  12 of the 57 in the same frame as the one before. A fresh login, where the roster may still be
+  loading, isn't measured.
 - **`PLAYER_ENTERING_WORLD` on a `/reload`** passed `isInitialLogin = false`,
   `isReloadingUi = true`, on both reloads. A fresh login isn't measured.
 - **Professions:** rows 15–17 of the professions table re-run with the corrected probe.
@@ -280,11 +283,15 @@ Its one gate is `C_TradeSkillUI.IsGuildTradeSkillsEnabled()`. The probe's `Guild
   - Skill levels: `C_Club` reports 1, and so do the crafter list's member rows (re-run, 71037).
   - Recipe knowledge: one answer with 0 members on both runs, and no recipe book opened, for an
     offline crafter (70338) or an Away one (71037).
-- **Unsettled:** whether that data exists anywhere else the client can reach. The corrected probe
-  (expanded headers, matched answers, an online crafter) found none of it.
+- **Unsettled:** whether the server has that data at all. The corrected probe (expanded headers,
+  matched answers, an online crafter) found none of it through the paths it tried. Six of 7
+  recipe queries timed out after 4 s, the one answer listed 0 members, and the recipe-book
+  request was inconclusive. That doesn't rule out another path, a longer wait, or a crafter
+  online and not Away.
 
-A "who's a tailor" directory is possible from what is established. "Who can craft X" needs
-addon-to-addon sharing (#9): the re-run found no server source for it.
+A "who's a tailor" directory is possible from what is established. For "who can craft X", the
+paths tested gave nothing, so addon-to-addon sharing is the implementation choice for #9. Whether
+the server serves recipes stays open.
 
 ## What this changes in the plan
 
