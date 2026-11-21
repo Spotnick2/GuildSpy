@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **A lighter saved file.** GuildSpy no longer records a timeline of the guild roster at every
+  login, which it kept for measuring the game and never showed. The `/gspy probe` commands, for
+  the same measurements, are gone from the addon too. What GuildSpy saved that way is cleared at
+  your next login; your guilds' history and settings are untouched.
+
 ## v1.1.1
 
 A fix for the server hotfix of November 20.

@@ -91,6 +91,54 @@ function loadAddon(opts)
     WoW.fire("ADDON_LOADED", "GuildSpy")
 end
 
+-- ForeverProbe, the probe host (Tools/GuildSpyProbe's dependency), loaded into
+-- this stub environment: $FOREVERPROBE, else ../ForeverProbe, its TOC's files
+-- with ("ForeverProbe", {}), then its ADDON_LOADED. GlassChat's loader. It is
+-- private and local, so CI sets FOREVERPROBE_OPTIONAL=1 and a probe test exits
+-- as SKIPPED there; locally a missing checkout is an error, never a silent skip.
+function loadForeverProbe()
+    local root = (os.getenv("FOREVERPROBE") or "../ForeverProbe"):gsub("\\", "/"):gsub("/$", "")
+    local toc = io.open(root .. "/ForeverProbe.toc", "rb")
+    if not toc then
+        if os.getenv("FOREVERPROBE_OPTIONAL") == "1" then
+            io.write("SKIPPED: ForeverProbe isn't here (private, local only); the probe tests run locally\n")
+            os.exit(0)
+        end
+        error("ForeverProbe checkout not found at " .. root .. ": clone it there or set FOREVERPROBE", 0)
+    end
+    local files = {}
+    for line in toc:read("*a"):gmatch("[^\r\n]+") do
+        if line:match("%.lua$") and not line:match("^#") then files[#files + 1] = root .. "/" .. line end
+    end
+    toc:close()
+    for _, file in ipairs(files) do assert(loadfile(file))("ForeverProbe", {}) end
+    WoW.fire("ADDON_LOADED", "ForeverProbe")
+    return ForeverProbe
+end
+
+-- GuildSpyProbe (Tools/GuildSpyProbe) the way the client loads it: a fresh
+-- session and a fresh ForeverProbe, then every .lua line of the probe's TOC
+-- with ("GuildSpyProbe", ns), then its ADDON_LOADED. opts.db seeds
+-- GuildSpyProbeDB and opts.fpdb ForeverProbeDB (both, for a /reload: a
+-- running procedure resumes from ForeverProbeDB); opts.setup() runs after the
+-- reset (a test's client state).
+-- GuildSpy itself isn't loaded: the probe reads the client, not the addon.
+-- Returns the probe's namespace.
+PROBE_TOC = "Tools/GuildSpyProbe/GuildSpyProbe.toc"
+function loadProbe(opts)
+    opts = opts or {}
+    ForeverProbe, ForeverProbeDB, GuildSpyProbeDB = nil, opts.fpdb, opts.db
+    WoW.reset()
+    if opts.setup then opts.setup() end
+    loadForeverProbe()
+    local ns = {}
+    for _, file in ipairs(Kit.tocFiles(PROBE_TOC)) do
+        assert(loadfile("Tools/GuildSpyProbe/" .. file))("GuildSpyProbe", ns)
+    end
+    WoW.fire("ADDON_LOADED", "GuildSpyProbe")
+    return ns
+end
+
 -- Pure modules are loaded with every global but a few
 -- Lua builtins forbidden, reads AND writes (except the addon's own table):
 -- "pure" is then enforced, not claimed. A stray client call, or a missing

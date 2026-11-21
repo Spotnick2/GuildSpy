@@ -186,7 +186,8 @@ is reset to "baseline needed". No per-character SV.
 
 ## Phases (each a PR)
 
-0. **Repo init + probe.** `/gspy probe` dumps (explicit indices, nil-safe): full
+0. **Repo init + probe.** `/gspy probe` (since #67 `/fp gs dump`, in `Tools/GuildSpyProbe`) dumps
+   (explicit indices, nil-safe): full
    `GetGuildRosterInfo(i)` tuple for a few online+offline rows, `GetGuildRosterLastOnline`,
    `GetNumGuildMembers` vs show-offline, `C_Club.GetGuildClubId`/`GetMemberInfo`,
    `CanViewOfficerNote`, rank names/indices, the full `GetGuildEventInfo` tuple for 10 entries,

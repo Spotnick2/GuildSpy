@@ -287,6 +287,10 @@ C_AddOns = {
     GetAddOnMetadata = function(name, key) return WoW.metadata[key] end,
     IsAddOnLoaded = function(name) return WoW.loadedAddOns[name] == true end,
 }
+-- Read by GuildSpyProbe's GRM state line only (API dump 71037, line 3379).
+C_Secrets = {
+    HasSecretRestrictions = function() return WoW.secretRestrictions == true end,
+}
 
 -- The retail list widgets Forever ships (Blizzard_SharedXML/Shared/Scroll):
 -- the view keeps its row initializer, so a test can draw a row with it.
@@ -448,4 +452,6 @@ WoW.reset()
 -- the addon's own, which are legitimately nil before their first assignment.
 -- LibStub: read by its own loader before it exists (the harness clears it for
 -- each load, so the embedded LibGlass-1.0 starts fresh).
-Kit.strict({ GuildSpy = true, GuildSpyDB = true, LibStub = true })
+-- ForeverProbe and its saved tables: the probe tests' (loadProbe in harness.lua).
+Kit.strict({ GuildSpy = true, GuildSpyDB = true, LibStub = true,
+             ForeverProbe = true, ForeverProbeDB = true, GuildSpyProbeDB = true })

@@ -1,7 +1,16 @@
--- The professions probe: survey every member, ask the guild-recipe API, and
--- never throw on a client where those calls are missing or silent.
+-- GuildSpyProbe's professions part (Tools/GuildSpyProbe/GuildProfessions.lua;
+-- was ProbeProfessions.lua inside the addon until #67): survey every member,
+-- ask the guild-recipe API, and never throw on a client where those calls are
+-- missing or silent. Runs locally only (ForeverProbe is private; CI sets
+-- FOREVERPROBE_OPTIONAL and this file skips).
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
+
+local function fp(cmd) SlashCmdList.FOREVERPROBE("gs " .. cmd) end
+local function logHas(pattern)
+    for _, line in ipairs(GuildSpyProbeDB.log) do if line:find(pattern, 1, true) then return true end end
+    return false
+end
 
 local function guild()
     return {
@@ -23,9 +32,9 @@ local function guild()
 end
 
 -- The survey: counts per profession, and ranks above 1 noticed.
-loadAddon({ setup = function() WoW.guild = guild() end })
-WoW.slash("/gspy probe")
-local p = GuildSpyDB.probe.professions
+loadProbe({ setup = function() WoW.guild = guild() end })
+fp("dump")
+local p = GuildSpyProbeDB.dump.professions
 check(p ~= nil, "professions probed")
 eq(p.survey.members, 4, "every club member surveyed")
 eq(p.survey.withAny, 3, "members with a profession")
@@ -48,12 +57,12 @@ WoW.advance(10)
 eq(#p.recipeQueries, 3, "Alchemy, Tailoring, Enchanting: three crafting lines (Herbalism has no recipe)")
 
 -- An answer moves the queue on at once and is read.
-loadAddon({ setup = function() WoW.guild = guild() end })
+loadProbe({ setup = function() WoW.guild = guild() end })
 rawset(_G, "GetGuildRecipeInfoPostQuery", function() return 171, 2330, 2 end)
 rawset(_G, "GetGuildRecipeMember", function(i) return "Akka", "Akka Avery", "PRIEST", true end)
-WoW.slash("/gspy probe")
+fp("dump")
 WoW.fire("GUILD_RECIPE_KNOWN_BY_MEMBERS")
-p = GuildSpyDB.probe.professions
+p = GuildSpyProbeDB.dump.professions
 eq(p.recipeQueries[1].post[3], 2, "the answer's member count read")
 eq(p.recipeQueries[1].members[2][2], "Akka Avery", "the members who know it read")
 eq(#p.recipeQueries, 2, "the next query sent without waiting")
@@ -74,12 +83,12 @@ rawset(_G, "GetNumGuildTradeSkill", nil)
 rawset(_G, "GetGuildTradeSkillInfo", nil)
 
 -- A guildmate's recipe book: an online crafter who isn't you is picked.
-loadAddon({ setup = function() WoW.guild = guild() end })
-WoW.slash("/gspy probe recipes")
-check(GuildSpyDB.probe == nil, "needs /gspy probe first")
-WoW.slash("/gspy probe")
-WoW.slash("/gspy probe recipes")
-local mr = GuildSpyDB.probe.memberRecipes
+loadProbe({ setup = function() WoW.guild = guild() end })
+fp("recipes")
+check(GuildSpyProbeDB.dump == nil and logHas("run /fp gs dump first"), "needs /fp gs dump first")
+fp("dump")
+fp("recipes")
+local mr = GuildSpyProbeDB.dump.memberRecipes
 eq(mr.member, "Akka Avery", "the online crafter, not yourself")
 eq(mr.skillLine, 171, "...in their first profession")
 WoW.fire("TRADE_SKILL_SHOW")
@@ -107,10 +116,10 @@ local function unforever()
                          "CollapseGuildTradeSkillHeader" }) do rawset(_G, k, nil) end
 end
 
-loadAddon({ setup = function() WoW.guild = guild() end })
+loadProbe({ setup = function() WoW.guild = guild() end })
 forever()
-WoW.slash("/gspy probe")
-p = GuildSpyDB.probe.professions
+fp("dump")
+p = GuildSpyProbeDB.dump.professions
 eq(p.enabled[1], false, "the switch read as off")
 eq(p.canView.Tailoring[1], false, "CanViewGuildRecipes read per profession")
 
@@ -147,11 +156,11 @@ eq(#collapsed, 2, "...and collapsed again afterwards")
 WoW.guild.club[3].profession1ID, WoW.guild.club[3].profession1Name = 182, "Herbalism"
 WoW.guild.club[3].profession2ID, WoW.guild.club[3].profession2Name = 171, "Alchemy"
 C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Akka Avery" end
-WoW.slash("/gspy probe recipes")
-local mr = GuildSpyDB.probe.memberRecipes
+fp("recipes")
+local mr = GuildSpyProbeDB.dump.memberRecipes
 eq(mr.member, "Akka Avery", "an online crafter whose craft is in slot 2")
 eq(mr.skillLine, 171, "...asked for that craft")
-check(WoW.chat[#WoW.chat]:find("Alchemy recipes", 1, true), "...named by that slot's profession")
+check(logHas("Alchemy recipes"), "...named by that slot's profession")
 WoW.fire("TRADE_SKILL_SHOW")
 WoW.advance(5)
 eq(mr.inconclusive, nil, "the book that opened is provably the one asked for")
@@ -161,8 +170,8 @@ eq(mr.learnedNames[1], "Recipe 2330", "...by name")
 eq(closes, 1, "the book this probe opened is closed")
 
 -- Nothing opened after the request (another book was already open): inconclusive, left alone.
-WoW.slash("/gspy probe recipes")
-mr = GuildSpyDB.probe.memberRecipes
+fp("recipes")
+mr = GuildSpyProbeDB.dump.memberRecipes
 WoW.advance(5)
 check(mr.inconclusive and mr.inconclusive:find("no trade skill view opened", 1, true), "no new view: inconclusive")
 eq(mr.recipeIDs, nil, "...nothing read as this member's")
@@ -170,8 +179,8 @@ eq(closes, 1, "...and the open view is left alone")
 
 -- Another guildmate's book opened meanwhile: inconclusive, left alone.
 C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Someone Else" end
-WoW.slash("/gspy probe recipes")
-mr = GuildSpyDB.probe.memberRecipes
+fp("recipes")
+mr = GuildSpyProbeDB.dump.memberRecipes
 WoW.fire("TRADE_SKILL_SHOW")
 WoW.advance(5)
 check(mr.inconclusive and mr.inconclusive:find("Someone Else", 1, true), "someone else's book: inconclusive")
@@ -179,8 +188,8 @@ eq(closes, 1, "...and not closed")
 
 -- A same-profession book that doesn't name its member: inconclusive, left alone.
 C_TradeSkillUI.IsTradeSkillLinked = function() return false, nil end
-WoW.slash("/gspy probe recipes")
-mr = GuildSpyDB.probe.memberRecipes
+fp("recipes")
+mr = GuildSpyProbeDB.dump.memberRecipes
 WoW.fire("TRADE_SKILL_SHOW")
 WoW.advance(5)
 check(mr.inconclusive and mr.inconclusive:find("doesn't name its member", 1, true), "an unnamed view: inconclusive")
@@ -189,10 +198,10 @@ eq(closes, 1, "...and not closed")
 
 -- A second request within the wait: the first timer does nothing.
 C_TradeSkillUI.IsTradeSkillLinked = function() return true, "Akka Avery" end
-WoW.slash("/gspy probe recipes")
+fp("recipes")
 WoW.advance(2)
-WoW.slash("/gspy probe recipes")
-local second = GuildSpyDB.probe.memberRecipes
+fp("recipes")
+local second = GuildSpyProbeDB.dump.memberRecipes
 WoW.fire("TRADE_SKILL_SHOW")
 WoW.advance(2.5)                                       -- the first timer fires now
 eq(second.done, nil, "the first request's timer didn't consume the second")
@@ -201,10 +210,7 @@ eq(second.done, true, "the second's own timer did")
 eq(closes, 2, "...and closed only its own book")
 unforever()
 
--- /gspy probe log with no probe yet: says so, runs nothing.
-loadAddon({ setup = function() WoW.guild = guild() end })
-WoW.slash("/gspy probe log")
-eq(GuildSpyDB.probe, nil, "no probe run")
-check(WoW.chat[#WoW.chat]:find("run /gspy probe first", 1, true), "...and it says what to do")
+-- Nothing the probe learned went to chat.
+eq(#WoW.chat, 0, "nothing in chat")
 
 done("test_probe_professions")
