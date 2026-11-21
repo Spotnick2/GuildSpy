@@ -34,8 +34,8 @@ issue  ->  branch  ->  PR  ->  owner's Codex review  ->  address  ->  owner merg
    reviewed SHA. Declined findings with a lasting reason also go in `docs/PLAN.md`.
 7. **The owner merges.** Commit and push only as part of this loop.
 
-In-game measurements (`/gspy probe`) go in `docs/FOREVER-PROBE.md`. Findings that hold for every
-Forever addon go in `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
+In-game measurements (the probe, `/fp steps gs guild`) go in `docs/FOREVER-PROBE.md`. Findings
+that hold for every Forever addon go in `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`.
 
 ## The review on a PR
 

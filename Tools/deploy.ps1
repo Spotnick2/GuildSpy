@@ -10,9 +10,11 @@
     copies only the shipped files and prints its commit. The checkout is
     $env:LIBGLASS, else ..\LibGlass.
 
-    GuildSpyProbe (Tools\GuildSpyProbe, #8) is a ForeverProbe module: -Probe and
-    -ProbeOnly deploy the ForeverProbe checkout first ($env:FOREVERPROBE, else
-    ..\ForeverProbe), then the module.
+    GuildSpyProbe (Tools\GuildSpyProbe) is a ForeverProbe module, never shipped:
+    the guild API's shapes (/fp steps gs guild, was /gspy probe until #67) and
+    what GRM sends (#8, /fp steps gs grm). -Probe and -ProbeOnly deploy the
+    ForeverProbe checkout first ($env:FOREVERPROBE, else ..\ForeverProbe), then
+    the module.
 
     Usage:
         pwsh Tools/deploy.ps1
@@ -53,7 +55,7 @@ function Deploy-Probe {
         Write-Host "  removing stale $($_.Name)" -ForegroundColor DarkYellow
         Remove-Item -LiteralPath $_.FullName -Force
     }
-    Write-Host "Probe: /reload is enough, a brand-new addon folder included. Then /fp steps gs grm" -ForegroundColor Green
+    Write-Host "Probe: /reload is enough, a brand-new addon folder included. Then /fp steps gs guild (or grm)" -ForegroundColor Green
 }
 if ($ProbeOnly) { Deploy-Probe; exit 0 }
 

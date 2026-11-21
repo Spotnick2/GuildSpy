@@ -21,10 +21,6 @@ GuildSpy.HELP = {
     { "/gspy scan", "look at the roster now" },
     { "/gspy rebaseline", "start over from the current roster (the log is kept)" },
     { "/gspy version", "the addon's version and the client build" },
-    { "/gspy probe", "dump the guild API's shapes (for measuring)" },
-    { "/gspy probe watch", "record every system message (for measuring)" },
-    { "/gspy probe log", "dump the guild event log again (for measuring)" },
-    { "/gspy probe recipes", "open a guildmate's recipe book through the guild API (for measuring)" },
 }
 
 -- GuildSpyDB: account-wide (docs/PLAN.md "Storage"). A part that isn't the
@@ -42,19 +38,15 @@ local function initDB()
     if type(db.accountSync) ~= "table" then db.accountSync = {} end
     if type(db.guilds) ~= "table" then db.guilds = {} end
     if type(db.nextSeq) ~= "number" then db.nextSeq = 1 end
+    -- The guild API probe's results, from before it moved to Tools\GuildSpyProbe
+    -- (#67): nothing reads them, and probeLog was written on every login.
+    db.probe, db.probeLog, db.probeWatch = nil, nil, nil
 end
 
 local function slash(msg)
     local cmd, rest = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
     cmd = cmd:lower()
-    if cmd == "probe" then
-        rest = rest:lower()
-        if rest == "watch" then GuildSpy.Probe.ToggleWatch()
-        elseif rest == "log" then
-            if GuildSpyDB.probe then GuildSpy.Probe.DumpEventLog() else say("run /gspy probe first") end
-        elseif rest == "recipes" then GuildSpy.Probe.MemberRecipes()
-        else GuildSpy.Probe.Run() end
-    elseif cmd == "log" then
+    if cmd == "log" then
         if tonumber(rest) then GuildSpy.Scanner.PrintLog(tonumber(rest)) else GuildSpy.UI.Open() end
     elseif cmd == "options" or cmd == "settings" or cmd == "config" then
         GuildSpy.Options.Open()

@@ -54,7 +54,7 @@ the tests answer `LibStub("LibAccountSync-1.0")` with a scripted fake) → the v
 CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0, copied from Gnomesweeper; the tests load
 recording fakes instead) → `Compat.lua` → `Glass.lua` → `Roster.lua` → `Patterns.lua` →
 `EventLog.lua` → `Log.lua` → `Wire.lua` → `Scanner.lua` → `AccountSync.lua` → `GuildSync.lua` → `Professions.lua` → `UI.lua` → `Options.lua` → `Minimap.lua` →
-`Probe.lua` → `ProbeProfessions.lua` → `GuildSpy.lua`. `Bindings.xml` isn't in the TOC: the
+`GuildSpy.lua`. `Bindings.xml` isn't in the TOC: the
 client finds it by name (the package check names it).
 
 - **`Compat.lua`**: `GuildSpy.API`, the only route to client APIs that moved or may be absent, and
@@ -63,10 +63,6 @@ client finds it by name (the package check names it).
 - **`Glass.lua`**: `GuildSpy.Glass = LibStub("LibGlass-1.0"):New()`, this addon's instance of the
   embedded glass material (`Libs\LibGlass-1.0`, a `.pkgmeta` external, gitignored). Material changes
   are LibGlass PRs. `Glass.MEDIA` is the library's, never our own art.
-- **`Probe.lua`**: phase 0's measurements, for measuring only. `/gspy probe` dumps the roster tuple
-  (finding the GUID by looking), last-online, ranks, `C_Club`, the event log and the `ERR_GUILD_*`
-  strings into `GuildSpyDB.probe`; a login timeline of roster completeness is always kept in
-  `GuildSpyDB.probeLog`; `/gspy probe watch` also records every system message.
 - **Pure files** use **no WoW API**; tests load them with every global forbidden (`newPureEnv` in
   `tests/harness.lua`):
   - `Roster.lua`: `Roster.Apply(state, scan, now, opts)`, the diff. It updates one guild's saved
@@ -89,17 +85,28 @@ client finds it by name (the package check names it).
   its two side tabs and `guildHost` to Glass UI's tenant API (`SkinTab`, `SkinPanel`; #63),
   feature-detected at API 1; without it nothing changes. The panels sit at the host's level + 2,
   over Glass UI's glass at + 1.
-- **`ProbeProfessions.lua`**: measuring only. It records whether the server serves guild
-  professions and recipes (it serves names only: `docs/FOREVER-PROBE.md`).
 - `tests/` — Lua 5.1 unit tests. `Tools/deploy.ps1` — dev deploy. `docs/` — plan and measurements.
   None of them ship (`.pkgmeta`).
 - `Media/Logo.tga` — the icon (#97): the logo's eye, for the TOC's `IconTexture`, the minimap
   button and the guild window's side tab. Made from the owner's artwork (`docs/logo.png`, not
   shipped) by `Tools/make-logo.py`; never edit the `.tga` by hand. It ships.
-- `Tools/GuildSpyProbe/` — a ForeverProbe module (`/fp gs`, `References\Docs\PROBES.md`), never
-  shipped: what Guild Roster Manager sends on the guild channel (#8). `GRMClassify.lua` is pure
-  (`tests/test_grmprobe.lua`); `GuildSpyProbe.lua` wires it to the client. The older measurements
-  above (`Probe.lua`, `ProbeProfessions.lua`, `/gspy probe`) aren't migrated.
+- `Tools/GuildSpyProbe/` — the developer probe, a ForeverProbe module (`/fp gs`,
+  `References\Docs\PROBES.md`), never shipped. It saves to `GuildSpyProbeDB` (its own
+  SavedVariables) and writes to the `/fp` console, never to chat. `docs/FOREVER-PROBE.md` says how
+  to run it. Two parts:
+  - **The guild API's shapes** (phase 0's measurements; `/gspy probe` inside the addon until #67).
+    `Guild.lua`: `/fp gs dump` saves the roster tuple (finding the GUID by looking), last-online,
+    ranks, `C_Club`, the event log and the `ERR_GUILD_*` strings into `GuildSpyProbeDB.dump`; a
+    login timeline of roster completeness is kept in `GuildSpyProbeDB.timeline`, and
+    `/fp gs watch` adds every system message. `GuildProfessions.lua`: whether the server serves
+    guild professions and recipes (it serves names only). `/fp steps gs guild` runs it all.
+    `tests/test_probe.lua`, `tests/test_probe_professions.lua`.
+  - **What Guild Roster Manager sends** on the guild channel (#8): `GRMClassify.lua` is pure
+    (`tests/test_grmprobe.lua`); `GuildSpyProbe.lua` wires it to the client and makes the module.
+    `/fp steps gs grm`.
+  - Its tests load the `..\ForeverProbe` checkout (`loadProbe` in `tests/harness.lua`); it is
+    private, so CI sets `FOREVERPROBE_OPTIONAL=1` and they skip there. Run `tests\run.ps1` before a
+    PR that touches the probe.
 
 ## Design rules that a cold reviewer must not override
 

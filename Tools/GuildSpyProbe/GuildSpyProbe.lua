@@ -1,13 +1,19 @@
--- GuildSpyProbe: a ForeverProbe module (/fp gs). Measures what Guild Roster
--- Manager sends on the guild channel on Forever, before deciding #8 (a GRM
--- listener). GRMClassify.lua does the counting; this file wires it to the client.
+-- GuildSpyProbe: a ForeverProbe module (/fp gs), never shipped. Two parts:
 --
--- Saved across sessions in GuildSpyProbeDB.grm: counts per prefix, channel and
--- tag, per day; up to 3 samples per tag (typed text reduced to field shapes);
--- sender and member-name shapes against the roster; the GRM users heard.
+-- 1. What Guild Roster Manager sends on the guild channel on Forever, before
+--    deciding #8 (a GRM listener). GRMClassify.lua does the counting; this
+--    file wires it to the client. Saved across sessions in GuildSpyProbeDB.grm:
+--    counts per prefix, channel and tag, per day; up to 3 samples per tag
+--    (typed text reduced to field shapes); sender and member-name shapes
+--    against the roster; the GRM users heard.
+--    /fp steps gs grm : state, one GRMUSER "REQ?" on your click, the answers,
+--    /reload. Then leave it loaded and play normally: it keeps listening.
 --
--- /fp steps gs grm : state, one GRMUSER "REQ?" on your click, the answers, /reload.
--- Then leave it loaded and play normally: it keeps listening.
+-- 2. The guild API's shapes (Guild.lua, GuildProfessions.lua): GuildSpy's
+--    phase 0 measurements, which were `/gspy probe` inside the addon until #67.
+--    /fp steps gs guild : the dump, the event log, the professions, /reload.
+--
+-- This file loads first: it makes the module and the helpers the other two share.
 
 local ADDON, NS = ...
 local MAX_LOG = 3000
@@ -15,10 +21,12 @@ local C = NS.GRMClassify
 
 local Probe = ForeverProbe:Module("GuildSpyProbe", { api = 1, cmd = "gs" })
 local function say(msg) Probe:Say(msg) end
+NS.Probe = Probe
 
 local DB          -- GuildSpyProbeDB.grm, bound at ADDON_LOADED
 
 local function secret(v) return issecretvalue ~= nil and issecretvalue(v) == true end
+NS.secret = secret
 
 -- "First Surname", as CHAT_MSG_ADDON names senders (GuildSpy's Compat.lua:68).
 local function me()
@@ -28,6 +36,7 @@ local function me()
     if type(second) == "string" and second ~= "" and not secret(second) then return name .. " " .. second end
     return name
 end
+NS.me = me
 
 -- Roster names as a set, read again after each GUILD_ROSTER_UPDATE.
 local roster, rosterDirty, rosterSize = {}, true, 0
@@ -157,8 +166,9 @@ Probe:Command("ask", function() ask() end, "send one GRMUSER REQ? on the guild c
 Probe:Command("clear", function()
     for k in pairs(DB) do DB[k] = nil end
     C.Init(DB)
+    NS.Guild.Clear()
     Probe:ClearLog()
-    say("GRM data and log cleared")
+    say("GRM data, guild dump, timeline and log cleared")
 end, "forget everything recorded")
 
 Probe:Steps("grm", {
@@ -200,9 +210,10 @@ boot:SetScript("OnEvent", function(_, event, ...)
         if type(GuildSpyProbeDB.grm) ~= "table" then GuildSpyProbeDB.grm = {} end
         Probe:UseLog(GuildSpyProbeDB.log, MAX_LOG)
         DB = C.Init(GuildSpyProbeDB.grm)
+        NS.Guild.Bind(GuildSpyProbeDB)
         GuildSpyProbeDB.loads = (GuildSpyProbeDB.loads or 0) + 1
         register()
-        say(("loaded (%d loads), %d GRM messages so far. /fp gs for the commands, /fp steps gs grm to start")
+        say(("loaded (%d loads), %d GRM messages so far. /fp gs for the commands; /fp steps gs grm or guild")
             :format(GuildSpyProbeDB.loads, DB.total))
     elseif event == "PLAYER_LOGIN" then
         -- The roster and the guild need a moment after login.
@@ -213,4 +224,4 @@ boot:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
-NS._test = { Probe = Probe, onMessage = onMessage, ask = ask }
+NS._test = { Probe = Probe, onMessage = onMessage, ask = ask }   -- Guild.lua's part is NS.Guild

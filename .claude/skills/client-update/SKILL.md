@@ -26,8 +26,10 @@ is specific to GuildSpy.
   `GuildControlGetRankName`, `GetGuildEventInfo`, `C_GuildInfo.*`, `C_Club.*`), the `GUILD_*` and
   `CHAT_MSG_SYSTEM` events, the `ERR_GUILD_*` strings, and frames/fonts: a removed or re-signatured
   function we call is a bug to fix before the bump, not a note.
-- **Re-measure the guild shapes:** ask the owner to run `/gspy probe` on the new build and
-  `/reload`, then compare `GuildSpyDB.probe` with `docs/FOREVER-PROBE.md`. The legacy guild globals
+- **Re-measure the guild shapes:** `pwsh Tools\deploy.ps1 -Probe`, then ask the owner to run
+  `/fp steps gs guild` on the new build (it ends with a `/reload`). Read
+  `GuildSpyProbeDB.dump` in `SavedVariables\GuildSpyProbe.lua` yourself and compare it with
+  `docs/FOREVER-PROBE.md`. The legacy guild globals
   are in the dump by name only, so a changed tuple order shows up nowhere else.
 
 ## 4. The bump PR
@@ -41,7 +43,7 @@ Branch `build-<build>` from `main`:
    that build's `data/forever-<build>/` (the forever-api-dump skill's step 4); bump `sha=` to a kit
    commit that has it if the pinned one doesn't.
 
-Then `pwsh tests\run.ps1` green, `pwsh Tools\deploy.ps1`, a `/reload` in game, and `/gspy probe`.
+Then `pwsh tests\run.ps1` green, `pwsh Tools\deploy.ps1`, a `/reload` in game, and `/fp steps gs guild`.
 Commit, push and open the PR (`Closes #N`) **only when the owner asks** — the owner runs every review.
 
 Addon-agnostic findings about the new build go in `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`,

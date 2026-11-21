@@ -32,6 +32,4 @@ Professions.lua
 UI.lua
 Options.lua
 Minimap.lua
-Probe.lua
-ProbeProfessions.lua
 GuildSpy.lua

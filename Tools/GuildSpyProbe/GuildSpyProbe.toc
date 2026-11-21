@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: GuildSpyProbe
-## Notes: Throwaway probe for GuildSpy: what Guild Roster Manager sends on the guild channel (#8). A ForeverProbe module: /fp gs
+## Notes: Throwaway probe for GuildSpy: the guild API's shapes, and what Guild Roster Manager sends on the guild channel (#8). A ForeverProbe module: /fp gs
 ## Author: Spotnick
 ## Version: dev
 ## Dependencies: ForeverProbe
@@ -9,3 +9,5 @@
 
 GRMClassify.lua
 GuildSpyProbe.lua
+Guild.lua
+GuildProfessions.lua

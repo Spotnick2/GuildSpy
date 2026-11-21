@@ -1,7 +1,6 @@
 -- GuildSpyProbe's GRMClassify (#8): GRM's addon messages -> counts, samples,
 -- name shapes. Pure: loaded with every client global forbidden. The module's
--- wiring (GuildSpyProbe.lua) needs ForeverProbe and is checked in game; its
--- offline test waits for the move onto WowTestKit (#68).
+-- wiring (GuildSpyProbe.lua) loads with ForeverProbe in tests/test_probe.lua.
 dofile("tests/harness.lua")
 local chunk = assert(loadfile("Tools/GuildSpyProbe/GRMClassify.lua"))
 setfenv(chunk, newPureEnv())

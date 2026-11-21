@@ -74,6 +74,20 @@ for _, cmd in ipairs({ "/guildspy", "/gspy" }) do
     check(#WoW.chat > before, cmd .. " help answers")
 end
 
+-- The guild API probe moved out of the addon, to Tools/GuildSpyProbe (#67):
+-- what it saved in GuildSpyDB is dropped, and /gspy has no probe command.
+loadAddon({ db = { version = 1, keep = true, probe = { build = "x" }, probeLog = { { e = "PLAYER_LOGIN" } },
+                   probeWatch = true } })
+eq(GuildSpyDB.probe, nil, "the old probe dump is dropped")
+eq(GuildSpyDB.probeLog, nil, "...the old login timeline")
+eq(GuildSpyDB.probeWatch, nil, "...and the old watch switch")
+eq(GuildSpyDB.keep, true, "...and nothing else")
+eq(GuildSpy.Probe, nil, "the addon has no probe of its own")
+for _, h in ipairs(GuildSpy.HELP) do check(not h[1]:find("probe", 1, true), "no probe in the help: " .. h[1]) end
+WoW.fire("PLAYER_LOGIN")
+WoW.fire("GUILD_ROSTER_UPDATE", true)
+eq(GuildSpyDB.probeLog, nil, "no login timeline is kept any more")
+
 -- The build check: quiet on the measured build, one line on another.
 loadAddon()
 WoW.fire("PLAYER_LOGIN")

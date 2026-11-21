@@ -35,15 +35,25 @@ Still open:
 
 ## How to run it
 
-1. `pwsh Tools/deploy.ps1`, restart the client (a new file), `/console scriptErrors 1`.
-2. Log in on a character **in a guild**; wait ~30 s.
-3. `/gspy probe`, then `/gspy probe watch` (records every system message from then on).
-   `/gspy probe log` re-reads the event log at any time. `/gspy probe recipes` asks for a
-   guildmate's recipe book (it opens the Professions window).
-4. Play normally. Ideally get a promotion or demotion, a note edit, a join or a leave to happen
-   while watching (an officer alt helps).
+The probe is `Tools/GuildSpyProbe`, a ForeverProbe module (`/fp gs`, `References\Docs\PROBES.md`),
+never shipped. Until #67 it was `/gspy probe` inside the addon, saving into `GuildSpyDB.probe` and
+`GuildSpyDB.probeLog`: the runs above were taken that way, and their findings hold for their build.
+
+1. `pwsh Tools/deploy.ps1 -Probe` (GuildSpy, then ForeverProbe and the probe), `/reload`,
+   `/console scriptErrors 1`.
+2. Log in on a character **in a guild**.
+3. `/fp steps gs guild`. The panel asks you to wait ~30 s for the roster, dumps the guild API,
+   waits for the event log and the professions answers, asks for a guildmate's recipe book (it opens the
+   Professions window), offers to record every system message from then on (#10), and asks for a
+   `/reload`. One-offs: `/fp gs dump`, `eventlog` (re-reads the event log), `recipes`,
+   `watch on|off`, `timeline`.
+4. With watch on, play normally. Ideally get a promotion or demotion, a note edit, a join or a
+   leave to happen (an officer alt helps).
 5. `/reload` (writes the file), then read
-   `WTF\Account\<account>\SavedVariables\GuildSpy.lua`: `GuildSpyDB.probe`, `GuildSpyDB.probeLog`.
+   `WTF\Account\<account>\SavedVariables\GuildSpyProbe.lua`: `GuildSpyProbeDB.dump` (the dump),
+   `GuildSpyProbeDB.timeline` (the login timeline and the watched system messages) and
+   `GuildSpyProbeDB.log` (the console's lines). In the answers below, `probe.X` is now
+   `GuildSpyProbeDB.dump.X`.
 
 ## Answers
 
@@ -133,8 +143,8 @@ Names alone would collide across connected realms, so keying members by GUID sta
     | quit | 2 | the member in p1, p2 nil | |
     | remove (kick) | 0 | **not observed yet** | |
 - **Inferred rule, not proven:** read the log only after its burst has settled. The probe now waits
-  for 3 s of quiet and counts the burst. `/gspy probe log` re-reads the log, and records per type
-  how many entries carry the names that type needs.
+  for 3 s of quiet and counts the burst. `/gspy probe log` (now `/fp gs eventlog`) re-reads the
+  log, and records per type how many entries carry the names that type needs.
 - Join entries carry rank `""`. The invite above carries "Guild Master" although the inviter is a
   Member, so the rank field's meaning on an invite is unclear; don't rely on it there.
 
@@ -228,8 +238,8 @@ or `Blizzard_Professions`. That UI includes:
 - an "All recipes" view (`CanViewGuildRecipes` / `ViewGuildRecipes`);
 - "who in the guild can craft this" (`QueryGuildMembersForRecipe`).
 
-Its one gate is `C_TradeSkillUI.IsGuildTradeSkillsEnabled()`. `ProbeProfessions.lua` asks whether
-the server answers.
+Its one gate is `C_TradeSkillUI.IsGuildTradeSkillsEnabled()`. The probe's `GuildProfessions.lua`
+(was `ProbeProfessions.lua`) asks whether the server answers.
 
 | # | Question | Where | Answer (run 2) |
 |---|---|---|---|
@@ -237,7 +247,7 @@ the server answers.
 | 14 | Do members' `professionNRank` values carry real skill levels? | `probe.professions.survey` | **Not through this API.** 144 of 153 members have professions, with **real names** (Skinning 50, Mining 47, Leatherworking 39, Herbalism 34, Blacksmithing 27, Tailoring 24, Alchemy 22, Enchanting 22, Engineering 8), but `C_Club` reports **rank 1 for every one** |
 | 15 | `QueryGuildRecipes` → `GUILD_TRADESKILL_UPDATE` → `GetGuildTradeSkillInfo` | `probe.professions.guildTradeSkill` | **Answers.** 10 header rows, all collapsed: skill line, collapsed, icon, name, online, visible, players. The 9 professions above with matching counts, plus "Test Profession [DNT]" (2933, 0 players). Member rows weren't read, because the headers were collapsed. The probe now expands them, reads the rows, and collapses them again: **re-run to see whether member rows carry a skill** |
 | 16 | `QueryGuildMembersForRecipe` → `GUILD_RECIPE_KNOWN_BY_MEMBERS` | `probe.professions.recipeQueries` | Only 1 of 7 queries answered: Minor Healing Potion with **0 members**, although the guild has 22 alchemists. The other 6 got no answer within 4 s. Answers weren't matched to their query then (now they are). **No recipe knowledge was obtained in these attempts** |
-| 17 | `/gspy probe recipes`: does a guildmate's recipe book open? | `probe.memberRecipes` | **Not in one attempt.** `QueryGuildMemberRecipes(guid, 171)` for Gal Orey (Alchemy, presence offline) returned nothing. No `TRADE_SKILL_SHOW` and no window; 4 s later `IsTradeSkillReady` was false, with 0 recipe ids. The probe now prefers an online crafter in either slot |
+| 17 | `/gspy probe recipes` (now `/fp gs recipes`): does a guildmate's recipe book open? | `probe.memberRecipes` | **Not in one attempt.** `QueryGuildMemberRecipes(guid, 171)` for Gal Orey (Alchemy, presence offline) returned nothing. No `TRADE_SKILL_SHOW` and no window; 4 s later `IsTradeSkillReady` was false, with 0 recipe ids. The probe now prefers an online crafter in either slot |
 
 **So far:**
 - **Established:** the server serves **who has which profession**, with names and counts, and
