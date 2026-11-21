@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.1.1
+
+A fix for the server hotfix of November 20.
+
+- **GuildSpy works again in a guild on your own realm.** Since the server hotfix, the game no
+  longer tells addons the realm's name, and GuildSpy stopped watching such a guild: no scans, no
+  chat lines, no digest and no guild in the minimap tooltip. It now knows a guild by its name
+  alone.
+- **Nothing is lost.** What GuildSpy saved before moves over the first time you log in to the
+  guild, the guild's history and your "Accept reports from" setting included. It picks up where it
+  left off, with no new baseline: changes made while it wasn't watching are found at the first
+  scans, as after any time away.
+
 ## v1.1.0
 
 The latest changes in the minimap button's tooltip, and a new icon.
