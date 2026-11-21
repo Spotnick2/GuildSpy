@@ -262,9 +262,10 @@ Two were declined, deliberately:
   shows both keys, revisit. **Superseded by #104:** since the 2026-11-20 server hotfix,
   `GetRealmName()` is `""`, so that fallback gave a same-realm guild no key at all. The key is now
   the guild's name alone (`API.GuildKey`), with no realm from either source, so alts on two
-  connected realms can't split one guild. The price: two guilds with the same name on two realms
-  share one state if the owner has characters in both. State saved under `"<name>-<realm>"` moves to
-  the name once, the first time the guild is seen (`Scanner.lua`, `migrate`).
+  connected realms can't split one guild. Guild names are unique region-wide (the owner,
+  2026-11-20), so the name is the guild's identity. State saved
+  under `"<name>-<realm>"` moves to the name once, the first time the guild is seen, and its
+  "accept reports from" rank with it (`Scanner.lua`, `migrateState` and `migrateRank`).
 
 ## Other ideas (not v1)
 

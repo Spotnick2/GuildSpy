@@ -156,12 +156,10 @@ local function isGuid(v) return type(v) == "string" and v:find("^Player%-") ~= n
 -- a character on another connected realm may still get one while one on the
 -- guild's own realm gets none, and two spellings would split one guild in two.
 --
--- What it merges: two guilds with the same name on two realms of the region,
--- if the owner has characters in both (names are unique per realm, as far as
--- we know). They'd share one saved state, and switching between them would
--- read as the whole roster joining and leaving. The ruleset (C_GameRules)
--- isn't added to the key: it wouldn't separate two realms of one ruleset, and
--- a reading that fails once would split the guild.
+-- The name alone is enough: guild names are unique region-wide, like character
+-- names (the owner, 2026-11-20), and a saved file and account sync never span
+-- two regions. So no realm or ruleset (C_GameRules) is added: a reading that
+-- failed once would split the guild.
 function API.GuildKey()
     if not IsInGuild() then return nil end
     local name = GetGuildInfo("player")

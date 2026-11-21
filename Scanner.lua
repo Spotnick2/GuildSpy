@@ -125,7 +125,8 @@ end
 
 -- A guild first seen under its new key takes the state an older version saved
 -- under "<name>-<realm>", once: the most recently observed if there are
--- several (the same name on two realms, now one guild: Compat's GuildKey).
+-- several (one guild saved under two realm spellings by alts on connected
+-- realms: the older copy is left to age out under MAX_GUILDS).
 -- Returns the old key it moved, or nil.
 local function migrateState(guilds, key)
     if type(guilds[key]) == "table" then return nil end

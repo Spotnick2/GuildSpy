@@ -440,7 +440,7 @@ do
     check(not legacy("Parse Partout-A-B", "Parse Partout"), "legacy: not a realm with a hyphen (the old key had none)")
 end
 
--- Two old keys of one name (the same name on two realms): the most recently
+-- Two old keys of one name (one guild under two realm spellings): the most recently
 -- observed one moves, the other stays to age out.
 do
     local two = { version = 1, guilds = {
