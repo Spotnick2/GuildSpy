@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v1.1.2
+
+A smaller saved file: the measuring tools are gone from the addon.
 
 - **A lighter saved file.** GuildSpy no longer records a timeline of the guild roster at every
   login, which it kept for measuring the game and never showed. The `/gspy probe` commands, for
