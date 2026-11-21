@@ -169,7 +169,11 @@ persistence tests only.
 
 The shared guide is `C:\Projects\WoW\References\Docs\RELEASING.md`; the workflow and
 `tests/release_files.sh` are its templates (#52). `git tag -a vX.Y.Z -m "..." && git push origin vX.Y.Z`. Every tag needs a
-player-facing `CHANGELOG.md` section (`## vX.Y.Z`). A tag publishes in three places:
+player-facing `CHANGELOG.md` section (`## vX.Y.Z`). **A release tag (`vX.Y.Z`, not an alpha or
+beta) also updates `README.md` and the untracked `README.curseforge.md` in its prep PR** (guide §3):
+both describe what that release does and nothing it no longer does. The PR says whether
+`README.curseforge.md` changed, since the owner pastes it into CurseForge and Wago (#78). A tag
+publishes in three places:
 - **CurseForge** (project 1741939) builds its own file from the tag webhook, reading `.pkgmeta`; no
   CurseForge key lives here.
 - **GitHub:** `.github/workflows/package-check.yml`'s `check` dry-runs the BigWigs packager (`-d`)
