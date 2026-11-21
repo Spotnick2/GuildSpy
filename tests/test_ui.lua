@@ -110,7 +110,8 @@ check(row.text:GetText():find("|cff3fc7ebAnn Lee|r", 1, true), "...the name in i
 check(row.icon:IsShown() and row.icon._texCoord[1] == 0.25, "...and its class icon")
 check(row.mark:IsShown(), "...marked new: never looked at")
 row._scripts.OnEnter(row)
-check(GameTooltip._text and GameTooltip._lines[1]:find("reached level 30", 1, true), "its tooltip has the whole line")
+check(GameTooltip._lines[1]:find("^%d%d%d%d%-%d%d%-%d%d %d%d:%d%d$"), "its tooltip's title is the time")
+check(GameTooltip._lines[2]:find("reached level 30", 1, true), "...then the whole line")
 
 -- Closing makes it seen; the next opening marks nothing old as new.
 win:Hide()
@@ -411,7 +412,7 @@ check(panel.markRead:IsEnabled(), "Mark all as read: enabled with something new"
 eq(panel.footer:GetText(), "Updated " .. Log.Relative(gs.observedAt, time()), "the footer: the last complete scan")
 draw(row, els[2].entry)
 row._scripts.OnEnter(row)
-eq(GameTooltip._lines[2], Log.Provenance(els[2].entry), "the tooltip says what the time means")
+eq(GameTooltip._lines[3], Log.Provenance(els[2].entry), "the tooltip says what the time means")
 row._scripts.OnLeave(row)
 view.initializer(row, els[1])
 check(row.header:IsShown() and not row.text:IsShown() and not row.mark:IsShown(), "a heading row shows only its heading")
@@ -461,8 +462,9 @@ for _, c in ipairs(Log.NewCounts(gs, before, false)) do total = total + c.n end
 for n in line:gsub("%+%d+ more$", ""):gmatch("(%d+) %a") do shown = shown + tonumber(n) end
 eq(shown + more, total, "...and the shown counts plus N are every new entry")
 panel.summaryHit._scripts.OnEnter(panel.summaryHit)
-eq(#GameTooltip._lines, 1 + #Log.NewCounts(gs, before, false), "its tooltip: every tab, then every group")
-check(GameTooltip._lines[1]:find("every tab", 1, true), "...saying it counts every tab")
+eq(#GameTooltip._lines, 2 + #Log.NewCounts(gs, before, false), "its tooltip: the title, every tab, then every group")
+eq(GameTooltip._lines[1], "New activity", "...titled")
+check(GameTooltip._lines[2]:find("every tab", 1, true), "...saying it counts every tab")
 panel.summaryHit._scripts.OnLeave(panel.summaryHit)
 panel.summary._width = 0
 UI.MarkAllRead()

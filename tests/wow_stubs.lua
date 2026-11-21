@@ -27,20 +27,6 @@ local Methods = WoW.Methods
 -- Frames
 --------------------------------------------------------------------------------
 
--- WowTestKit #85: an XML intrinsic is a widget of its base type with a mixin
--- (wow-ui-source forever 70959: Blizzard_SharedXML/Shared/Frame/EventFrame.xml:3
--- is a <Frame ... intrinsic="true">, Blizzard_Menu/DropdownButton.xml:3 a
--- <Button ... intrinsic="true">). The core would make a widget of a type the
--- build lacks; made as its base type here, the name asked for in _intrinsic.
-local INTRINSIC = { EventFrame = "Frame", DropdownButton = "Button" }
-local kitCreateFrame = CreateFrame
-function CreateFrame(ftype, name, parent, template)
-    local base = INTRINSIC[ftype]
-    local w = kitCreateFrame(base or ftype, name, parent, template)
-    if base then w._intrinsic = ftype end
-    return w
-end
-
 -- What the client's templates make that the addon reaches (the field each is
 -- proved by, as API.SafeFrame checks), unless the test says the template is
 -- missing (WoW.missingTemplates: CreateFrame then returns a bare frame, as the
@@ -67,19 +53,8 @@ WoW.templates.UIPanelScrollFrameTemplate = unlessMissing(WoW.templates.UIPanelSc
 -- because a test relies on it)
 --------------------------------------------------------------------------------
 
--- The tooltip: what it says, as lines (test_ui, test_minimap read _lines and
--- _owner). SetText starts a new tooltip with its title; the core's SetText
--- does the rest.
-local kitSetText = Methods.SetText
-function Methods.SetText(w, t)
-    if w._type == "GameTooltip" then w._lines = {} end
-    return kitSetText(w, t)
-end
-function Methods.AddLine(w, text) w._lines = w._lines or {}; w._lines[#w._lines + 1] = text end
--- GameTooltip:AddDoubleLine is in the 70938 dump. Recorded as one line, the two texts joined by a tab.
-function Methods.AddDoubleLine(w, left, right) w._lines = w._lines or {}; w._lines[#w._lines + 1] = left .. "\t" .. right end
--- A tooltip's owner; taking one clears what it said, as in the client.
-function Methods.SetOwner(w, owner) w._owner = owner; w._lines = {} end
+-- The tooltip (its lines, _lines, and its owner, _owner) is the kit's
+-- (WowTestKit #89): SetText is line 1, as NumLines counts it on the client.
 -- A texture's coordinates (test_ui reads the class icon's).
 function Methods.SetTexCoord(w, ...) w._texCoord = { ... } end
 -- A FontString's text width: 7 px a visible character (colour codes take none).
@@ -106,14 +81,16 @@ function Methods.SetupMenu(w, fn) w._menu = fn end
 -- The clock and the drivers
 --------------------------------------------------------------------------------
 
--- WowTestKit #86: each timer runs with the clock at its own due time, as on
--- the client. The core's WoW.advance(dt) moves WoW.now to the end first, so
--- a timer due at 2 s of a 4 s advance reads 4: the scan it runs then stamps
--- the wrong time, and a system message at 4 s falls outside the scan's
--- interval and loses its officer (test_scanner). So the clock goes from one
--- due time to the next, the core's WoW.advance(0) running what is due at
--- each; a timer made inside one counts from its due time. The calendar clock
--- (time(), WoW.epoch) moves with WoW.now.
+-- WowTestKit #103: the calendar clock (time(), WoW.epoch) must move with
+-- WoW.now at each timer's due time, and the kit has no calendar clock. Since
+-- WowTestKit #86 the core runs each timer with GetTime() at its due time, but
+-- time() would stay where the advance started: a scan stamps the wrong time,
+-- and a system message falls outside the scan's interval and loses its
+-- officer (test_scanner). So the clock still goes from one due time to the
+-- next here, moving WoW.epoch with WoW.now, the core's WoW.advance(0) running
+-- what is due at each. A 0-second ticker isn't a due time to step to: it
+-- re-arms at the current time (WowTestKit #76), so the loop would never end.
+-- The core fires it once in each advance(0).
 local kitAdvance = WoW.advance
 local function moveTo(at)
     WoW.epoch = WoW.epoch + (at - WoW.now)
@@ -126,7 +103,7 @@ function WoW.advance(dt)
         local due
         for _, t in ipairs(WoW.timers) do
             local at = t.at or t.s or 0
-            if not t.cancelled and at <= target and (not due or at < due) then due = at end
+            if not t.cancelled and not (t.every and t.every <= 0) and at <= target and (not due or at < due) then due = at end
         end
         if not due then break end
         moveTo(math.max(due, WoW.now))
@@ -157,7 +134,7 @@ table.insert(WoW.onReset, function()
     WoW.levelCap, WoW.capFns = 60, { expansion = true, player = true }
     WoW.sounds = {}
     WoW.metadata = { Version = "@project-version@" }
-    WoW.build = { "1.60.1", "70532", "Oct 20 2026", 16001 }
+    WoW.build = { "1.60.1", "71037", "Nov 18 2026", 16001 }
     -- The realm is hidden since the 2026-11-20 server hotfix: GetRealmName() is "" (porting guide).
     WoW.playerName, WoW.playerSurname, WoW.realm = "Fizzle", "Sprocketwhistle", ""
     WoW.guild = nil
