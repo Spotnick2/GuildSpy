@@ -62,7 +62,7 @@ WoW.fire("PLAYER_LOGIN")
 WoW.fire("GUILD_ROSTER_UPDATE", false)
 for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
 WoW.advance(25)
-local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+local gs = GuildSpyDB.guilds["Parse Partout"]
 check(gs and gs.observedAt, "baselined")
 
 local Log, UI, T = GuildSpy.Log, GuildSpy.UI, GuildSpy._test.UI
@@ -656,7 +656,7 @@ check(GuildSpy.UI.tab and GuildSpy.UI.tab:GetParent() == cf2, "loaded before us:
 
 -- A damaged "viewed" mark in the saved file: dropped, the window still opens.
 local saved = firstDB
-saved.guilds["Parse Partout-Forever"].viewedSeq = "lots"
+saved.guilds["Parse Partout"].viewedSeq = "lots"
 loadAddon({ db = saved, setup = function() WoW.guild = newGuild() end })
 WoW.fire("PLAYER_LOGIN")
 WoW.fire("GUILD_ROSTER_UPDATE", false)
@@ -664,7 +664,7 @@ for _ = 1, 3 do WoW.fire("GUILD_EVENT_LOG_UPDATE") end
 WoW.advance(25)
 WoW.slash("/gspy log")
 GuildSpy._test.UI.window():Hide()
-check(type(saved.guilds["Parse Partout-Forever"].viewedSeq) == "number", "a text viewedSeq is replaced, not compared")
+check(type(saved.guilds["Parse Partout"].viewedSeq) == "number", "a text viewedSeq is replaced, not compared")
 
 -- A client without the dropdown or the top-tab template: plain buttons that still work.
 loadAddon({ db = saved, setup = function()

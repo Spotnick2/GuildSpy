@@ -147,19 +147,24 @@ end
 
 local function isGuid(v) return type(v) == "string" and v:find("^Player%-") ~= nil end
 
--- The guild's key: "<guild name>-<guild realm>". The realm is GetGuildInfo's
--- 4th return, the GUILD's realm (it can differ from the player's). nil while
--- the client doesn't know yet, or out of a guild.
+-- The guild's key: its name, and the name again as the second return. nil
+-- while the client doesn't know yet, or out of a guild.
+--
+-- No realm (#104). Since the 2026-11-20 server hotfix GetRealmName() is "",
+-- so the old "<name>-<realm>" key was nil for a guild on the player's own
+-- realm and GuildSpy did nothing. GetGuildInfo's 4th return isn't read either:
+-- a character on another connected realm may still get one while one on the
+-- guild's own realm gets none, and two spellings would split one guild in two.
+--
+-- The name alone is enough: guild names are unique region-wide, like character
+-- names (the owner, 2026-11-20), and a saved file and account sync never span
+-- two regions. So no realm or ruleset (C_GameRules) is added: a reading that
+-- failed once would split the guild.
 function API.GuildKey()
     if not IsInGuild() then return nil end
-    local name, _, _, realm = GetGuildInfo("player")
+    local name = GetGuildInfo("player")
     if type(name) ~= "string" or name == "" then return nil end
-    if type(realm) ~= "string" or realm == "" then realm = GetRealmName() end
-    if type(realm) ~= "string" or realm == "" then return nil end
-    -- One spelling whichever source gave it ("Classic Beta PvE 2" and
-    -- "ClassicBetaPvE2" are one realm), so alts never split one guild in two.
-    realm = realm:gsub("[%s%-']", "")
-    return name .. "-" .. realm, name
+    return name, name
 end
 
 -- Years, months, days, hours ago -> hours. A month is counted as 730 h; the

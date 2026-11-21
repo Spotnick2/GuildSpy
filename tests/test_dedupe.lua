@@ -275,7 +275,7 @@ do  -- The scanner: a change a poll finds, already covered by my other account's
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("GUILD_ROSTER_UPDATE", false)
     WoW.advance(100)
-    local gs = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local gs = GuildSpyDB.guilds["Parse Partout"]
     local t = time()
     for i, step in ipairs({ { 21, 22, t - 5 }, { 22, 23, t - 3 } }) do
         local e = live("x:" .. i, step[1], step[2], step[3])
@@ -309,7 +309,7 @@ do  -- The scanner: a change a poll finds, already covered by my other account's
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("GUILD_ROSTER_UPDATE", false)
     WoW.advance(10)
-    local gs2 = GuildSpyDB.guilds["Parse Partout-Forever"]
+    local gs2 = GuildSpyDB.guilds["Parse Partout"]
     local left = false
     for _, e in ipairs(gs2.log) do if e.uid == "old:1" then left = true end end
     check(not left and #gs2.log == 3, "a stored 21 to 23 that the steps cover is gone after loading")

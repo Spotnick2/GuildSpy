@@ -115,10 +115,60 @@ local function validGuild(gs)
     return gs
 end
 
+-- Whether a saved key is the one an older version gave this guild:
+-- "<name>-<realm>", the realm without spaces, hyphens or apostrophes (#104).
+local function legacyKey(k, name)
+    local prefix = name .. "-"
+    return type(k) == "string" and #k > #prefix and k:sub(1, #prefix) == prefix
+        and k:find("-", #prefix + 1, true) == nil
+end
+
+-- A guild first seen under its new key takes the state an older version saved
+-- under "<name>-<realm>", once: the most recently observed if there are
+-- several (one guild saved under two realm spellings by alts on connected
+-- realms: the older copy is left to age out under MAX_GUILDS).
+-- Returns the old key it moved, or nil.
+local function migrateState(guilds, key)
+    if type(guilds[key]) == "table" then return nil end
+    local from, at
+    for k, g in pairs(guilds) do
+        if type(g) == "table" and legacyKey(k, key) then
+            local t = type(g.observedAt) == "number" and g.observedAt or 0
+            if not from or t > at then from, at = k, t end
+        end
+    end
+    if not from then return nil end
+    guilds[key], guilds[from] = guilds[from], nil
+    return from
+end
+
+-- The "accept reports from" rank under an old key moves to the new one, with
+-- or without the guild's state: MAX_GUILDS can drop a guild's state and keep
+-- its rank (#105 review). The moved state's own rank wins; else, of several
+-- old keys, the strictest (the lowest index: the fewest ranks accepted).
+-- Every old key of the name goes.
+local function migrateRank(key, from)
+    local ranks = db().settings and db().settings.reportRanks
+    if type(ranks) ~= "table" then return end
+    local pick = from and ranks[from]
+    local found = {}
+    for k, r in pairs(ranks) do
+        if legacyKey(k, key) then
+            found[#found + 1] = k
+            if not (from and ranks[from] ~= nil) and type(r) == "number" and (pick == nil or r < pick) then pick = r end
+        end
+    end
+    for _, k in ipairs(found) do ranks[k] = nil end
+    if ranks[key] == nil then ranks[key] = pick end
+    if next(ranks) == nil then db().settings.reportRanks = nil end
+end
+Scanner._test = { legacyKey = legacyKey }
+
 -- The saved state of one guild, made if new; at most MAX_GUILDS are kept,
 -- the least recently observed dropped first.
 local function guildState(key)
     local guilds = db().guilds
+    migrateRank(key, migrateState(guilds, key))
     if type(guilds[key]) ~= "table" then guilds[key] = {} end
     local gs = validGuild(guilds[key])
     local keys = {}

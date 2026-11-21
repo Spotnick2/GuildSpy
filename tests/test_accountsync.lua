@@ -6,7 +6,7 @@ dofile("tests/harness.lua")
 
 loadAddon()
 local AS, Log, Wire = GuildSpy.AccountSync, GuildSpy.Log, GuildSpy.Wire
-local KEY = "Parse Partout-Forever"
+local KEY = "Parse Partout"
 local clock = 1790000000
 local net = {}
 local clients = {}
@@ -280,7 +280,7 @@ end
 do
     net, clients = {}, {}
     local A = client("Alt One", "Player-1-0000000A", KEY)
-    local B = client("Alt Two", "Player-1-0000000B", "Another Guild-Forever")
+    local B = client("Alt Two", "Player-1-0000000B", "Another Guild")
     observe(B, join("Other Guild", 10))
     meet(A, B)
     local asked = 0
@@ -309,15 +309,15 @@ do
     pump(function(m)
         if not held and kindOf(m) == "PAGE" and m.to == A.guid then held = m; return true end
     end)
-    A.key = "New Guild-Forever"
+    A.key = "New Guild"
     A.core:GuildChanged()
     A.core:OnMessage(held.text, { guid = B.guid, name = B.name })
     check(not find(A, "Before Change"), "a page for the old guild arriving after a change is ignored")
     -- Both now in the new guild: a pull starts at once, not after the old request's timeout.
-    B.key = "New Guild-Forever"
+    B.key = "New Guild"
     B.gs = { log = {} }
     A.gs = { log = {} }
-    A.core:OnMessage(Wire.Message("CAP", { "New Guild-Forever" }), { guid = B.guid, name = B.name })
+    A.core:OnMessage(Wire.Message("CAP", { "New Guild" }), { guid = B.guid, name = B.name })
     local asked = false
     for _, m in ipairs(net) do if kindOf(m) == "REQ" and m.to == B.guid then asked = true end end
     check(asked, "after a guild change, the new guild is asked at once")
@@ -454,13 +454,13 @@ do  -- A real exchange through the shell: the catch-up line, once, batched.
     local sharing = O._test.sharing
     sharing:Show()
     -- An open page follows the other account into another guild, and back (#40 Codex review).
-    WoW.lasDeliver(Wire.Message("CAP", { "Other Guild-Forever", "1" }), { guid = "Player-1-0000000B", name = "Alt Two" })
+    WoW.lasDeliver(Wire.Message("CAP", { "Other Guild", "1" }), { guid = "Player-1-0000000B", name = "Alt Two" })
     check(sharing.status:GetText():find("Alt Two: online, in another guild", 1, true),
         "the other account moved guilds: the open page says so, not synced")
     WoW.lasDeliver(Wire.Message("CAP", { KEY, "1" }), { guid = "Player-1-0000000B", name = "Alt Two" })
     check(sharing.status:GetText():find("Alt Two: synced", 1, true), "...back in my guild: the sync for it stands")
     -- A sync for another guild doesn't count in this one.
-    A._test.core().peers["Player-1-0000000B"].syncedKey = "Other Guild-Forever"
+    A._test.core().peers["Player-1-0000000B"].syncedKey = "Other Guild"
     check(not table.concat(O.SharingLines(), "\n"):find("synced", 1, true), "a sync for another guild isn't shown as synced")
     A._test.core().peers["Player-1-0000000B"].syncedKey = KEY
     -- It logs off: the open page drops it.
