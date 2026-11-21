@@ -9,6 +9,26 @@ rights, in a 151–153-member guild on connected realms (GUIDs from realms 4618 
 - run 2: Koma Kino, rank Initiate, account `#12`. This run added the professions questions and
   re-read the event log after its burst.
 
+**Re-measured on 1.60.1.71037 (2026-11-20, 21:49 EST, #101),** after that day's server hotfix that
+hid the realm. One run by Drucida Komakino, rank Member, no officer rights, in a
+369-member guild on connected realms. Every shape GuildSpy reads is unchanged:
+- **The roster tuple** (§1): 17 returns in the same order. Returns 18–21 are nil in every row.
+  Position 17 holds a GUID in 369 of 369 rows, all unique, and position 1 holds a name in all 369.
+  `rankIndex` is still 0-based. Position 12 (achievement points) now reads `0` or `-1`.
+- **Last online** (§3): four nils for an online member, `years, months, days, hours` for an
+  offline one (`0,0,10,4`).
+- **`GetNumGuildMembers`** (§4): two returns (`369, 107`), with show-offline on.
+- **Ranks** (§6): `GuildControlGetNumRanks()` = 6, and `GuildControlGetRankName` is still 1-based
+  (1 = "Guild Master").
+- **The event log** (§8): 8 returns, 100 entries, oldest first (index 1 is 5 d 10 h old, index 100
+  0 h). All 100 carry the names their type needs after the burst: 45 invite, 45 join, 8 quit,
+  2 promote. Still no `remove` entry.
+- **`C_Club`** (§9): a guild club id, 369 members, the same fields plus `clubType`,
+  `isRemoteChat`, `memberId` and `role`. No `officerNote` for this character.
+- **New since the hotfix:** `GetGuildInfo("player")` returns 4 values, and the 4th (the guild's
+  realm) is **nil**. Since `GetRealmName()` is `""` too, GuildSpy keys a guild by its name alone
+  (#104).
+
 Still open:
 - #7: a run on a character that can view officer notes.
 - #10: the real text of a promotion, a demotion, a leave and a kick.

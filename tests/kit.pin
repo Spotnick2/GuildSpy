@@ -1,5 +1,5 @@
 # WowTestKit for these tests: the commit, and the client build to test against.
-# build: the one this addon was last measured on (Compat.lua's MEASURED_ON_BUILD, 1.60.1.70532).
-sha=3cba24fd68e35758c19671bcedfefa9ad228c60f
-build=70532
+# build: the one this addon was last measured on (Compat.lua's MEASURED_ON_BUILD, 1.60.1.71037).
+sha=a9b2ee01084b9a8e05c11a72edb59a1245e428bc
+build=71037
 api=2
